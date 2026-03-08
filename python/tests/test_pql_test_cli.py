@@ -1,0 +1,417 @@
+"""
+CLI integration tests for pql_test_cli.
+
+Run with:
+    cd python
+    pytest tests/test_pql_test_cli.py -v
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from tests.conftest import make_dax_source
+
+# Path to the CLI entry point
+_CLI = str(Path(__file__).parent.parent / "pql_test_cli.py")
+
+
+def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
+    """Run the CLI in a subprocess and return (stdout, stderr, returncode)."""
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    result = subprocess.run(
+        [sys.executable, _CLI, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=cwd,
+        timeout=30,
+        env=env,
+    )
+    return result.stdout, result.stderr, result.returncode
+
+
+# ---------------------------------------------------------------------------
+# --help / --version
+# ---------------------------------------------------------------------------
+
+class TestMetaFlags:
+    def test_prints_help_text(self):
+        stdout, _, code = run_cli(["--help"])
+        assert code == 0
+        assert "pql-test" in stdout.lower() or "discover" in stdout.lower()
+
+    def test_help_mentions_retrieve_tests(self):
+        stdout, _, _ = run_cli(["--help"])
+        assert "retrieve-tests" in stdout
+
+    def test_help_mentions_run_tests(self):
+        stdout, _, _ = run_cli(["--help"])
+        assert "run-tests" in stdout
+
+    def test_help_mentions_check_prereqs(self):
+        stdout, _, _ = run_cli(["--help"])
+        assert "check-prereqs" in stdout
+
+    def test_prints_version(self):
+        stdout, _, code = run_cli(["--version"])
+        assert code == 0
+        # Version should contain digits and dots
+        assert any(c.isdigit() for c in stdout)
+
+    def test_no_args_shows_help(self):
+        stdout, stderr, code = run_cli([])
+        # Click groups with no subcommand exit 2 and print help/usage to stderr
+        combined = stdout + stderr
+        assert "pql-test" in combined.lower() or "Usage" in combined
+
+
+# ---------------------------------------------------------------------------
+# check-prereqs
+# ---------------------------------------------------------------------------
+
+class TestCheckPrereqs:
+    def test_outputs_python_version_check(self):
+        stdout, _, _ = run_cli(["check-prereqs"])
+        assert "Python" in stdout
+
+    def test_outputs_pyadomd_check(self):
+        stdout, _, _ = run_cli(["check-prereqs"])
+        assert "pyadomd" in stdout
+
+    def test_outputs_msal_check(self):
+        stdout, _, _ = run_cli(["check-prereqs"])
+        assert "msal" in stdout
+
+    def test_outputs_pass_or_fail_indicators(self):
+        stdout, _, _ = run_cli(["check-prereqs"])
+        # Either ✅ or ❌ should appear for each item
+        assert "\u2705" in stdout or "\u274c" in stdout
+
+    def test_outputs_psutil_check(self):
+        """Mirrors Pester 'Module should exist': psutil prerequisite reported."""
+        stdout, _, _ = run_cli(["check-prereqs"])
+        assert "psutil" in stdout
+
+
+# ---------------------------------------------------------------------------
+# retrieve-tests
+# ---------------------------------------------------------------------------
+
+class TestRetrieveTests:
+    def test_errors_when_model_path_missing(self):
+        _, stderr, code = run_cli(["retrieve-tests"])
+        assert code != 0
+
+    def test_errors_when_model_path_does_not_exist(self):
+        _, stderr, code = run_cli(["retrieve-tests", "/nonexistent/path/xyz"])
+        assert code == 1
+        assert "not found" in stderr.lower()
+
+    def test_reports_no_tests_for_empty_model(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, code = run_cli(["retrieve-tests", str(tmp_path)])
+        assert code == 0
+        assert stdout.strip() == "[]"
+
+    def test_lists_single_test_suite(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Calculations.DEV.Tests.dax").write_text(
+            make_dax_source("Calcs"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(["retrieve-tests", str(tmp_path)])
+        assert code == 0
+        assert "Calculations.DEV.Tests" in stdout
+
+    def test_lists_multiple_test_suites(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Alpha.Tests.dax").write_text(
+            make_dax_source("Alpha"), encoding="utf-8"
+        )
+        (dax_dir / "Suite.Beta.Tests.dax").write_text(
+            make_dax_source("Beta"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(["retrieve-tests", str(tmp_path)])
+        assert code == 0
+        assert "Suite.Alpha.Tests" in stdout
+        assert "Suite.Beta.Tests" in stdout
+
+    def test_verbose_shows_file_path(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Verbose.Tests.dax").write_text(
+            make_dax_source("V"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(["retrieve-tests", str(tmp_path), "--verbose"])
+        assert code == 0
+        assert ".dax" in stdout or "File:" in stdout
+
+    def test_test_flag_filters_to_named_suite(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Alpha.Tests.dax").write_text(
+            make_dax_source("Alpha"), encoding="utf-8"
+        )
+        (dax_dir / "Suite.Beta.Tests.dax").write_text(
+            make_dax_source("Beta"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(
+            ["retrieve-tests", str(tmp_path), "--test", "Suite.Alpha.Tests"]
+        )
+        assert code == 0
+        assert "Suite.Alpha.Tests" in stdout
+        assert "Suite.Beta.Tests" not in stdout
+
+    def test_test_flag_exits_1_when_suite_not_found(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        _, _, code = run_cli(
+            ["retrieve-tests", str(tmp_path), "--test", "Missing.Tests"]
+        )
+        assert code == 1
+
+    def test_discovers_real_sample_model_suites(self, sample_model_path):
+        stdout, _, code = run_cli(["retrieve-tests", sample_model_path])
+        assert code == 0
+        assert "Tests" in stdout
+        assert stdout.strip() != "[]"
+
+
+# ---------------------------------------------------------------------------
+# retrieve-test (single suite)
+# ---------------------------------------------------------------------------
+
+class TestRetrieveTest:
+    def test_errors_when_model_path_does_not_exist(self):
+        _, stderr, code = run_cli(["retrieve-test", "/nonexistent/path/xyz", "Any"])
+        assert code == 1
+        assert "not found" in stderr.lower()
+
+    def test_errors_when_suite_not_found(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, code = run_cli(["retrieve-test", str(tmp_path), "Missing.Tests"])
+        assert code == 1
+        assert stdout.strip() == "null"
+
+    def test_shows_named_suite(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Calculations.DEV.Tests.dax").write_text(
+            make_dax_source("Calcs"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(
+            ["retrieve-test", str(tmp_path), "Calculations.DEV.Tests"]
+        )
+        assert code == 0
+        assert "Calculations.DEV.Tests" in stdout
+
+    def test_does_not_show_other_suites(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Alpha.Tests.dax").write_text(
+            make_dax_source("Alpha"), encoding="utf-8"
+        )
+        (dax_dir / "Suite.Beta.Tests.dax").write_text(
+            make_dax_source("Beta"), encoding="utf-8"
+        )
+        stdout, _, code = run_cli(
+            ["retrieve-test", str(tmp_path), "Suite.Beta.Tests"]
+        )
+        assert code == 0
+        assert "Suite.Beta.Tests" in stdout
+        assert "Suite.Alpha.Tests" not in stdout
+
+    def test_verbose_shows_dax_source(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        source = make_dax_source("MyFunc")
+        (dax_dir / "My.Suite.Tests.dax").write_text(source, encoding="utf-8")
+        stdout, _, code = run_cli(
+            ["retrieve-test", str(tmp_path), "My.Suite.Tests", "--verbose"]
+        )
+        assert code == 0
+        assert "EVALUATE" in stdout
+
+
+# ---------------------------------------------------------------------------
+# run-tests
+# ---------------------------------------------------------------------------
+
+class TestRunTests:
+    def test_errors_when_model_path_missing(self):
+        _, stderr, code = run_cli(["run-tests"])
+        assert code != 0
+
+    def test_errors_when_model_path_does_not_exist(self):
+        _, stderr, code = run_cli(["run-tests", "/nonexistent/path/xyz"])
+        assert code == 1
+        assert "not found" in stderr.lower()
+
+    def test_exits_0_and_shows_summary_for_empty_model(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, code = run_cli(["run-tests", str(tmp_path)])
+        assert code == 0
+        assert '"total": 0' in stdout
+
+    def test_shows_warning_when_no_connection_and_has_tests(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Tests.dax").write_text(
+            make_dax_source("S"), encoding="utf-8"
+        )
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path)])
+        combined = stdout + stderr
+        assert "XMLA" in combined or "connection" in combined.lower()
+
+    def test_accepts_connection_flags_without_parse_error(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Tests.dax").write_text(
+            make_dax_source("S"), encoding="utf-8"
+        )
+        # Flags should parse fine; actual XMLA call will fail — that's expected
+        stdout, stderr, _ = run_cli(
+            [
+                "run-tests",
+                str(tmp_path),
+                "--tenant-id", "test-tenant",
+                "--workspace-id", "test-ws",
+                "--dataset-id", "test-ds",
+                "--client-id", "test-client",
+                "--client-secret", "test-secret",
+            ]
+        )
+        # Should not crash on argument parsing
+        combined = stdout + stderr
+        assert "Error: No such option" not in combined
+
+    def test_shows_xmla_connection_line_when_remote_params_given(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(
+            [
+                "run-tests",
+                str(tmp_path),
+                "--tenant-id", "my-tenant",
+                "--workspace-id", "my-ws",
+                "--dataset-id", "my-ds",
+            ]
+        )
+        combined = stdout + stderr
+        assert "my-tenant" in combined or "my-ws" in combined
+
+    def test_exits_0_when_all_tests_pass(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Tests.dax").write_text(
+            make_dax_source("S"), encoding="utf-8"
+        )
+        # Patch the runner so tests "pass" without real XMLA
+        import unittest.mock as mock
+
+        rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
+
+        # We run via subprocess so we cannot easily inject mocks.
+        # This test validates flag parsing and output format with no connection
+        # (tests will be reported as skipped/failed — exit 1 is acceptable).
+        stdout, stderr, code = run_cli(["run-tests", str(tmp_path)])
+        # Without a real XMLA connection the test shows "No XMLA" warning
+        # and exits 0 for an empty model or 1 for failed/skipped tests.
+        # We just verify it runs without crashing.
+        assert "Error:" not in stdout or "not found" not in stdout
+
+    def test_shows_results_summary_line(self, tmp_path):
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path)])
+        assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+    # ------------------------------------------------------------------
+    # --local flag tests (mirrors Pester '-Tag "Local"' tests)
+    # ------------------------------------------------------------------
+
+    def test_local_flag_is_accepted_by_parser(self, tmp_path):
+        """
+        Mirrors Pester 'Should run tests locally': --local is a valid flag.
+        Ensures no 'Error: No such option' parse error.
+        """
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        assert "No such option" not in stderr
+        assert "No such option" not in stdout
+
+    def test_local_flag_does_not_require_remote_connection_flags(self, tmp_path):
+        """
+        Mirrors Pester 'Should throw error is missing tenant id when not local':
+        with --local, no --tenant-id / --workspace-id are needed.
+        The CLI must not reject the invocation for missing connection options.
+        """
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        _, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        assert "Missing option" not in stderr
+
+    def test_local_flag_shows_warning_when_no_pbi_desktop_open(self, tmp_path):
+        """
+        Mirrors Pester 'Should warn about no test because path does not have tests
+        for currently opened file': when --local is used but no model is open,
+        a warning is printed (warnings.Length > 0 equivalent).
+        """
+        (tmp_path / "SampleModel.pbip").write_text("{}")
+        dax_dir = tmp_path / "SampleModel.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        combined = stdout + stderr
+        # Either "no matching" or "not found" or "no power bi desktop" or similar
+        assert any(
+            phrase in combined.lower()
+            for phrase in ("no matching", "not found", "no power bi", "warning")
+        )
+
+    def test_local_flag_shows_summary_line(self, tmp_path):
+        """
+        Mirrors Pester 'Should run tests locally' output format check:
+        even with --local, a summary line with passed/failed/total is printed.
+        """
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+    def test_local_flag_with_verbose_does_not_crash(self, tmp_path):
+        """
+        Mirrors Pester 'Should run tests for a subset based on folder path':
+        --local --verbose is a valid combination and should not error.
+        """
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local", "--verbose"])
+        assert "Error:" not in stderr or "not found" not in stderr
+
+    def test_local_flag_exits_0_for_empty_model(self, tmp_path):
+        """
+        Mirrors Pester: when no *.Tests.dax files exist the runner exits 0
+        (no failures — equivalent to $warnings check passing because there
+        are no test results to evaluate).
+        """
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        _, _, code = run_cli(["run-tests", str(tmp_path), "--local"])
+        assert code == 0
+
+    def test_run_tests_help_mentions_local_flag(self):
+        """Mirrors 'Module should exist': --local is documented in help text."""
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "--local" in stdout

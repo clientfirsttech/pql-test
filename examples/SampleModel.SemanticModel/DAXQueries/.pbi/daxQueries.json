@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "tabOrder": [
+    "DataQuality.DEV.Tests",
+    "Calculations.DEV.Tests",
+    "Schema.DEV.Tests",
+    "BestPractices.ANY.Tests",
+    "Query 1"
+  ],
+  "defaultTab": "DataQuality.DEV.Tests"
+}

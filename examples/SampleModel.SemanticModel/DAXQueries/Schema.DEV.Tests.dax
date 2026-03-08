@@ -1,0 +1,37 @@
+DEFINE
+	FUNCTION Schema.DEV.Tests = () =>
+	UNION (
+		// Table existence
+		PQL.Assert.Tbl.ShouldExist("Schema: MarvelFact table exists", "MarvelFact"),
+		PQL.Assert.Tbl.ShouldExist("Schema: DateDim table exists", "DateDim"),
+		PQL.Assert.Tbl.ShouldExist("Schema: AlignmentDim table exists", "AlignmentDim"),
+		PQL.Assert.Tbl.ShouldExist("Schema: EyeColorDim table exists", "EyeColorDim"),
+
+		// Column existence - MarvelFact
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[ID] exists", "MarvelFact", "ID"),
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[Name] exists", "MarvelFact", "Name"),
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[Appearances] exists", "MarvelFact", "Appearances"),
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[DateID] exists", "MarvelFact", "DateID"),
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[EyeID] exists", "MarvelFact", "EyeID"),
+		PQL.Assert.Col.ShouldExist("Schema: MarvelFact[AlignmentID] exists", "MarvelFact", "AlignmentID"),
+
+		// Column existence - DateDim
+		PQL.Assert.Col.ShouldExist("Schema: DateDim[DateID] exists", "DateDim", "DateID"),
+		PQL.Assert.Col.ShouldExist("Schema: DateDim[Date] exists", "DateDim", "Date"),
+		PQL.Assert.Col.ShouldExist("Schema: DateDim[Year] exists", "DateDim", "Year"),
+
+		// Column existence - AlignmentDim
+		PQL.Assert.Col.ShouldExist("Schema: AlignmentDim[AlignmentID] exists", "AlignmentDim", "AlignmentID"),
+		PQL.Assert.Col.ShouldExist("Schema: AlignmentDim[Alignment] exists", "AlignmentDim", "Alignment"),
+
+		// Column existence - EyeColorDim
+		PQL.Assert.Col.ShouldExist("Schema: EyeColorDim[EyeID] exists", "EyeColorDim", "EyeID"),
+		PQL.Assert.Col.ShouldExist("Schema: EyeColorDim[Eye Color] exists", "EyeColorDim", "Eye Color"),
+
+		// Relationships
+		PQL.Assert.Relationship.ShouldExist("Schema: MarvelFact-DateDim relationship exists", "MarvelFact", "DateID", "DateDim", "DateID"),
+		PQL.Assert.Relationship.ShouldExist("Schema: MarvelFact-EyeColorDim relationship exists", "MarvelFact", "EyeID", "EyeColorDim", "EyeID"),
+		PQL.Assert.Relationship.ShouldExist("Schema: MarvelFact-AlignmentDim relationship exists", "MarvelFact", "AlignmentID", "AlignmentDim", "AlignmentID")
+	)
+
+EVALUATE Schema.DEV.Tests()

@@ -1,0 +1,23 @@
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+node_modules
+dist
+out
+*.vsix
+.vscode-test/
+.DS_Store
+*.log
+
+# Python
+python/.venv/
+python/__pycache__/
+python/**/__pycache__/
+python/.pytest_cache/
+python/**/.pytest_cache/
+python/.coverage
+python/htmlcov/
+python/*.egg-info/
+python/dist/
+python/build/
+python/**/.env
+python/.env

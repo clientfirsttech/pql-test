@@ -1,0 +1,49 @@
+DEFINE
+	FUNCTION Calcs.DEV.Tests = () =>
+	UNION (
+		// [Number of Characters] = COUNTROWS('MarvelFact')
+		// Verify the measure returns the base row count
+		PQL.Assert.ShouldEqual(
+			"Calculations: Number of Characters equals COUNTROWS",
+			[Number of Characters],
+			COUNTROWS('MarvelFact')
+		),
+
+		// [Number of Characters] must always be > 1000 (base rowcount >= 0)
+		PQL.Assert.ShouldBeGreaterThan(
+			"Calculations: Number of Characters is greater than 1000",
+			1000,
+			[Number of Characters]
+		),
+
+		// [Running Total of Character Appearances] must be non-negative
+		PQL.Assert.ShouldBeGreaterOrEqual(
+			"Calculations: Running Total of Character Appearances is non-negative",
+			0,
+			[Running Total of Character Appearances]
+		),
+
+		// [Running Total of Character Appearances] must not exceed total row count
+		PQL.Assert.ShouldBeLessOrEqual(
+			"Calculations: Running Total of Character Appearances does not exceed total row count",
+			COUNTROWS('MarvelFact'),
+			[Running Total of Character Appearances]
+		),
+
+		// [Number of Characters Title By Date] must start with the expected prefix
+		PQL.Assert.ShouldStartWith(
+			"Calculations: Number of Characters Title By Date starts with correct prefix",
+			"Number of Characters that first appeared ",
+			[Number of Characters Title By Date]
+		),
+
+		// [Number of Characters] must return 0 (not blank) when no data exists for a date
+		// Uses year = -1 which cannot exist in DateDim, producing an empty filter context
+		PQL.Assert.ShouldEqual(
+			"Calculations: Number of Characters returns 0 not blank for a date with no data",
+			0,
+			CALCULATE([Number of Characters], FILTER(ALL('DateDim'), 'DateDim'[Year] = -1))
+		)
+	)
+
+EVALUATE Calcs.DEV.Tests()
