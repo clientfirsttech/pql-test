@@ -420,6 +420,8 @@ Execute DAX test suites in a PBIP model via XMLA and report pass/fail results.
 
 ```bash
 pql-test run-tests <modelPath> [--test <name>] [--verbose]
+                               [--output <file>]
+                               [--log-format {azuredevops,github}]
                                [--tenant-id <id>]
                                [--workspace-id <id>]
                                [--dataset-id <id>]
@@ -431,7 +433,9 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 |---|---|---|
 | `<modelPath>` | ✅ | Path to the PBIP model root directory |
 | `--test <name>` | ❌ | Run only the named test suite |
-| `--verbose`, `-v` | ❌ | Show messages and durations for all results (not just failures) |
+| `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
+| `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
+| `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (required for remote XMLA) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (required for remote XMLA) |
 | `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (required for remote XMLA) |
@@ -457,20 +461,68 @@ pql-test run-tests ./examples/SampleModel \
 pql-test run-tests ./examples/SampleModel --test "Calculations.DEV.Tests"
 ```
 
-**Example output (all passing):**
+**Save JSON results to a file while still printing to the console:**
+
+```bash
+pql-test run-tests ./examples/SampleModel --output results.json
+```
+
+The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` array with per-assertion detail. Example structure:
+
+```json
+{
+  "model_path": "/examples/SampleModel",
+  "passed": 5,
+  "failed": 1,
+  "skipped": 0,
+  "total": 6,
+  "results": [
+    { "test_name": "Calculations: X equals Y", "passed": false, "skipped": false,
+      "message": "Expected: 5 | Actual: 7", "error": null, "duration_ms": 12.3 }
+  ]
+}
+```
+
+**Emit Azure DevOps pipeline annotations:**
+
+```bash
+pql-test run-tests ./examples/SampleModel --log-format azuredevops
+```
+
+This emits `##[group]` / `##[endgroup]` / `##[error]` / `##[warning]` and a final `##vso[task.complete result=Failed|Succeeded;]` command, making failures visible directly in the Azure DevOps pipeline log.
+
+**Emit GitHub Actions workflow annotations:**
+
+```bash
+pql-test run-tests ./examples/SampleModel --log-format github
+```
+
+This emits `::group::` / `::endgroup::` / `::error::` / `::warning::` / `::notice::` commands, surfacing failures as annotations on the GitHub Actions summary page.
+
+**Combine `--log-format` with `--output` in CI pipelines:**
+
+```powershell
+pql-test run-tests ./examples/SampleModel `
+  --log-format azuredevops `
+  --output pql-test-results.json `
+  --tenant-id  $env:PQL_TENANT_ID `
+  --workspace-id $env:PQL_WORKSPACE_ID `
+  --dataset-id   $env:PQL_DATASET_ID `
+  --client-id    $env:PQL_CLIENT_ID `
+  --client-secret $env:PQL_CLIENT_SECRET
+```
+
+**Example output (all passing, default format):**
 
 ```
-XMLA connection: localhost:50001 / catalog: SampleModel
+Local XMLA connection: localhost:50001 / catalog:
 
-Test run for: /examples/SampleModel
-Results: 6 passed, 0 failed, 6 total
+========================== test session starts ===========================
+model: /examples/SampleModel
 
-  ✅ Calculations: Number of Characters equals COUNTROWS
-  ✅ Calculations: Number of Characters is greater than 1000
-  ✅ Calculations: Running Total of Character Appearances is non-negative
-  ✅ Calculations: Running Total of Character Appearances does not exceed total row count
-  ✅ Calculations: Number of Characters Title By Date starts with correct prefix
-  ✅ Calculations: Number of Characters returns 0 not blank for a date with no data
+......
+
+===================== 6 passed, 0 failed, 6 total =======================
 ```
 
 **Example output (with failures):**
@@ -478,34 +530,36 @@ Results: 6 passed, 0 failed, 6 total
 ```
 XMLA connection: powerbi://api.powerbi.com/v1.0/myTenant/myWorkspace / catalog: 22222...
 
-Test run for: /examples/SampleModel
-Results: 4 passed, 2 failed, 6 total
+========================== test session starts ===========================
+model: /examples/SampleModel
 
-  ✅ Calculations: Number of Characters equals COUNTROWS
-  ✅ Calculations: Number of Characters is greater than 1000
-  ❌ Calculations: Running Total of Character Appearances is non-negative
-    Expected: 0 | Actual: -5
-  ✅ Calculations: Running Total of Character Appearances does not exceed total row count
-  ❌ Calculations: Number of Characters Title By Date starts with correct prefix
-    Expected: Number of Characters that first appeared  | Actual: Characters first appeared
-  ✅ Calculations: Number of Characters returns 0 not blank for a date with no data
+..FF..
+
+-------------------------------- FAILURES --------------------------------
+
+  FAILED Calculations: Running Total of Character Appearances is non-negative
+  Expected: 0 | Actual: -5
+
+  FAILED Calculations: Number of Characters Title By Date starts with correct prefix
+  Expected: Number of Characters that first appeared  | Actual: Characters first appeared
+
+==================== 4 passed, 2 failed, 6 total ========================
 ```
 
 **No XMLA connection detected:**
 
 ```
 Warning: No XMLA connection detected. Tests will be reported as skipped.
-Options:
-  • Open the model in Power BI Desktop (auto-detected)
-  • Supply --tenant-id <id> --workspace-id <id> --dataset-id <id>
 
-Test run for: /examples/SampleModel
-Results: 0 passed, 4 failed, 4 total
+========================== test session starts ===========================
+model: /examples/SampleModel
 
-  ❌ BestPractices.ANY.Tests
-    No XMLA connection available. Open the model in Power BI Desktop or supply
-    --tenant-id, --workspace-id, and --dataset-id.
-  ...
+ssss
+
+------------------------------ warnings summary --------------------------
+  WARN No XMLA connection detected. Tests will be reported as skipped. ...
+
+==================== 0 passed, 0 failed, 4 total, 4 warnings ===========
 ```
 
 ---

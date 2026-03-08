@@ -22,6 +22,8 @@ Usage:
   pql-test retrieve-tests <modelPath> [--test <name>] [--verbose]
   pql-test retrieve-test  <modelPath> <name> [--verbose]
   pql-test run-tests      <modelPath> [--test <name>] [--verbose]
+                           [--output <file>]
+                           [--log-format {azuredevops,github}]
                            [--tenant-id <id>] [--workspace-id <id>]
                            [--dataset-id <id>] [--client-id <id>]
                            [--client-secret <secret>]
@@ -185,24 +187,146 @@ def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
     click.echo("")
 
 
-def _print_results(suite: TestSuite, verbose: bool) -> None:
-    click.echo(f"\nTest run for: {suite.model_path}")
-    click.echo(
-        f"Results: {suite.passed} passed, {suite.failed} failed, "
-        f"{suite.total} total\n"
-    )
-    for r in suite.results:
-        icon = "\u2705" if r.passed else "\u274c"
-        click.echo(f"  {icon} {r.test_name}")
-        if verbose or not r.passed:
-            click.echo(f"    {r.message}")
-            if r.error:
-                click.echo(f"    Error: {r.error}")
-            if r.duration_ms is not None:
-                click.echo(f"    Duration: {r.duration_ms:.0f}ms")
-    if suite.total == 0:
-        click.echo("  No tests were executed.")
+def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | None = None) -> None:
+    """Print test results in a pytest-style format."""
+    width = 72
+
+    def _sep(title: str = "", char: str = "=") -> str:
+        if not title:
+            return char * width
+        inner = f" {title} "
+        left = max(0, (width - len(inner)) // 2)
+        right = max(0, width - left - len(inner))
+        return char * left + inner + char * right
+
+    click.echo("\n" + _sep("test session starts"))
+    click.echo(f"model: {suite.model_path}")
     click.echo("")
+
+    failures = [r for r in suite.results if not r.passed and not r.skipped]
+    skipped_results = [r for r in suite.results if r.skipped]
+
+    if verbose:
+        for r in suite.results:
+            if r.skipped:
+                tag = "SKIP"
+            elif r.passed:
+                tag = "PASS"
+            else:
+                tag = "FAIL"
+            line = f"  {tag} {r.test_name}"
+            if r.message:
+                line += f" -- {r.message}"
+            if r.duration_ms is not None:
+                line += f" ({r.duration_ms:.0f}ms)"
+            click.echo(line)
+        if suite.results:
+            click.echo("")
+    else:
+        dots = ""
+        for r in suite.results:
+            if r.skipped:
+                dots += "s"
+            elif r.passed:
+                dots += "."
+            else:
+                dots += "F"
+        if dots:
+            click.echo(dots)
+            click.echo("")
+
+    if failures:
+        click.echo(_sep("FAILURES", "-"))
+        for r in failures:
+            click.echo(f"\n  FAILED {r.test_name}")
+            click.echo(f"  {r.message}")
+            if r.error:
+                click.echo(f"  Error: {r.error}")
+        click.echo("")
+
+    # Collect all warnings: pre-run messages + skipped-test messages (deduplicated)
+    warn_msgs: list[str] = list(pre_warnings or [])
+    seen: set[str] = set(warn_msgs)
+    for r in skipped_results:
+        msg = r.message or r.test_name
+        if msg not in seen:
+            warn_msgs.append(msg)
+            seen.add(msg)
+
+    if warn_msgs:
+        click.echo(_sep("warnings summary", "-"))
+        for msg in warn_msgs:
+            click.echo(f"  WARN {msg}")
+        click.echo("")
+
+    summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
+    if suite.skipped:
+        plural = "s" if suite.skipped != 1 else ""
+        summary += f", {suite.skipped} warning{plural}"
+    click.echo(_sep(summary))
+
+
+def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
+    """Print test results using Azure DevOps pipeline logging commands."""
+    click.echo("##[group]pql-test Results")
+    click.echo(f"model: {suite.model_path}")
+    click.echo("")
+
+    for r in suite.results:
+        if r.skipped:
+            click.echo(f"##[warning]SKIPPED {r.test_name}: {r.message}")
+        elif r.passed:
+            click.echo(f"  PASS {r.test_name}")
+        else:
+            msg = f"FAILED {r.test_name}"
+            if r.message:
+                msg += f" -- {r.message}"
+            click.echo(f"##[error]{msg}")
+            if r.error:
+                click.echo(f"##[error]  Error: {r.error}")
+
+    for w in (pre_warnings or []):
+        click.echo(f"##[warning]{w}")
+
+    click.echo("")
+    click.echo("##[endgroup]")
+
+    summary = (
+        f"{suite.passed} passed, {suite.failed} failed, "
+        f"{suite.skipped} skipped, {suite.total} total"
+    )
+    result = "Failed" if suite.failed > 0 else "Succeeded"
+    click.echo(f"##vso[task.complete result={result};]{summary}")
+
+
+def _print_results_github(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
+    """Print test results using GitHub Actions workflow commands."""
+    click.echo("::group::pql-test Results")
+    click.echo(f"model: {suite.model_path}")
+    click.echo("")
+
+    for r in suite.results:
+        if r.skipped:
+            click.echo(f"::warning::{r.test_name}: {r.message}")
+        elif r.passed:
+            click.echo(f"  PASS {r.test_name}")
+        else:
+            msg = r.message or ""
+            click.echo(f"::error title={r.test_name}::{msg}")
+            if r.error:
+                click.echo(f"::error title={r.test_name} Error::{r.error}")
+
+    for w in (pre_warnings or []):
+        click.echo(f"::warning::{w}")
+
+    click.echo("")
+    click.echo("::endgroup::")
+
+    summary = (
+        f"{suite.passed} passed, {suite.failed} failed, "
+        f"{suite.skipped} skipped, {suite.total} total"
+    )
+    click.echo(f"::notice::{summary}")
 
 
 # ---------------------------------------------------------------------------
@@ -427,8 +551,25 @@ def cmd_retrieve_test(model_path: str, name: str, human: bool, verbose: bool) ->
     default=None,
     help="Run only the named test suite.",
 )
-@click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
-@click.option("--verbose", "-v", is_flag=True, help="With --human: show detailed per-assertion results.")
+@click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail (message and duration) for every result.")
+@click.option(
+    "--output",
+    "output",
+    default=None,
+    metavar="FILE",
+    help="Write full JSON results to FILE in addition to the human-readable output.",
+)
+@click.option(
+    "--log-format",
+    "log_format",
+    default=None,
+    type=click.Choice(["azuredevops", "github"], case_sensitive=False),
+    help=(
+        "Emit CI-native log annotations instead of human-readable output. "
+        "azuredevops: ##[group]/##[error]/##vso[task.complete] commands. "
+        "github: ::group::/::error::/::notice:: commands."
+    ),
+)
 @click.option(
     "--local",
     "local_mode",
@@ -443,8 +584,9 @@ def cmd_retrieve_test(model_path: str, name: str, human: bool, verbose: bool) ->
 def cmd_run_tests(
     model_path: str,
     test_name: str | None,
-    human: bool,
     verbose: bool,
+    output: str | None,
+    log_format: str | None,
     local_mode: bool,
     tenant_id: str | None,
     workspace_id: str | None,
@@ -455,7 +597,10 @@ def cmd_run_tests(
 ) -> None:
     """Run all DAX test suites in a PBIP model via XMLA.
 
-    Outputs a JSON object by default. Use --human for formatted text.
+    Results are printed in a pytest-style format by default.
+    Use --output to also save full JSON results to a file.
+    Use --log-format to emit CI-native annotations for Azure DevOps or
+    GitHub Actions pipelines.
 
     MODEL_PATH is the PBIP root directory containing the .pbip file.
     You may also pass the .SemanticModel directory directly.
@@ -464,6 +609,9 @@ def cmd_run_tests(
     Examples:
       pql-test run-tests ../examples
       pql-test run-tests ../examples/SampleModel.SemanticModel
+      pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
+      pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
+      pql-test run-tests ../examples/SampleModel.SemanticModel --log-format azuredevops
     """
     abs_path = str(Path(model_path).resolve())
     if not Path(abs_path).exists():
@@ -471,6 +619,8 @@ def cmd_run_tests(
         sys.exit(1)
 
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+
+    pre_warnings: list[str] = []
 
     if local_mode:
         # Mirrors Invoke-DQVTesting -Local: enumerate open PBI Desktop instances
@@ -481,16 +631,20 @@ def cmd_run_tests(
                 if instances:
                     click.echo("\nDetected Power BI Desktop instances:")
                     for inst in instances:
-                        click.echo(f"  \u2022 {inst.model_name}  →  {inst.server} / {inst.catalog}")
+                        click.echo(f"  \u2022 {inst.model_name}  \u2192  {inst.server} / {inst.catalog}")
                 else:
                     click.echo("\nNo Power BI Desktop instances detected.")
             except ImportError:
-                click.echo("\npsutil not installed — local detection limited to port-file fallback.")
+                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
 
         conn = resolve_local_xmla_connection(abs_path)
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
+            pre_warnings.append(
+                "--local specified but no matching Power BI Desktop instance found. "
+                "Make sure the model is open in Power BI Desktop."
+            )
             click.echo(
                 "\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
                 "Make sure the model is open in Power BI Desktop.",
@@ -501,6 +655,11 @@ def cmd_run_tests(
         if conn:
             click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
+            pre_warnings.append(
+                "No XMLA connection detected. Tests will be reported as skipped. "
+                "Open the model in Power BI Desktop (--local) or supply "
+                "--tenant-id, --workspace-id, --dataset-id."
+            )
             click.echo(
                 "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
                 "Options:\n"
@@ -522,10 +681,19 @@ def cmd_run_tests(
     )
 
     suite = run_tests_from_model(abs_path, test_name, opts, connection=conn, skip_message=skip_message)
-    if human:
-        _print_results(suite, verbose)
+
+    if log_format == "azuredevops":
+        _print_results_azuredevops(suite, pre_warnings=pre_warnings)
+    elif log_format == "github":
+        _print_results_github(suite, pre_warnings=pre_warnings)
     else:
-        click.echo(json.dumps(_suite_to_dict(suite), indent=2))
+        _print_results(suite, verbose, pre_warnings=pre_warnings)
+
+    if output:
+        out_path = Path(output)
+        out_path.write_text(json.dumps(_suite_to_dict(suite), indent=2), encoding="utf-8")
+        click.echo(f"\nJSON results written to: {output}")
+
     sys.exit(1 if suite.failed > 0 else 0)
 
 

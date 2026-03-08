@@ -8,6 +8,7 @@ Run with:
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -261,7 +262,7 @@ class TestRunTests:
         dax_dir.mkdir(parents=True)
         stdout, _, code = run_cli(["run-tests", str(tmp_path)])
         assert code == 0
-        assert '"total": 0' in stdout
+        assert "0 total" in stdout
 
     def test_shows_warning_when_no_connection_and_has_tests(self, tmp_path):
         dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
@@ -415,3 +416,137 @@ class TestRunTests:
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
         assert "--local" in stdout
+
+
+# ---------------------------------------------------------------------------
+# --output flag tests
+# ---------------------------------------------------------------------------
+
+class TestRunTestsOutputOption:
+    def test_output_flag_is_accepted_by_parser(self, tmp_path):
+        """--output <file> is a valid flag and causes no parse error."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--output", str(out_file)])
+        assert "No such option" not in stderr
+
+    def test_output_writes_json_file(self, tmp_path):
+        """--output writes valid JSON with passed/failed/total keys."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        run_cli(["run-tests", str(tmp_path), "--output", str(out_file)])
+        assert out_file.exists()
+        data = json.loads(out_file.read_text(encoding="utf-8"))
+        assert "passed" in data
+        assert "failed" in data
+        assert "total" in data
+
+    def test_output_json_contains_results_array(self, tmp_path):
+        """Written JSON includes a 'results' list."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        run_cli(["run-tests", str(tmp_path), "--output", str(out_file)])
+        data = json.loads(out_file.read_text(encoding="utf-8"))
+        assert "results" in data
+        assert isinstance(data["results"], list)
+
+    def test_output_still_shows_human_on_stdout(self, tmp_path):
+        """When --output is given, human-readable output still goes to stdout."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--output", str(out_file)])
+        assert "passed" in stdout
+
+    def test_output_reports_file_written(self, tmp_path):
+        """stdout mentions the file that was written."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--output", str(out_file)])
+        assert "results.json" in stdout or str(out_file) in stdout
+
+    def test_output_flag_appears_in_help(self):
+        """--output is documented in run-tests --help."""
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "--output" in stdout
+
+
+# ---------------------------------------------------------------------------
+# --log-format flag tests
+# ---------------------------------------------------------------------------
+
+class TestRunTestsLogFormat:
+    def test_log_format_azuredevops_is_accepted(self, tmp_path):
+        """--log-format azuredevops is a valid flag."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "azuredevops"])
+        assert "No such option" not in stderr
+        assert "Invalid value" not in stderr
+
+    def test_log_format_github_is_accepted(self, tmp_path):
+        """--log-format github is a valid flag."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "github"])
+        assert "No such option" not in stderr
+        assert "Invalid value" not in stderr
+
+    def test_log_format_invalid_value_rejected(self, tmp_path):
+        """An unrecognised --log-format value causes a parse error."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        _, stderr, code = run_cli(["run-tests", str(tmp_path), "--log-format", "teamcity"])
+        assert code != 0
+        assert "invalid" in stderr.lower() or "Invalid" in stderr
+
+    def test_azuredevops_emits_group_annotation(self, tmp_path):
+        """azuredevops format includes ##[group] and ##[endgroup] markers."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "azuredevops"])
+        assert "##[group]" in stdout
+        assert "##[endgroup]" in stdout
+
+    def test_azuredevops_emits_task_complete(self, tmp_path):
+        """azuredevops format emits ##vso[task.complete ...] summary line."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "azuredevops"])
+        assert "##vso[task.complete" in stdout
+
+    def test_github_emits_group_annotation(self, tmp_path):
+        """github format includes ::group:: and ::endgroup:: markers."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "github"])
+        assert "::group::" in stdout
+        assert "::endgroup::" in stdout
+
+    def test_github_emits_notice_summary(self, tmp_path):
+        """github format emits ::notice:: summary line."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--log-format", "github"])
+        assert "::notice::" in stdout
+
+    def test_log_format_combined_with_output(self, tmp_path):
+        """--log-format and --output can be combined; JSON file is still written."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        out_file = tmp_path / "results.json"
+        run_cli(["run-tests", str(tmp_path), "--log-format", "github", "--output", str(out_file)])
+        assert out_file.exists()
+        data = json.loads(out_file.read_text(encoding="utf-8"))
+        assert "total" in data
+
+    def test_log_format_appears_in_help(self):
+        """--log-format is documented in run-tests --help."""
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "--log-format" in stdout
