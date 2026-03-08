@@ -484,8 +484,20 @@ class TestRunTestWithMockedXmla:
         rows = [{"TestName": "t", "Expected": "42", "Actual": "99", "Passed": "false"}]
         with patch("pql_test_runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
+        assert results[0].expected == "42"
+        assert results[0].actual == "99"
         assert "42" in results[0].message
         assert "99" in results[0].message
+
+    def test_suite_name_populated_from_test_name(self):
+        rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            results = run_test(self._make_test(), self._make_conn())
+        assert results[0].suite_name == "Calculations.DEV.Tests"
+
+    def test_suite_name_set_when_no_connection(self):
+        results = run_test(self._make_test(), connection=None)
+        assert results[0].suite_name == "Calculations.DEV.Tests"
 
     def test_handles_best_practice_rule_description(self):
         rows = [

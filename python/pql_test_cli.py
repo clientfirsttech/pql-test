@@ -149,9 +149,11 @@ def _suite_to_dict(suite: TestSuite) -> dict:
         "results": [
             {
                 "test_name": r.test_name,
+                "expected": r.expected,
+                "actual": r.actual,
                 "passed": r.passed,
+                "suite_name": r.suite_name,
                 "skipped": r.skipped,
-                "message": r.message,
                 "error": r.error,
                 "duration_ms": r.duration_ms,
             }
@@ -191,13 +193,15 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     """Print test results in a pytest-style format."""
     width = 72
 
-    def _sep(title: str = "", char: str = "=") -> str:
+    def _sep(title: str = "", char: str = "=", fg: str | None = None) -> str:
         if not title:
-            return char * width
-        inner = f" {title} "
-        left = max(0, (width - len(inner)) // 2)
-        right = max(0, width - left - len(inner))
-        return char * left + inner + char * right
+            line = char * width
+        else:
+            inner = f" {title} "
+            left = max(0, (width - len(inner)) // 2)
+            right = max(0, width - left - len(inner))
+            line = char * left + inner + char * right
+        return click.style(line, fg=fg) if fg else line
 
     click.echo("\n" + _sep("test session starts"))
     click.echo(f"model: {suite.model_path}")
@@ -209,11 +213,11 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     if verbose:
         for r in suite.results:
             if r.skipped:
-                tag = "SKIP"
+                tag = click.style("SKIP", fg="yellow")
             elif r.passed:
-                tag = "PASS"
+                tag = click.style("PASS", fg="green")
             else:
-                tag = "FAIL"
+                tag = click.style("FAIL", fg="red")
             line = f"  {tag} {r.test_name}"
             if r.message:
                 line += f" -- {r.message}"
@@ -223,22 +227,22 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
         if suite.results:
             click.echo("")
     else:
-        dots = ""
+        dots_parts = []
         for r in suite.results:
             if r.skipped:
-                dots += "s"
+                dots_parts.append(click.style("s", fg="yellow"))
             elif r.passed:
-                dots += "."
+                dots_parts.append(click.style(".", fg="green"))
             else:
-                dots += "F"
-        if dots:
-            click.echo(dots)
+                dots_parts.append(click.style("F", fg="red"))
+        if dots_parts:
+            click.echo("".join(dots_parts))
             click.echo("")
 
     if failures:
-        click.echo(_sep("FAILURES", "-"))
+        click.echo(_sep("FAILURES", "-", fg="red"))
         for r in failures:
-            click.echo(f"\n  FAILED {r.test_name}")
+            click.echo(f"\n  {click.style('FAILED', fg='red')} {r.test_name}")
             click.echo(f"  {r.message}")
             if r.error:
                 click.echo(f"  Error: {r.error}")
@@ -254,16 +258,23 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
             seen.add(msg)
 
     if warn_msgs:
-        click.echo(_sep("warnings summary", "-"))
+        click.echo(_sep("warnings summary", "-", fg="yellow"))
         for msg in warn_msgs:
-            click.echo(f"  WARN {msg}")
+            click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
         click.echo("")
 
     summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
     if suite.skipped:
         plural = "s" if suite.skipped != 1 else ""
         summary += f", {suite.skipped} warning{plural}"
-    click.echo(_sep(summary))
+
+    if suite.failed > 0:
+        summary_color = "red"
+    elif suite.skipped > 0:
+        summary_color = "yellow"
+    else:
+        summary_color = "green"
+    click.echo(_sep(summary, fg=summary_color))
 
 
 def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:

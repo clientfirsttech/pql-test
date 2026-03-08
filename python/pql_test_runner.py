@@ -197,6 +197,9 @@ class TestResult:
     skipped: bool = False
     error: Optional[str] = None
     duration_ms: Optional[float] = None
+    actual: Optional[str] = None
+    expected: Optional[str] = None
+    suite_name: Optional[str] = None
 
 
 @dataclass
@@ -874,6 +877,7 @@ def run_test(
                 skipped=True,
                 message=skip_message,
                 duration_ms=(time.monotonic() - start) * 1000.0,
+                suite_name=test.name,
             )
         ]
 
@@ -890,6 +894,7 @@ def run_test(
                         "ensure the EVALUATE expression is correct."
                     ),
                     duration_ms=(time.monotonic() - start) * 1000.0,
+                    suite_name=test.name,
                 )
             ]
 
@@ -898,11 +903,11 @@ def run_test(
             row_test_name = _get_col(row, "TestName") or test.name
             passed_val = _get_col(row, "Passed").lower()
             passed = passed_val in ("true", "1")
-            expected = _get_col(row, "Expected")
-            actual = _get_col(row, "Actual")
+            row_expected = _get_col(row, "Expected")
+            row_actual = _get_col(row, "Actual")
             rule_desc = _get_col(row, "RuleDescription")
 
-            parts = [f"Expected: {expected}", f"Actual: {actual}"]
+            parts = [f"Expected: {row_expected}", f"Actual: {row_actual}"]
             if rule_desc:
                 parts.append(f"Rule: {rule_desc}")
 
@@ -911,6 +916,9 @@ def run_test(
                     test_name=row_test_name,
                     passed=passed,
                     message=" | ".join(parts),
+                    actual=row_actual,
+                    expected=row_expected,
+                    suite_name=test.name,
                     duration_ms=(time.monotonic() - start) * 1000.0,
                 )
             )
@@ -924,6 +932,7 @@ def run_test(
                 message="Test execution failed",
                 error=str(exc),
                 duration_ms=(time.monotonic() - start) * 1000.0,
+                suite_name=test.name,
             )
         ]
 
