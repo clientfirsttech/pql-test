@@ -1,0 +1,250 @@
+# pql-test Skills File
+# GitHub CLI Copilot Extension – Skills Plugin Manifest
+#
+# Registers each pql-test CLI command as a callable skill so that GitHub
+# Copilot (and any compatible skills-plugin host) can discover, describe,
+# and invoke the tool's functionality directly from natural-language prompts.
+#
+# Reference format: https://docs.github.com/en/copilot/building-copilot-extensions/building-a-copilot-agent-for-your-copilot-extension/using-skills-with-copilot-agents
+
+version: "1"
+
+extension:
+  name: pql-test
+  description: >
+    Discover and run DAX unit tests stored inside a Power BI / Microsoft
+    Fabric PBIP (Power BI Project) semantic model's DAXQueries/ folder.
+    Tests execute via the XMLA endpoint and report pytest-style results with
+    native CI logging for GitHub Actions and Azure DevOps pipelines.
+
+skills:
+  # --------------------------------------------------------------------------
+  # check-prereqs
+  # --------------------------------------------------------------------------
+  - name: check-prereqs
+    description: >
+      Verify that all required packages and runtime dependencies are available
+      (Python >= 3.9, pyadomd, msal, psutil). Exits with code 0 when all
+      prerequisites are met, 1 otherwise.
+    parameters:
+      type: object
+      properties: {}
+      required: []
+    runs:
+      using: command
+      command: pql-test check-prereqs
+
+  # --------------------------------------------------------------------------
+  # retrieve-tests
+  # --------------------------------------------------------------------------
+  - name: retrieve-tests
+    description: >
+      List all DAX test suites (*.Tests.dax files) found in a PBIP semantic
+      model's DAXQueries/ folder. Returns a JSON array by default; use
+      human: true for formatted text output.
+    parameters:
+      type: object
+      properties:
+        model_path:
+          type: string
+          description: >
+            Path to the PBIP root directory (containing the .pbip file and the
+            .SemanticModel sub-folder), the .SemanticModel directory itself, or
+            the .pbip file directly.
+        test_name:
+          type: string
+          description: >
+            Filter results to a specific test suite by name. When omitted all
+            discovered test suites are returned.
+        human:
+          type: boolean
+          description: >
+            Output in human-readable formatted text instead of JSON.
+            Default: false.
+        verbose:
+          type: boolean
+          description: >
+            When combined with human: true, also show the file path for each
+            test suite and display the resolved XMLA connection information.
+            Default: false.
+        tenant_id:
+          type: string
+          description: >
+            Azure AD tenant ID used to resolve the remote XMLA endpoint.
+            Can also be set via the PQL_TENANT_ID environment variable.
+        workspace_id:
+          type: string
+          description: >
+            Power BI workspace GUID used to resolve the remote XMLA endpoint.
+            Can also be set via the PQL_WORKSPACE_ID environment variable.
+        dataset_id:
+          type: string
+          description: >
+            Dataset / semantic model GUID used to resolve the remote XMLA
+            endpoint. Can also be set via the PQL_DATASET_ID environment
+            variable.
+        client_id:
+          type: string
+          description: >
+            Service principal client ID for Azure AD authentication.
+            Can also be set via the PQL_CLIENT_ID environment variable.
+        client_secret:
+          type: string
+          description: >
+            Service principal client secret for Azure AD authentication.
+            Can also be set via the PQL_CLIENT_SECRET environment variable.
+        environment:
+          type: string
+          description: >
+            Power BI cloud environment to connect to. Accepted values:
+            Public, Germany, China, USGov, USGovHigh, DOD.
+            Default: Public. Can also be set via the PQL_ENVIRONMENT
+            environment variable.
+          enum:
+            - Public
+            - Germany
+            - China
+            - USGov
+            - USGovHigh
+            - DOD
+      required:
+        - model_path
+    runs:
+      using: command
+      command: pql-test retrieve-tests
+
+  # --------------------------------------------------------------------------
+  # retrieve-test
+  # --------------------------------------------------------------------------
+  - name: retrieve-test
+    description: >
+      Show details for a single DAX test suite identified by name. Returns a
+      JSON object by default; use human: true for formatted text. When
+      verbose: true the full DAX source of the test is included in the output.
+    parameters:
+      type: object
+      properties:
+        model_path:
+          type: string
+          description: >
+            Path to the PBIP root directory (containing the .pbip file and the
+            .SemanticModel sub-folder) or the .SemanticModel directory itself.
+        name:
+          type: string
+          description: >
+            The exact name of the DAX test suite to retrieve (e.g.
+            "Calcs.DEV.Tests").
+        human:
+          type: boolean
+          description: >
+            Output in human-readable formatted text instead of JSON.
+            Default: false.
+        verbose:
+          type: boolean
+          description: >
+            When combined with human: true, also print the full DAX source of
+            the test suite. When used with JSON output, adds a "source" field
+            to the returned object. Default: false.
+      required:
+        - model_path
+        - name
+    runs:
+      using: command
+      command: pql-test retrieve-test
+
+  # --------------------------------------------------------------------------
+  # run-tests
+  # --------------------------------------------------------------------------
+  - name: run-tests
+    description: >
+      Execute all DAX test suites found in a PBIP semantic model against the
+      model's XMLA endpoint. Connects automatically to a locally-open Power BI
+      Desktop instance or to a remote Power BI Premium / Microsoft Fabric
+      workspace when connection credentials are provided. Results are printed in
+      a pytest-style format; use log_format to emit native CI annotations for
+      GitHub Actions or Azure DevOps.
+    parameters:
+      type: object
+      properties:
+        model_path:
+          type: string
+          description: >
+            Path to the PBIP root directory (containing the .pbip file and the
+            .SemanticModel sub-folder) or the .SemanticModel directory itself.
+        test_name:
+          type: string
+          description: >
+            Run only the named test suite. When omitted all discovered test
+            suites are executed.
+        verbose:
+          type: boolean
+          description: >
+            Show per-assertion detail (message and duration) for every test
+            result instead of the compact dot-notation summary. Default: false.
+        output:
+          type: string
+          description: >
+            File path to write full JSON test results to in addition to the
+            human-readable output printed to stdout.
+        log_format:
+          type: string
+          description: >
+            Emit CI-native log annotations instead of human-readable output.
+            "github" emits ::group:: / ::error:: / ::notice:: commands for
+            GitHub Actions. "azuredevops" emits ##[group] / ##[error] /
+            ##vso[task.complete] commands for Azure Pipelines.
+          enum:
+            - github
+            - azuredevops
+        local:
+          type: boolean
+          description: >
+            Detect and connect to a locally open Power BI Desktop instance
+            (mirrors Invoke-DQVTesting -Local). The model must be open in
+            Power BI Desktop before running. Requires psutil. Default: false.
+        tenant_id:
+          type: string
+          description: >
+            Azure AD tenant ID used to connect to the remote XMLA endpoint.
+            Can also be set via the PQL_TENANT_ID environment variable.
+        workspace_id:
+          type: string
+          description: >
+            Power BI workspace GUID used to connect to the remote XMLA
+            endpoint. Can also be set via the PQL_WORKSPACE_ID environment
+            variable.
+        dataset_id:
+          type: string
+          description: >
+            Dataset / semantic model GUID used to connect to the remote XMLA
+            endpoint. Can also be set via the PQL_DATASET_ID environment
+            variable.
+        client_id:
+          type: string
+          description: >
+            Service principal client ID for Azure AD authentication.
+            Can also be set via the PQL_CLIENT_ID environment variable.
+        client_secret:
+          type: string
+          description: >
+            Service principal client secret for Azure AD authentication.
+            Can also be set via the PQL_CLIENT_SECRET environment variable.
+        environment:
+          type: string
+          description: >
+            Power BI cloud environment to target. Accepted values:
+            Public, Germany, China, USGov, USGovHigh, DOD.
+            Default: Public. Can also be set via the PQL_ENVIRONMENT
+            environment variable.
+          enum:
+            - Public
+            - Germany
+            - China
+            - USGov
+            - USGovHigh
+            - DOD
+      required:
+        - model_path
+    runs:
+      using: command
+      command: pql-test run-tests
