@@ -30,6 +30,14 @@ on:
         description: 'GitHub Models model name (e.g. gpt-4o-mini, gpt-4o)'
         required: false
         default: 'gpt-4o-mini'
+  # Called by ci.yml to participate in the sequential pipeline
+  workflow_call:
+    inputs:
+      model:
+        description: 'GitHub Models model name'
+        type: string
+        required: false
+        default: 'gpt-4o-mini'
 
 jobs:
   promptfoo-eval:
@@ -61,28 +69,29 @@ jobs:
         run: npm install -g promptfoo@latest
 
       # -----------------------------------------------------------------------
-      # Override the model name if the workflow was triggered manually
+      # Override the model name if a non-default model was requested
+      # inputs.model works for both workflow_dispatch and workflow_call
       # -----------------------------------------------------------------------
       - name: Apply model override
-        if: ${{ github.event.inputs.model != '' && github.event.inputs.model != 'gpt-4o-mini' }}
+        if: ${{ inputs.model != '' && inputs.model != 'gpt-4o-mini' }}
         working-directory: tests/promptfoo
         run: |
-          MODEL="${{ github.event.inputs.model }}"
           echo "Overriding provider to github:$MODEL"
-          # Use yq/python to patch the provider; fall back to sed
+          # Patch the provider id in promptfoo.yaml in-place
           python3 - <<PYEOF
-          import pathlib, re
+          import pathlib, re, os
+          model = os.environ['MODEL']
           cfg = pathlib.Path('promptfoo.yaml')
           updated = re.sub(
               r'(id:\s*)github:[^\s]+',
-              rf'\g<1>github:${MODEL}',
+              rf'\g<1>github:{model}',
               cfg.read_text()
           )
           cfg.write_text(updated)
-          print(f"Provider set to github:{MODEL}")
+          print(f"Provider set to github:{model}")
           PYEOF
         env:
-          MODEL: ${{ github.event.inputs.model }}
+          MODEL: ${{ inputs.model }}
 
       # -----------------------------------------------------------------------
       # Run evaluations using GitHub Copilot (GITHUB_TOKEN for auth)
@@ -153,7 +162,7 @@ jobs:
           PYEOF
 
       - name: Annotate if GitHub Models was unavailable
-        if: steps.promptfoo_eval.outcome == 'failure' && !failure()
+        if: steps.promptfoo_eval.outcome == 'failure'
         run: |
           echo "::warning::promptfoo LLM evaluation could not complete – GitHub Models (github:gpt-4o-mini) may require additional repository permissions or a Copilot subscription."
           echo "::warning::Structural validation in validate-plugin.yml is the authoritative check."

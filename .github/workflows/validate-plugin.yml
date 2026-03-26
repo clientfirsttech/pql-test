@@ -26,6 +26,8 @@ on:
       - 'skills/**'
       - '.github/workflows/validate-plugin.yml'
   workflow_dispatch:
+  # Called by ci.yml to participate in the sequential pipeline
+  workflow_call:
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -34,6 +36,8 @@ jobs:
   validate-structure:
     name: Validate plugin structure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -184,6 +188,8 @@ jobs:
     name: Install plugin via gh copilot CLI
     runs-on: ubuntu-latest
     needs: validate-structure
+    permissions:
+      contents: read
     env:
       GH_TOKEN: ${{ github.token }}
 
