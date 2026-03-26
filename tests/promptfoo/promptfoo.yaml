@@ -1,0 +1,183 @@
+# promptfoo evaluation config for the pql-test Copilot CLI plugin
+#
+# Uses the GitHub Copilot / GitHub Models provider so that no third-party
+# API keys are required.  The `github:gpt-4o-mini` provider authenticates
+# with GITHUB_TOKEN, which is always available in GitHub Actions.
+#
+# Run locally (set GITHUB_TOKEN to a PAT with models:read scope):
+#   cd tests/promptfoo
+#   GITHUB_TOKEN=ghp_... npx promptfoo@latest eval
+#
+# Run in CI:
+#   The workflow passes github.token automatically; no secrets to configure.
+#
+# Structure-only mode (no token needed – echo provider):
+#   npx promptfoo@latest eval --providers echo
+
+description: pql-test Copilot CLI Plugin – skill instruction evaluations
+
+# ---------------------------------------------------------------------------
+# Providers
+# ---------------------------------------------------------------------------
+providers:
+  # GitHub Copilot / GitHub Models – authenticated with GITHUB_TOKEN.
+  # No OpenAI or Anthropic key required.
+  - id: github:gpt-4o-mini
+    label: "GitHub Copilot (gpt-4o-mini)"
+
+# ---------------------------------------------------------------------------
+# Prompt template
+# ---------------------------------------------------------------------------
+# The SKILL.md file is injected as context; the model is asked the question.
+# With a real LLM the model reads the skill and answers the question.
+
+prompts:
+  - id: skill-prompt
+    raw: |
+      You are a helpful assistant. Use only the information in the context
+      below to answer the question.
+
+      --- CONTEXT ---
+      {{skill_content}}
+      --- END CONTEXT ---
+
+      Question: {{question}}
+
+# ---------------------------------------------------------------------------
+# Test cases
+# ---------------------------------------------------------------------------
+# skill_content uses the file:// prefix so promptfoo loads the SKILL.md
+# content at eval time.  Paths are relative to this config file.
+# icontains assertions are used so the LLM can phrase answers naturally
+# while still quoting the exact CLI flags and commands.
+# ---------------------------------------------------------------------------
+
+tests:
+  # ── check-prereqs ──────────────────────────────────────────────────────────
+  - description: "check-prereqs skill mentions Python version requirement"
+    vars:
+      skill_content: "file://../../skills/check-prereqs/SKILL.md"
+      question: "What Python version does pql-test require?"
+    assert:
+      - type: icontains
+        value: "3.9"
+      - type: icontains
+        value: "pyadomd"
+      - type: icontains
+        value: "msal"
+
+  - description: "check-prereqs skill includes the CLI command"
+    vars:
+      skill_content: "file://../../skills/check-prereqs/SKILL.md"
+      question: "What command do I run to verify my environment is ready?"
+    assert:
+      - type: icontains
+        value: "pql-test check-prereqs"
+
+  # ── retrieve-tests ─────────────────────────────────────────────────────────
+  - description: "retrieve-tests skill mentions MODEL_PATH parameter"
+    vars:
+      skill_content: "file://../../skills/retrieve-tests/SKILL.md"
+      question: "What is the required argument for retrieve-tests?"
+    assert:
+      - type: icontains
+        value: "model_path"
+      - type: icontains
+        value: "pql-test retrieve-tests"
+
+  - description: "retrieve-tests skill documents cloud environment options"
+    vars:
+      skill_content: "file://../../skills/retrieve-tests/SKILL.md"
+      question: "Which cloud environments are supported?"
+    assert:
+      - type: icontains
+        value: "Public"
+      - type: icontains
+        value: "USGov"
+
+  - description: "retrieve-tests skill documents JSON output as default"
+    vars:
+      skill_content: "file://../../skills/retrieve-tests/SKILL.md"
+      question: "What is the default output format for retrieve-tests?"
+    assert:
+      - type: icontains
+        value: "json"
+
+  # ── retrieve-test ──────────────────────────────────────────────────────────
+  - description: "retrieve-test skill describes the NAME parameter"
+    vars:
+      skill_content: "file://../../skills/retrieve-test/SKILL.md"
+      question: "What parameters does pql-test retrieve-test require?"
+    assert:
+      - type: icontains
+        value: "name"
+      - type: icontains
+        value: "pql-test retrieve-test"
+
+  - description: "retrieve-test skill documents --verbose flag"
+    vars:
+      skill_content: "file://../../skills/retrieve-test/SKILL.md"
+      question: "How do I see the full DAX source of a test?"
+    assert:
+      - type: icontains
+        value: "--verbose"
+
+  # ── run-tests ──────────────────────────────────────────────────────────────
+  - description: "run-tests skill documents exit codes"
+    vars:
+      skill_content: "file://../../skills/run-tests/SKILL.md"
+      question: "What do the exit codes for run-tests mean?"
+    assert:
+      - type: icontains
+        value: "0"
+      - type: icontains
+        value: "passed"
+
+  - description: "run-tests skill documents GitHub Actions log format"
+    vars:
+      skill_content: "file://../../skills/run-tests/SKILL.md"
+      question: "How do I get native GitHub Actions log annotations?"
+    assert:
+      - type: icontains
+        value: "--log-format github"
+
+  - description: "run-tests skill documents Azure DevOps log format"
+    vars:
+      skill_content: "file://../../skills/run-tests/SKILL.md"
+      question: "How do I get Azure Pipelines logging commands?"
+    assert:
+      - type: icontains
+        value: "--log-format azuredevops"
+
+  - description: "run-tests skill mentions --local flag for Power BI Desktop"
+    vars:
+      skill_content: "file://../../skills/run-tests/SKILL.md"
+      question: "How do I run tests against a locally open Power BI Desktop instance?"
+    assert:
+      - type: icontains
+        value: "--local"
+      - type: icontains
+        value: "psutil"
+
+  - description: "run-tests skill documents service principal authentication"
+    vars:
+      skill_content: "file://../../skills/run-tests/SKILL.md"
+      question: "How do I authenticate with a service principal?"
+    assert:
+      - type: icontains
+        value: "--client-id"
+      - type: icontains
+        value: "--client-secret"
+      - type: icontains
+        value: "--tenant-id"
+
+  # ── plugin.json manifest ───────────────────────────────────────────────────
+  - description: "plugin.json manifest contains the plugin name"
+    vars:
+      skill_content: "file://../../plugin.json"
+      question: "What is the name of this plugin?"
+    assert:
+      - type: icontains
+        value: "pql-test"
+      - type: icontains
+        value: "version"

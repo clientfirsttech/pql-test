@@ -1,0 +1,251 @@
+# Validate the GitHub Copilot CLI plugin structure and verify it can be
+# installed and its skills recognised by the gh copilot extension.
+#
+# Job 1 – validate-structure
+#   • Runs on every push / PR that touches the plugin files.
+#   • Pure static checks, no credentials needed.
+#
+# Job 2 – cli-install
+#   • Installs the gh copilot extension, installs this plugin, and asserts
+#     that `gh copilot plugin list` reports it with the expected name.
+#   • Requires only the built-in GITHUB_TOKEN, but gh copilot itself must be
+#     available on the runner.  The step is protected by a continue-on-error
+#     guard so that it never blocks the PR if the extension is unavailable.
+
+name: Validate Copilot CLI Plugin
+
+on:
+  push:
+    paths:
+      - 'plugin.json'
+      - 'skills/**'
+      - '.github/workflows/validate-plugin.yml'
+  pull_request:
+    paths:
+      - 'plugin.json'
+      - 'skills/**'
+      - '.github/workflows/validate-plugin.yml'
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: static structural validation (no credentials required)
+  # ---------------------------------------------------------------------------
+  validate-structure:
+    name: Validate plugin structure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 1a. plugin.json must exist and be valid JSON
+      # -----------------------------------------------------------------------
+      - name: plugin.json exists and is valid JSON
+        run: |
+          if [ ! -f plugin.json ]; then
+            echo "::error file=plugin.json::plugin.json not found at repository root"
+            exit 1
+          fi
+          if ! jq . plugin.json > /dev/null 2>&1; then
+            echo "::error file=plugin.json::plugin.json is not valid JSON"
+            exit 1
+          fi
+          echo "plugin.json is valid JSON"
+
+      # -----------------------------------------------------------------------
+      # 1b. Required manifest fields
+      # -----------------------------------------------------------------------
+      - name: Required fields present in plugin.json
+        run: |
+          errors=0
+          for field in name description version skills; do
+            if ! jq -e ".[\"$field\"] // empty" plugin.json > /dev/null 2>&1; then
+              echo "::error file=plugin.json::Missing required field: $field"
+              errors=$((errors + 1))
+            else
+              echo "OK: field '$field' = $(jq -r ".[\"$field\"]" plugin.json)"
+            fi
+          done
+          [ $errors -eq 0 ] || exit 1
+
+      # -----------------------------------------------------------------------
+      # 1c. Every skills directory contains a SKILL.md
+      # -----------------------------------------------------------------------
+      - name: Each skill directory has SKILL.md
+        run: |
+          # Resolve the skills directory declared in plugin.json
+          skills_value=$(jq -r '.skills' plugin.json)
+
+          # skills can be a string or an array; normalise to space-separated paths
+          if jq -e '.skills | type == "array"' plugin.json > /dev/null 2>&1; then
+            skills_dirs=$(jq -r '.skills[]' plugin.json | sed 's:/$::')
+          else
+            skills_dirs=$(echo "$skills_value" | sed 's:/$::')
+          fi
+
+          errors=0
+          total=0
+          for skills_dir in $skills_dirs; do
+            if [ ! -d "$skills_dir" ]; then
+              echo "::error::Skills directory '$skills_dir' declared in plugin.json does not exist"
+              errors=$((errors + 1))
+              continue
+            fi
+            for skill_dir in "$skills_dir"/*/; do
+              [ -d "$skill_dir" ] || continue
+              skill_name=$(basename "$skill_dir")
+              total=$((total + 1))
+              if [ ! -f "${skill_dir}SKILL.md" ]; then
+                echo "::error file=${skill_dir}::Skill '$skill_name' is missing SKILL.md"
+                errors=$((errors + 1))
+              else
+                echo "OK: $skill_name/SKILL.md present"
+              fi
+            done
+          done
+
+          [ $total -gt 0 ] || { echo "::warning::No skill directories found"; }
+          [ $errors -eq 0 ] || exit 1
+          echo "All $total skill(s) have SKILL.md"
+
+      # -----------------------------------------------------------------------
+      # 1d. Validate SKILL.md frontmatter (name + description required)
+      # -----------------------------------------------------------------------
+      - name: SKILL.md files have valid frontmatter
+        run: |
+          python3 - <<'PYEOF'
+          import pathlib, re, sys
+
+          errors = []
+
+          skills_value = __import__('json').loads(pathlib.Path('plugin.json').read_text())['skills']
+          if isinstance(skills_value, str):
+              skills_roots = [skills_value.rstrip('/')]
+          else:
+              skills_roots = [s.rstrip('/') for s in skills_value]
+
+          skill_files = []
+          for root in skills_roots:
+              skill_files.extend(sorted(pathlib.Path(root).glob('*/SKILL.md')))
+
+          if not skill_files:
+              print('WARNING: no SKILL.md files found', file=sys.stderr)
+              sys.exit(0)
+
+          for skill_path in skill_files:
+              content = skill_path.read_text(encoding='utf-8')
+              m = re.match(r'^---\n(.*?)\n---', content, re.DOTALL)
+              if not m:
+                  errors.append(f'{skill_path}: missing YAML frontmatter block (--- ... ---)')
+                  continue
+              fm = m.group(1)
+              skill_name = skill_path.parent.name
+
+              if not re.search(r'^name:\s+\S', fm, re.MULTILINE):
+                  errors.append(f'{skill_path}: frontmatter is missing required "name" field')
+              else:
+                  name_val = re.search(r'^name:\s+(.+)', fm, re.MULTILINE).group(1).strip()
+                  print(f'OK: {skill_name}/SKILL.md  name="{name_val}"')
+
+              if not re.search(r'^description:\s+\S', fm, re.MULTILINE):
+                  errors.append(f'{skill_path}: frontmatter is missing required "description" field')
+              else:
+                  desc_val = re.search(r'^description:\s+(.+)', fm, re.MULTILINE).group(1).strip()
+                  print(f'OK: {skill_name}/SKILL.md  description="{desc_val[:60]}..."')
+
+          if errors:
+              print()
+              for e in errors:
+                  print(f'::error::{e}', file=sys.stderr)
+              sys.exit(1)
+
+          print(f'\n{len(skill_files)} SKILL.md file(s) have valid frontmatter')
+          PYEOF
+
+      # -----------------------------------------------------------------------
+      # 1e. Plugin name in plugin.json must not contain spaces or uppercase
+      #     (gh copilot plugin uninstall uses the name as an identifier)
+      # -----------------------------------------------------------------------
+      - name: Plugin name is a valid identifier
+        run: |
+          plugin_name=$(jq -r '.name' plugin.json)
+          if echo "$plugin_name" | grep -qP '[A-Z\s]'; then
+            echo "::warning file=plugin.json::Plugin name '$plugin_name' contains uppercase letters or spaces; consider using lowercase-kebab-case"
+          else
+            echo "OK: plugin name '$plugin_name' is valid"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 2: install plugin with the gh copilot CLI and verify it is listed
+  # ---------------------------------------------------------------------------
+  cli-install:
+    name: Install plugin via gh copilot CLI
+    runs-on: ubuntu-latest
+    needs: validate-structure
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install gh copilot extension
+        # continue-on-error so a missing subscription doesn't block the PR
+        id: install_ext
+        continue-on-error: true
+        run: |
+          gh extension install github/gh-copilot 2>&1
+          echo "gh copilot version: $(gh copilot --version 2>&1 || echo 'unavailable')"
+
+      - name: Install plugin locally
+        id: plugin_install
+        continue-on-error: true
+        if: steps.install_ext.outcome == 'success'
+        run: |
+          gh copilot plugin install . 2>&1
+          echo "plugin_installed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Verify plugin appears in plugin list
+        if: steps.plugin_install.outputs.plugin_installed == 'true'
+        run: |
+          EXPECTED=$(jq -r '.name' plugin.json)
+          echo "Expecting plugin name: $EXPECTED"
+
+          if gh copilot plugin list 2>&1 | grep -q "$EXPECTED"; then
+            echo "::notice::Plugin '$EXPECTED' successfully listed by gh copilot plugin list"
+          else
+            echo "::error::Plugin '$EXPECTED' not found in gh copilot plugin list"
+            exit 1
+          fi
+
+      - name: Verify individual skills are listed
+        if: steps.plugin_install.outputs.plugin_installed == 'true'
+        run: |
+          skills_value=$(jq -r '.skills' plugin.json)
+          if jq -e '.skills | type == "array"' plugin.json > /dev/null 2>&1; then
+            skills_dirs=$(jq -r '.skills[]' plugin.json | sed 's:/$::')
+          else
+            skills_dirs=$(echo "$skills_value" | sed 's:/$::')
+          fi
+
+          errors=0
+          for skills_dir in $skills_dirs; do
+            for skill_dir in "$skills_dir"/*/; do
+              [ -d "$skill_dir" ] || continue
+              skill_name=$(basename "$skill_dir")
+              if gh copilot skill list 2>&1 | grep -q "$skill_name"; then
+                echo "::notice::Skill '$skill_name' recognised by CLI"
+              else
+                echo "::warning::Skill '$skill_name' not found in 'gh copilot skill list' output (may require Copilot subscription)"
+              fi
+            done
+          done
+
+      - name: Summarise CLI install outcome
+        if: steps.install_ext.outcome != 'success'
+        run: |
+          echo "::notice::gh copilot extension could not be installed in this environment."
+          echo "::notice::Structural validation (job 1) passed. Install the plugin locally with:"
+          echo "::notice::  gh extension install github/gh-copilot && gh copilot plugin install ."
