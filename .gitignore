@@ -21,3 +21,8 @@ python/dist/
 python/build/
 python/**/.env
 python/.env
+
+# promptfoo evaluation output
+tests/promptfoo/results-*.json
+tests/promptfoo/node_modules/
+.promptfoo/

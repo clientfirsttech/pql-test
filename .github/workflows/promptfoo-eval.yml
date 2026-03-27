@@ -1,0 +1,168 @@
+# Run promptfoo evaluations against the pql-test Copilot CLI plugin skills.
+#
+# Uses the GitHub Copilot / GitHub Models provider (github:gpt-4o-mini) which
+# authenticates with the built-in GITHUB_TOKEN.  No third-party API keys
+# (OpenAI, Anthropic, etc.) are required.
+#
+# The LLM eval step is marked continue-on-error so that the job does not
+# block PRs if GitHub Models access is not yet available for the repository.
+# The structural validation in validate-plugin.yml always runs and always
+# enforces correctness.
+
+name: Promptfoo Skill Evaluation
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - 'tests/promptfoo/**'
+      - '.github/workflows/promptfoo-eval.yml'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - 'tests/promptfoo/**'
+      - '.github/workflows/promptfoo-eval.yml'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'GitHub Models model name (e.g. gpt-4o-mini, gpt-4o)'
+        required: false
+        default: 'gpt-4o-mini'
+  # Called by ci.yml to participate in the sequential pipeline
+  workflow_call:
+    inputs:
+      model:
+        description: 'GitHub Models model name'
+        type: string
+        required: false
+        default: 'gpt-4o-mini'
+
+jobs:
+  promptfoo-eval:
+    name: Promptfoo – GitHub Copilot skill evaluation
+    runs-on: ubuntu-latest
+    # Grant the token permission to call the GitHub Models API
+    permissions:
+      contents: read
+      models: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-promptfoo-${{ hashFiles('tests/promptfoo/promptfoo.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-promptfoo-
+
+      - name: Install promptfoo
+        run: npm install -g promptfoo@latest
+
+      # -----------------------------------------------------------------------
+      # Override the model name if a non-default model was requested
+      # inputs.model works for both workflow_dispatch and workflow_call
+      # -----------------------------------------------------------------------
+      - name: Apply model override
+        if: ${{ inputs.model != '' && inputs.model != 'gpt-4o-mini' }}
+        working-directory: tests/promptfoo
+        run: |
+          echo "Overriding provider to github:$MODEL"
+          # Patch the provider id in promptfoo.yaml in-place
+          python3 - <<PYEOF
+          import pathlib, re, os
+          model = os.environ['MODEL']
+          cfg = pathlib.Path('promptfoo.yaml')
+          updated = re.sub(
+              r'(id:\s*)github:[^\s]+',
+              rf'\g<1>github:{model}',
+              cfg.read_text()
+          )
+          cfg.write_text(updated)
+          print(f"Provider set to github:{model}")
+          PYEOF
+        env:
+          MODEL: ${{ inputs.model }}
+
+      # -----------------------------------------------------------------------
+      # Run evaluations using GitHub Copilot (GITHUB_TOKEN for auth)
+      # -----------------------------------------------------------------------
+      - name: Run promptfoo evaluation (GitHub Copilot)
+        id: promptfoo_eval
+        # continue-on-error so the job stays green when GitHub Models access
+        # is not yet provisioned for this repository
+        continue-on-error: true
+        working-directory: tests/promptfoo
+        run: |
+          promptfoo eval \
+            --config promptfoo.yaml \
+            --no-cache \
+            --output results.json \
+            2>&1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROMPTFOO_DISABLE_TELEMETRY: '1'
+
+      # -----------------------------------------------------------------------
+      # Upload results regardless of outcome
+      # -----------------------------------------------------------------------
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results
+          path: tests/promptfoo/results.json
+          if-no-files-found: ignore
+
+      # -----------------------------------------------------------------------
+      # Human-readable summary
+      # -----------------------------------------------------------------------
+      - name: Show pass/fail summary
+        if: always()
+        working-directory: tests/promptfoo
+        run: |
+          if [ ! -f results.json ]; then
+            echo "::notice::No results.json produced (GitHub Models may be unavailable)."
+            echo "::notice::Run locally: GITHUB_TOKEN=ghp_... npx promptfoo@latest eval"
+            exit 0
+          fi
+
+          python3 - <<'PYEOF'
+          import json, sys, pathlib
+
+          data = json.loads(pathlib.Path('results.json').read_text())
+          results = data.get('results', {}).get('results', [])
+
+          passed = sum(1 for r in results if r.get('success'))
+          failed = sum(1 for r in results if not r.get('success'))
+          total  = len(results)
+
+          print(f'\npromptfoo results: {passed}/{total} passed')
+          for r in results:
+              status = '✓' if r.get('success') else '✗'
+              desc   = r.get('description') or r.get('testCase', {}).get('description', '(no description)')
+              print(f'  {status}  {desc}')
+              if not r.get('success'):
+                  for a in r.get('gradingResult', {}).get('componentResults', []):
+                      if not a.get('pass'):
+                          print(f'       ↳ FAILED assertion: {a.get("assertion", {}).get("type")} = {a.get("assertion", {}).get("value")}')
+
+          if failed:
+              print(f'\n{failed} test(s) failed', file=sys.stderr)
+              sys.exit(1)
+          PYEOF
+
+      - name: Annotate if GitHub Models was unavailable
+        if: steps.promptfoo_eval.outcome == 'failure'
+        run: |
+          echo "::warning::promptfoo LLM evaluation could not complete – GitHub Models (github:gpt-4o-mini) may require additional repository permissions or a Copilot subscription."
+          echo "::warning::Structural validation in validate-plugin.yml is the authoritative check."
