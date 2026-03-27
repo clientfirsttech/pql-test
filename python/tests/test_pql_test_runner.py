@@ -30,6 +30,7 @@ from pql_test_runner import (
     XmlaConnectionOptions,
     _collect_dax_test_files,
     _detect_local_pbi_desktop_port,
+    _find_pbi_ancestor_pid,
     _find_pbip_file,
     _find_semantic_model_dir,
     get_pbi_files_opened,
@@ -82,6 +83,100 @@ def _make_mock_process(pid: int, name: str, ppid: int, listen_port: int | None =
     else:
         proc.net_connections.return_value = []
     return proc
+
+
+# ---------------------------------------------------------------------------
+# _find_pbi_ancestor_pid
+# ---------------------------------------------------------------------------
+
+class TestFindPbiAncestorPid:
+    """
+    Unit tests for the process-tree walking helper that maps msmdsrv.exe
+    to its PBIDesktop.exe ancestor across an arbitrary number of intermediate
+    host processes.
+    """
+
+    def _make_psutil_process(self, pid: int, ppid: int) -> MagicMock:
+        """Minimal mock that supports .ppid() and psutil exceptions."""
+        import pql_test_runner as runner
+        proc = MagicMock()
+        proc.ppid.return_value = ppid
+        proc.pid = pid
+        return proc
+
+    def test_returns_immediate_parent_when_direct_child(self):
+        """msmdsrv.exe is a direct child of PBIDesktop.exe."""
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        import pql_test_runner as runner
+
+        pbi_pid = 100
+        msmdsrv_proc = self._make_psutil_process(pid=999, ppid=pbi_pid)
+
+        with patch("pql_test_runner._psutil.Process", side_effect=lambda pid: self._make_psutil_process(pid, 0)):
+            result = _find_pbi_ancestor_pid(msmdsrv_proc, {pbi_pid})
+
+        assert result == pbi_pid
+
+    def test_returns_grandparent_when_one_intermediate_process(self):
+        """
+        msmdsrv.exe → intermediate host → PBIDesktop.exe
+        The tree walk must traverse the intermediate process and still find
+        the PBI ancestor.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        intermediate_pid = 200
+        # msmdsrv parent is the intermediate process
+        msmdsrv_proc = self._make_psutil_process(pid=999, ppid=intermediate_pid)
+        # intermediate's parent is PBIDesktop
+        intermediate_proc = self._make_psutil_process(pid=intermediate_pid, ppid=pbi_pid)
+
+        import pql_test_runner as runner
+
+        def _process_factory(pid: int) -> MagicMock:
+            if pid == intermediate_pid:
+                return intermediate_proc
+            return self._make_psutil_process(pid, 0)  # top-level / unknown
+
+        with patch("pql_test_runner._psutil.Process", side_effect=_process_factory):
+            result = _find_pbi_ancestor_pid(msmdsrv_proc, {pbi_pid})
+
+        assert result == pbi_pid
+
+    def test_returns_none_when_no_pbi_ancestor_exists(self):
+        """
+        Process chain has no PBI Desktop ancestor — should return None without
+        raising an exception.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        unrelated_pid = 50
+        proc = self._make_psutil_process(pid=999, ppid=unrelated_pid)
+        top_proc = self._make_psutil_process(pid=unrelated_pid, ppid=0)
+
+        with patch("pql_test_runner._psutil.Process", return_value=top_proc):
+            result = _find_pbi_ancestor_pid(proc, {1234})
+
+        assert result is None
+
+    def test_handles_no_such_process_gracefully(self):
+        """
+        If any process in the chain has already exited, NoSuchProcess is caught
+        and None is returned instead of propagating.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        import pql_test_runner as runner
+
+        proc = self._make_psutil_process(pid=999, ppid=50)
+        proc.ppid.side_effect = runner._psutil.NoSuchProcess(pid=999)
+
+        result = _find_pbi_ancestor_pid(proc, {100})
+        assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -383,9 +478,13 @@ class TestResolveXmlaConnection:
         assert "powerbi://api.powerbi.com" in conn.server
 
     def test_requires_all_three_remote_params(self, tmp_path):
-        # Missing dataset_id — should not produce a remote connection
+        # Missing dataset_id — should not produce a remote connection.
+        # Also suppress local fallback so a running PBI Desktop doesn't interfere.
         opts = XmlaConnectionOptions(tenant_id="t", workspace_id="w")
-        with patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None):
+        with (
+            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+        ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is None
 
@@ -582,7 +681,10 @@ class TestRunTests:
 
 class TestRunTestsFromModel:
     def test_returns_empty_suite_for_nonexistent_model(self):
-        suite = run_tests_from_model("/nonexistent/path/xyz")
+        # Suppress local auto-detection so a running PBI Desktop doesn't cause
+        # live discovery on a nonexistent path.
+        with patch("pql_test_runner.resolve_xmla_connection", return_value=None):
+            suite = run_tests_from_model("/nonexistent/path/xyz")
         assert suite.total == 0
         assert suite.passed == 0
         assert suite.failed == 0
@@ -616,12 +718,15 @@ class TestRunTestsFromModel:
             ]
         )
         conn = ResolvedXmlaConnection(server=_MOCK_PORTFILE_SERVER, catalog="M")
-        rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
-            with patch(
-                "pql_test_runner.resolve_xmla_connection", return_value=conn
-            ):
-                suite = run_tests_from_model(model_dir, test_name="Suite.A.Tests")
+        exec_rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
+        # _retrieve_tests_via_dax returns None → falls back to file scan so
+        # the discovery mock doesn't conflict with the execution mock.
+        with (
+            patch("pql_test_runner._retrieve_tests_via_dax", return_value=None),
+            patch("pql_test_runner._execute_dax_query", return_value=exec_rows),
+            patch("pql_test_runner.resolve_xmla_connection", return_value=conn),
+        ):
+            suite = run_tests_from_model(model_dir, test_name="Suite.A.Tests")
         assert len(suite.tests) == 1
         assert suite.tests[0].name == "Suite.A.Tests"
 
@@ -658,12 +763,16 @@ class TestGetPbiFilesOpened:
 
     def test_returns_empty_list_when_no_pbi_windows_found(self):
         """
-        No PBI Desktop open → empty list.
+        No PBI Desktop open at all — no windows AND no msmdsrv processes → empty list.
         Mirrors Pester: no results when model is not running locally.
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        with patch("pql_test_runner._get_pbi_process_window_titles", return_value={}):
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", return_value=[]),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+        ):
             result = get_pbi_files_opened()
         assert result == []
 
@@ -797,6 +906,147 @@ class TestGetPbiFilesOpened:
         assert len(instances) == 1
         assert instances[0].catalog == ""  # empty: omit Initial Catalog in connection string
 
+    def test_conn_listen_string_status_is_accepted(self):
+        """
+        psutil 6+ removed the CONN_LISTEN constant and uses the plain string
+        "LISTEN" instead.  Verify that get_pbi_files_opened() still discovers
+        the port when conn.status is already the expected string.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        port = _MOCK_AS_PORT_A
+        # Build a mock connection whose status is the string "LISTEN" (not
+        # the psutil constant), which is what psutil 6+ returns.
+        conn = MagicMock()
+        conn.status = "LISTEN"
+        conn.laddr = MagicMock()
+        conn.laddr.ip = "127.0.0.1"
+        conn.laddr.port = port
+
+        fake_proc = MagicMock()
+        fake_proc.info = {"pid": 999, "name": "msmdsrv.exe", "ppid": 1234}
+        fake_proc.net_connections.return_value = [conn]
+
+        with (
+            patch(
+                "pql_test_runner._get_pbi_process_window_titles",
+                return_value={1234: "StringListenModel - Power BI Desktop"},
+            ),
+            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "StringListenModel"
+        assert instances[0].server == f"localhost:{port}"
+
+    def test_tree_walk_finds_model_via_intermediate_process(self):
+        """
+        Modern Power BI Desktop may spawn msmdsrv.exe through an intermediate
+        host process rather than directly.  When the immediate parent PID is not
+        in pbi_pid_to_model, the tree walk should still resolve the correct name.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        import pql_test_runner as runner
+
+        port = _MOCK_AS_PORT_A
+        pbi_pid = 1000
+        intermediate_pid = 2000
+
+        fake_proc = _make_mock_process(
+            pid=3000, name="msmdsrv.exe", ppid=intermediate_pid, listen_port=port
+        )
+
+        # _find_pbi_ancestor_pid calls _psutil.Process(ppid).ppid():
+        # intermediate.ppid() → pbi_pid → found in pbi_pids
+        intermediate_mock = MagicMock()
+        intermediate_mock.ppid.return_value = pbi_pid
+
+        with (
+            patch(
+                "pql_test_runner._get_pbi_process_window_titles",
+                return_value={pbi_pid: "TreeWalkModel - Power BI Desktop"},
+            ),
+            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test_runner._psutil.Process", return_value=intermediate_mock),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "TreeWalkModel"
+        assert instances[0].server == f"localhost:{port}"
+
+    def test_uses_global_net_connections_when_available(self):
+        """
+        When psutil.net_connections() (global) is available, the port is
+        resolved from the pre-built pid→port map rather than per-process
+        net_connections().  This is more reliable on some Windows configurations.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        port = _MOCK_AS_PORT_A
+        msmdsrv_pid = 999
+        pbi_pid = 1234
+
+        fake_proc = MagicMock()
+        fake_proc.info = {"pid": msmdsrv_pid, "name": "msmdsrv.exe", "ppid": pbi_pid}
+        # net_connections on the process object would NOT be called when the
+        # global map already has the entry.
+        fake_proc.net_connections.side_effect = AssertionError("should not be called")
+
+        global_conn = MagicMock()
+        global_conn.status = "LISTEN"
+        global_conn.laddr = MagicMock(ip="127.0.0.1", port=port)
+        global_conn.pid = msmdsrv_pid
+
+        with (
+            patch(
+                "pql_test_runner._get_pbi_process_window_titles",
+                return_value={pbi_pid: "GlobalConnModel - Power BI Desktop"},
+            ),
+            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test_runner._psutil.net_connections", return_value=[global_conn]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "GlobalConnModel"
+        assert instances[0].server == f"localhost:{port}"
+        fake_proc.net_connections.assert_not_called()
+
+    def test_finds_msmdsrv_when_pbi_window_titles_unavailable(self):
+        """
+        When _get_pbi_process_window_titles() returns empty (e.g. UAC mismatch
+        or Microsoft Store variant), get_pbi_files_opened() must NOT return early.
+        It should still find msmdsrv.exe and return an instance with an empty
+        model_name so the unnamed-instance fallback in resolve_local_xmla_connection
+        can handle it.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        port = _MOCK_AS_PORT_A
+        fake_proc = _make_mock_process(pid=500, name="msmdsrv.exe", ppid=100, listen_port=port)
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        # We found msmdsrv even without a PBI window — model_name is empty
+        assert len(instances) == 1
+        assert instances[0].model_name == ""
+        assert instances[0].server == f"localhost:{port}"
+
 
 # ---------------------------------------------------------------------------
 # resolve_local_xmla_connection — mirrors Pester -Local flag tests
@@ -904,6 +1154,38 @@ class TestResolveLocalXmlaConnection:
         assert conn.server == fallback_server  # dynamic: derived from fallback mock
         assert conn.catalog == ""  # local: no Initial Catalog; AS auto-selects
 
+    def test_returns_connection_when_single_unnamed_instance_exists(self, tmp_path):
+        """
+        When the process-tree walk cannot link msmdsrv.exe to a PBIDesktop.exe
+        window (model_name is empty) but exactly one PBI Desktop window is open,
+        resolve_local_xmla_connection should fall back to that instance rather
+        than returning None.  This handles modern PBI Desktop builds where the
+        process tree cannot be walked reliably.
+        """
+        (tmp_path / "SampleModel.pbip").write_text("{}")
+        # Instance with empty model_name — tree walk produced no result
+        unnamed_inst = LocalPbiInstance(
+            model_name="",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[unnamed_inst]):
+            conn = resolve_local_xmla_connection(str(tmp_path))
+        assert conn is not None
+        assert conn.server == unnamed_inst.server
+
+    def test_returns_none_when_multiple_unnamed_instances_exist(self, tmp_path):
+        """
+        When multiple unnamed instances are detected the caller cannot know
+        which one to use — return None rather than guessing.
+        """
+        (tmp_path / "SampleModel.pbip").write_text("{}")
+        inst_a = LocalPbiInstance(model_name="", server=f"localhost:{_MOCK_AS_PORT_A}", catalog="")
+        inst_b = LocalPbiInstance(model_name="", server=f"localhost:{_MOCK_AS_PORT_B}", catalog="")
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst_a, inst_b]):
+            conn = resolve_local_xmla_connection(str(tmp_path))
+        assert conn is None
+
     def test_falls_back_to_port_file_from_semantic_model_path(self, tmp_path):
         """
         When given the .SemanticModel directory directly (no .pbip in that dir),
@@ -993,3 +1275,187 @@ class TestResolveLocalXmlaConnection:
         # No *.Tests.dax files → total == 0, like Pester $warnings.Length > 0
         assert suite.total == 0
         assert suite.tests == []
+
+# ---------------------------------------------------------------------------
+# _retrieve_tests_via_dax
+# ---------------------------------------------------------------------------
+
+from pql_test_runner import _retrieve_tests_via_dax  # noqa: E402
+
+
+class TestRetrieveTestsViaDax:
+    """Tests for the live-model discovery helper _retrieve_tests_via_dax()."""
+
+    # ------------------------------------------------------------------
+    # V2 success path
+    # ------------------------------------------------------------------
+
+    def test_v2_success_returns_test_list(self):
+        """V2 rows → PqlTest list with all metadata populated."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": "Calculation tests",
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": "alice@contoso.com",
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert len(result) == 1
+        t = result[0]
+        assert t.name == "Calcs.DEV.Tests"
+        assert t.description == "Calculation tests"
+        assert t.impersonated_user_name == "alice@contoso.com"
+
+    def test_v2_source_is_evaluate_expression(self):
+        """source must be 'EVALUATE <name>()' for live-discovered tests."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert result[0].source == "EVALUATE Calcs.DEV.Tests()"
+
+    def test_v2_file_path_is_empty_string(self):
+        """Live-discovered tests have no local file path."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert result[0].file_path == ""
+
+    def test_v2_multiple_rows(self):
+        """All rows from V2 are converted to PqlTest objects."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": f"Suite{i}.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
+            }
+            for i in range(3)
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert len(result) == 3
+        assert [t.name for t in result] == ["Suite0.Tests", "Suite1.Tests", "Suite2.Tests"]
+
+    # ------------------------------------------------------------------
+    # V1 fallback
+    # ------------------------------------------------------------------
+
+    def test_falls_back_to_v1_when_v2_raises(self):
+        """If V2 raises, V1 is attempted and its results are returned."""
+        v1_rows = [{"PQL.Assert.RetrieveTests()[Name]": "Calcs.DEV.Tests"}]
+
+        call_count: list[int] = [0]
+
+        def _fake_execute(conn, dax: str):
+            call_count[0] += 1
+            if "RetrieveTestsV2" in dax:
+                raise Exception("Function not found")
+            return v1_rows
+
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", side_effect=_fake_execute):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].name == "Calcs.DEV.Tests"
+        assert call_count[0] == 2  # V2 then V1
+
+    def test_v1_fallback_impersonated_user_is_none(self):
+        """V1 rows have no impersonation column → field is None."""
+        v1_rows = [{"PQL.Assert.RetrieveTests()[Name]": "Calcs.DEV.Tests"}]
+
+        def _fake_execute(conn, dax: str):
+            if "RetrieveTestsV2" in dax:
+                raise Exception("not found")
+            return v1_rows
+
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", side_effect=_fake_execute):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert result[0].impersonated_user_name is None
+
+    # ------------------------------------------------------------------
+    # Both queries fail → None (file-scan fallback signal)
+    # ------------------------------------------------------------------
+
+    def test_returns_none_when_both_dax_queries_fail(self):
+        """If both V2 and V1 raise, None is returned (sentinel for file scan)."""
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", side_effect=Exception("error")):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is None
+
+    # ------------------------------------------------------------------
+    # retrieve_tests() integration: connection threading
+    # ------------------------------------------------------------------
+
+    def test_retrieve_tests_uses_live_discovery_when_connection_given(self, tmp_model):
+        """retrieve_tests(path, connection=conn) delegates to _retrieve_tests_via_dax."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
+            }
+        ]
+        model_dir = tmp_model(
+            [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
+        )
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = retrieve_tests(model_dir, connection=conn)
+
+        assert len(result) == 1
+        assert result[0].name == "Calcs.DEV.Tests"
+        # Live path: no file path
+        assert result[0].file_path == ""
+
+    def test_retrieve_tests_falls_back_to_file_scan_when_dax_fails(self, tmp_model):
+        """When both DAX queries fail, file scan is used automatically."""
+        model_dir = tmp_model(
+            [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
+        )
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", side_effect=Exception("network error")):
+            result = retrieve_tests(model_dir, connection=conn)
+
+        # Falls back to file scan → finds the .Tests.dax file
+        assert len(result) == 1
+        assert result[0].file_path.endswith(".dax")
+
+    def test_retrieve_tests_uses_file_scan_when_no_connection(self, tmp_model):
+        """retrieve_tests(path) with no connection always uses file scan."""
+        model_dir = tmp_model(
+            [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
+        )
+        result = retrieve_tests(model_dir)
+        assert len(result) == 1
+        assert result[0].file_path.endswith(".dax")

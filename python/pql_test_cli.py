@@ -136,6 +136,7 @@ def _test_to_dict(t: PqlTest) -> dict:
         "name": t.name,
         "description": t.description,
         "file_path": t.file_path,
+        "impersonated_user_name": t.impersonated_user_name,
     }
 
 
@@ -184,7 +185,9 @@ def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
         click.echo(f"  \u2022 {t.name}")
         if t.description:
             click.echo(f"    {t.description}")
-        if verbose:
+        if t.impersonated_user_name:
+            click.echo(f"    RLS user: {t.impersonated_user_name}")
+        if verbose and t.file_path:
             click.echo(f"    File: {t.file_path}")
     click.echo("")
 
@@ -449,12 +452,22 @@ def cmd_check_prereqs() -> None:
 )
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="With --human: show file paths and connection info.")
+@click.option(
+    "--local",
+    "local_mode",
+    is_flag=True,
+    help=(
+        "Detect and connect to a locally open Power BI Desktop instance "
+        "to query PQL.Assert.RetrieveTestsV2 / RetrieveTests for live discovery."
+    ),
+)
 @conn_options
 def cmd_retrieve_tests(
     model_path: str,
     test_name: str | None,
     human: bool,
     verbose: bool,
+    local_mode: bool,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
@@ -466,6 +479,13 @@ def cmd_retrieve_tests(
 
     Outputs a JSON array by default. Use --human for formatted text.
 
+    By default, test suites are discovered by scanning the SemanticModel's
+    DAXQueries/ folder for *.Tests.dax files.  When --local (or XMLA options)
+    are supplied the live model is queried instead via
+    PQL.Assert.RetrieveTestsV2() (falling back to PQL.Assert.RetrieveTests()),
+    which returns ALL test functions registered in the model including those
+    defined directly in functions.tmdl.
+
     MODEL_PATH is the PBIP root directory — the folder that contains the
     .pbip file and the .SemanticModel sub-folder.  You may also pass the
     .SemanticModel directory or the .pbip file directly.
@@ -473,6 +493,7 @@ def cmd_retrieve_tests(
     \b
     Examples:
       pql-test retrieve-tests ../examples
+      pql-test retrieve-tests ../examples/SampleModel.SemanticModel --local
       pql-test retrieve-tests ../examples/SampleModel.SemanticModel
     """
     abs_path = str(Path(model_path).resolve())
@@ -482,8 +503,21 @@ def cmd_retrieve_tests(
 
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
 
+    # Resolve a live connection before discovery so RetrieveTestsV2/V1 can be used.
+    conn = None
+    if local_mode:
+        conn = resolve_local_xmla_connection(abs_path)
+        if conn is None:
+            click.echo(
+                "Warning: --local specified but no matching Power BI Desktop instance found. "
+                "Falling back to file-based discovery.",
+                err=True,
+            )
+    elif any([tenant_id, workspace_id, dataset_id]):
+        conn = resolve_xmla_connection(abs_path, opts)
+
     if test_name:
-        test = retrieve_test_by_name(abs_path, test_name)
+        test = retrieve_test_by_name(abs_path, test_name, connection=conn)
         if not test:
             if human:
                 click.echo(f'No test found with name: "{test_name}"')
@@ -492,12 +526,11 @@ def cmd_retrieve_tests(
             sys.exit(1)
         results = [test]
     else:
-        results = retrieve_tests(abs_path)
+        results = retrieve_tests(abs_path, connection=conn)
 
     if human:
         _print_tests(results, verbose)
         if verbose:
-            conn = resolve_xmla_connection(abs_path, opts)
             if conn:
                 click.echo(f"Connection: {conn.server} / {conn.catalog}")
             else:
@@ -652,13 +685,19 @@ def cmd_run_tests(
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
+            from pql_test_runner import _find_pbip_file as _fpf
+            from pathlib import Path as _Path
+            _pbip = _fpf(abs_path)
+            _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
             pre_warnings.append(
                 "--local specified but no matching Power BI Desktop instance found. "
                 "Make sure the model is open in Power BI Desktop."
             )
             click.echo(
-                "\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
-                "Make sure the model is open in Power BI Desktop.",
+                f"\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
+                f"Looking for model: '{_searched_name}'\n"
+                f"Make sure '{_searched_name}' is open in Power BI Desktop.\n"
+                f"Tip: run with --verbose to see all detected instances.",
                 err=True,
             )
     else:

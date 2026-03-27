@@ -182,6 +182,8 @@ class PqlTest:
     """Raw DAX source."""
     description: Optional[str] = None
     """Optional description (FUNCTION name when present in the DAX source)."""
+    impersonated_user_name: Optional[str] = None
+    """RLS impersonation user from PQL.Assert.RetrieveTestsV2 (live discovery only)."""
 
 
 @dataclass
@@ -405,6 +407,31 @@ def _get_catalog_from_local_port(port: int) -> Optional[str]:
     return None
 
 
+def _find_pbi_ancestor_pid(
+    proc: "_psutil.Process",  # type: ignore[name-defined]
+    pbi_pids: set,
+    max_depth: int = 6,
+) -> Optional[int]:
+    """
+    Walk the process parent chain of *proc* and return the first PID that
+    appears in *pbi_pids* (a set of known PBIDesktop.exe PIDs).
+
+    This handles the case where msmdsrv.exe is not a direct child of
+    PBIDesktop.exe — modern Power BI Desktop versions may interpose one or more
+    intermediate host processes between the two.
+    """
+    current = proc
+    for _ in range(max_depth):
+        try:
+            ppid = current.ppid()
+            if ppid in pbi_pids:
+                return ppid
+            current = _psutil.Process(ppid)
+        except (_psutil.NoSuchProcess, _psutil.AccessDenied, ValueError):
+            break
+    return None
+
+
 def get_pbi_files_opened() -> list[LocalPbiInstance]:
     """
     Discover all Power BI Desktop instances open on this machine.
@@ -413,10 +440,16 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
 
     1. Enumerate visible windows via ``EnumWindows`` + ``GetWindowText`` to
        find PBIDesktop.exe PIDs and model names (window title minus the
-       " - Power BI Desktop" suffix).
-    2. Find ``msmdsrv.exe`` processes and their LISTEN TCP ports using psutil
-       (equivalent to ``Get-NetTCPConnection`` / ``Get-CimInstance Win32_Process``).
-    3. Map each msmdsrv process to its parent PBIDesktop process via PPID.
+       " - Power BI Desktop" suffix).  When window enumeration fails (e.g.
+       UAC integrity mismatch or Microsoft Store variant of PBI Desktop),
+       this step produces an empty map but scanning continues.
+    2. Find ``msmdsrv.exe`` processes.  Port detection uses the global
+       ``psutil.net_connections()`` call (more reliable on Windows than
+       per-process access) with a per-process fallback.
+    3. Map each msmdsrv process to its parent PBIDesktop process by walking
+       the process tree.  When no PBI window was found for a process, the
+       model_name is left empty — resolve_local_xmla_connection handles the
+       unnamed-instance fallback.
     4. Query ``$SYSTEM.DBSCHEMA_CATALOGS`` on each port (via pyadomd) to
        resolve the real catalog name/GUID that Power BI Desktop loaded.
 
@@ -429,6 +462,8 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
         )
 
     # Step 1 — PID → window title mapping
+    # This may return an empty dict (e.g. Store app, UAC elevation, hidden
+    # window) — we do NOT return early; msmdsrv scanning always continues.
     pid_to_raw_title = _get_pbi_process_window_titles()
     pbi_pid_to_model: dict[int, str] = {}
     for pid, title in pid_to_raw_title.items():
@@ -436,37 +471,74 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
         model_name = title[:idx].strip() if idx > 0 else title
         pbi_pid_to_model[pid] = model_name
 
-    if not pbi_pid_to_model:
-        return []
+    pbi_pids = set(pbi_pid_to_model.keys())
+
+    # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
+    # the plain string "LISTEN".  Accept both so the code works on any version.
+    _listen_status: object = getattr(_psutil, "CONN_LISTEN", "LISTEN")
+
+    # Pre-build a pid → listen_port map using the global net_connections call.
+    # This is more reliable on Windows than per-process net_connections() because
+    # it queries GetExtendedTcpTable once for all connections and doesn't require
+    # per-process handle access.  Falls back to per-process inspection if the
+    # global call raises an exception (e.g. on some test environments).
+    _global_listen_ports: dict[int, int] = {}
+    try:
+        for _c in _psutil.net_connections(kind="tcp"):
+            _c_status = getattr(_c, "status", None)
+            if (
+                (_c_status == _listen_status or _c_status == "LISTEN")
+                and _c.laddr
+                and _c.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")
+                and getattr(_c, "pid", None) is not None
+            ):
+                _global_listen_ports[_c.pid] = _c.laddr.port
+    except Exception:  # noqa: BLE001
+        pass  # global call not available — fall back to per-process inspection
 
     # Step 2 & 3 — msmdsrv ports mapped back to parent PBIDesktop via PPID
+    # (walking the full process tree, not just the immediate parent)
     instances: list[LocalPbiInstance] = []
     for proc in _psutil.process_iter(["pid", "name", "ppid"]):
         try:
             pname = (proc.info.get("name") or "").lower()
             if pname != "msmdsrv.exe":
                 continue
+
+            msmdsrv_pid: int = proc.info.get("pid") or 0
+
+            # Try immediate parent first (fast path), then walk the tree.
             parent_pid: int = proc.info.get("ppid") or 0
             model_name = pbi_pid_to_model.get(parent_pid, "")
+            if not model_name and pbi_pids:
+                ancestor = _find_pbi_ancestor_pid(proc, pbi_pids)
+                if ancestor is not None:
+                    model_name = pbi_pid_to_model.get(ancestor, "")
 
-            for conn in proc.net_connections(kind="tcp"):
-                if (
-                    getattr(conn, "status", None) == _psutil.CONN_LISTEN
-                    and conn.laddr
-                    and conn.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")
-                ):
-                    port = conn.laddr.port
-                    # Step 4 — verify connectivity; local AS auto-selects the single database
-                    _cat = _get_catalog_from_local_port(port)
-                    catalog = _cat if _cat is not None else ""
-                    instances.append(
-                        LocalPbiInstance(
-                            model_name=model_name,
-                            server=f"localhost:{port}",
-                            catalog=catalog,
-                        )
+            # Resolve the listen port: global map first, per-process fallback.
+            port: Optional[int] = _global_listen_ports.get(msmdsrv_pid)
+            if port is None:
+                for conn in proc.net_connections(kind="tcp"):
+                    conn_status = getattr(conn, "status", None)
+                    if (
+                        (conn_status == _listen_status or conn_status == "LISTEN")
+                        and conn.laddr
+                        and conn.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")
+                    ):
+                        port = conn.laddr.port
+                        break
+
+            if port is not None:
+                # Step 4 — verify connectivity; local AS auto-selects the single database
+                _cat = _get_catalog_from_local_port(port)
+                catalog = _cat if _cat is not None else ""
+                instances.append(
+                    LocalPbiInstance(
+                        model_name=model_name,
+                        server=f"localhost:{port}",
+                        catalog=catalog,
                     )
-                    break
+                )
         except (_psutil.NoSuchProcess, _psutil.AccessDenied):
             continue
 
@@ -525,7 +597,22 @@ def resolve_local_xmla_connection(
                     server=inst.server,
                     catalog=inst.catalog,
                 )
-        # No name match — warn but do not guess a random model
+        # No exact name match.  If all detected instances have an empty
+        # model_name (process-tree walk couldn't link them to a PBI window)
+        # and there is exactly one PBI Desktop window open, it is safe to
+        # assume that the single running instance belongs to the requested
+        # model.  This handles edge cases where msmdsrv.exe cannot be linked
+        # to its PBIDesktop.exe ancestor via the process tree.
+        unnamed = [i for i in instances if not i.model_name]
+        named = [i for i in instances if i.model_name]
+        if unnamed and not named:
+            # Every detected port is unlinked; use the first one only when
+            # there is a single PBI Desktop window (unambiguous).
+            if len(instances) == 1:
+                return ResolvedXmlaConnection(
+                    server=instances[0].server,
+                    catalog=instances[0].catalog,
+                )
         return None
 
     # No .pbip file in model_path — use the first detected instance
@@ -551,21 +638,31 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
         return None
-    ws_base = (
-        Path(local_app_data)
-        / "Microsoft"
-        / "Power BI Desktop"
-        / "AnalysisServicesWorkspaces"
-    )
-    if not ws_base.exists():
-        return None
-    for ws_dir in ws_base.iterdir():
-        port_file = ws_dir / "Data" / "msmdsrv.port.txt"
-        if port_file.exists():
-            # PBI Desktop writes this file as UTF-16 LE (no BOM)
-            port = port_file.read_text(encoding="utf-16-le").strip()
-            if port.isdigit():
-                return f"localhost:{port}"
+
+    # Candidate base paths — standard installer and Microsoft Store package
+    _ws_candidates = [
+        Path(local_app_data) / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces",
+    ]
+    # Microsoft Store version stores data under the package's LocalState
+    _packages_root = Path(local_app_data) / "Packages"
+    if _packages_root.exists():
+        for _pkg in _packages_root.iterdir():
+            if _pkg.name.startswith("Microsoft.MicrosoftPowerBIDesktop"):
+                _ws_candidates.append(
+                    _pkg / "LocalState" / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces"
+                )
+                break  # only one PBI Desktop Store package expected
+
+    for ws_base in _ws_candidates:
+        if not ws_base.exists():
+            continue
+        for ws_dir in ws_base.iterdir():
+            port_file = ws_dir / "Data" / "msmdsrv.port.txt"
+            if port_file.exists():
+                # PBI Desktop writes this file as UTF-16 LE (no BOM)
+                port = port_file.read_text(encoding="utf-16-le").strip()
+                if port.isdigit():
+                    return f"localhost:{port}"
     return None
 
 
@@ -809,36 +906,111 @@ def _execute_dax_query(
 # Public API — discovery
 # ---------------------------------------------------------------------------
 
-def retrieve_tests(model_path: str) -> list[PqlTest]:
+def _retrieve_tests_via_dax(
+    connection: "ResolvedXmlaConnection",
+) -> Optional[list["PqlTest"]]:
     """
-    Retrieve all DAX test suites from a PBIP model directory.
+    Discover test functions from a live model using XMLA.
 
-    Scans the SemanticModel's DAXQueries/ folder for *.Tests.dax files
-    and returns a descriptor for each.
+    Tries ``PQL.Assert.RetrieveTestsV2()`` first (returns Name, Description,
+    PQLAssert_ImpersonatedUserName).  Falls back to ``PQL.Assert.RetrieveTests()``
+    (returns Name only) when V2 is absent from the model.
+
+    Returns a (possibly empty) list of PqlTest objects when either query
+    succeeds, or ``None`` when both queries fail (e.g. PQL.Assert is not
+    installed in this model), signalling the caller to fall back to the
+    file-based scan.
+    """
+    rows: list[dict] | None = None
+    has_v2_columns = False
+
+    try:
+        rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTestsV2()")
+        has_v2_columns = True
+    except Exception:  # noqa: BLE001
+        pass
+
+    if rows is None:
+        try:
+            rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTests()")
+        except Exception:  # noqa: BLE001
+            return None  # neither function available — fall back to file scan
+
+    tests: list[PqlTest] = []
+    for row in rows or []:
+        name = _get_col(row, "Name")
+        if not name:
+            continue
+        description = (_get_col(row, "Description") or None) if has_v2_columns else None
+        impersonated_user = (
+            _get_col(row, "PQLAssert_ImpersonatedUserName") or None
+        ) if has_v2_columns else None
+        tests.append(
+            PqlTest(
+                name=name,
+                file_path="",
+                source=f"EVALUATE {name}()",
+                description=description,
+                impersonated_user_name=impersonated_user,
+            )
+        )
+    return tests
+
+
+def retrieve_tests(
+    model_path: str,
+    connection: Optional["ResolvedXmlaConnection"] = None,
+) -> list[PqlTest]:
+    """
+    Retrieve all DAX test suites for a PBIP model.
+
+    When *connection* is supplied the live model is queried first via
+    ``PQL.Assert.RetrieveTestsV2()`` (falling back to
+    ``PQL.Assert.RetrieveTests()``).  This returns the authoritative set of
+    test functions actually registered in the model — including tests defined
+    directly in the model's ``functions.tmdl``, not just those in
+    ``DAXQueries/``.
+
+    When no connection is available (or both DAX queries fail) the function
+    falls back to scanning the SemanticModel's DAXQueries/ folder for
+    ``*.Tests.dax`` files.
 
     Parameters
     ----------
     model_path:
         Root directory of the PBIP model (contains the .pbip file).
+    connection:
+        Optional live XMLA connection.  Pass to enable live discovery.
 
     Returns
     -------
     List of PqlTest descriptors; empty list when none are found.
     """
+    if connection is not None:
+        live = _retrieve_tests_via_dax(connection)
+        if live is not None:  # None means both queries failed
+            return live
+
+    # Offline fallback: scan DAXQueries/ folder for *.Tests.dax files
     semantic_model_dir = _find_semantic_model_dir(model_path)
     if not semantic_model_dir:
         return []
     return [_parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)]
 
 
-def retrieve_test_by_name(model_path: str, test_name: str) -> Optional[PqlTest]:
+def retrieve_test_by_name(
+    model_path: str,
+    test_name: str,
+    connection: Optional["ResolvedXmlaConnection"] = None,
+) -> Optional[PqlTest]:
     """
     Retrieve a single DAX test suite by name (case-insensitive).
 
-    The name is matched against the file stem without .dax extension,
-    e.g. "Calculations.DEV.Tests".
+    The name is matched against the function name (e.g. "Calcs.DEV.Tests").
+    When *connection* is supplied live discovery is used; otherwise the
+    DAXQueries/ folder is scanned.
     """
-    for t in retrieve_tests(model_path):
+    for t in retrieve_tests(model_path, connection=connection):
         if t.name.lower() == test_name.lower():
             return t
     return None
@@ -975,16 +1147,16 @@ def run_tests_from_model(
     if conn_opts is None:
         conn_opts = XmlaConnectionOptions()
 
-    if test_name:
-        found = retrieve_test_by_name(model_path, test_name)
-        tests: list[PqlTest] = [found] if found else []
-    else:
-        tests = retrieve_tests(model_path)
-
     # Use a pre-resolved connection when supplied (e.g. from --local detection),
     # otherwise resolve from conn_opts as normal.
     if connection is None:
         connection = resolve_xmla_connection(model_path, conn_opts)
+
+    if test_name:
+        found = retrieve_test_by_name(model_path, test_name, connection=connection)
+        tests: list[PqlTest] = [found] if found else []
+    else:
+        tests = retrieve_tests(model_path, connection=connection)
     results = run_tests(tests, connection, skip_message=skip_message)
     passed = sum(1 for r in results if r.passed)
     skipped = sum(1 for r in results if r.skipped)
