@@ -9,11 +9,20 @@ Tests are *.Tests.dax files executed via ADOMD.NET (pyadomd), mirroring the
 Invoke-DQVTesting pattern.  Service principal authentication is supported via
 MSAL, enabling row-level security calls from build agents.
 
+Model path formats:
+  - <filesystem_path>           Traditional PBIP root directory.
+  - local/<model_name>          Connect to a locally-open Power BI
+                                Desktop instance by model name.
+  - <workspace>.<semantic_model> Fabric CLI dot notation — connect to
+                                a remote workspace by display names.
+
 Connection resolution:
   - When --tenant-id, --workspace-id, and --dataset-id are all provided (or
     set via PQL_* environment variables) the CLI connects to the remote
     Power BI Premium / Fabric XMLA endpoint using a service-principal
     bearer token acquired from Azure AD via MSAL.
+  - When using workspace.model Fabric CLI dot notation, the CLI connects
+    directly using workspace and model display names without GUIDs.
   - Otherwise the CLI auto-detects a locally-open Power BI Desktop instance
     using the local Analysis Services port file.
 

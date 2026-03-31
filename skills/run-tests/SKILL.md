@@ -5,7 +5,10 @@ description: Execute all DAX test suites in a PBIP semantic model against the XM
 
 Run `pql-test run-tests MODEL_PATH` to execute all DAX test suites found in a Power BI Project (PBIP) semantic model and report results in a pytest-style format.
 
-MODEL_PATH is the PBIP root directory containing the `.pbip` file and the `.SemanticModel` sub-folder, or the `.SemanticModel` directory itself.
+MODEL_PATH accepts three formats:
+- **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory itself).
+- **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name, without requiring a local file path. Useful when test files are defined in the model's `functions.tmdl` and may not exist locally.
+- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation (similar to `fab run`). Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`).
 
 The command auto-detects a locally-open Power BI Desktop instance via the Analysis Services port file, or connects to a remote Power BI Premium / Microsoft Fabric XMLA endpoint when `--tenant-id`, `--workspace-id`, and `--dataset-id` are supplied.
 
@@ -28,6 +31,8 @@ Exit codes: `0` = all tests passed, `1` = one or more tests failed.
 Usage:
 ```
 pql-test run-tests ../examples
+pql-test run-tests local/SampleModel
+pql-test run-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
 pql-test run-tests ../examples/SampleModel.SemanticModel --local
 pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
 pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
