@@ -849,7 +849,7 @@ def cmd_run_tests(
                 )
 
     skip_message = (
-        f"No matching Power BI Desktop instance found for model '{ident.model_name}'. "
+        f"No matching Power BI Desktop instance found for model '{ident.model_name or ''}'. "
         "Make sure the model is open in Power BI Desktop."
         if ident.kind == "local" and not conn
         else (
