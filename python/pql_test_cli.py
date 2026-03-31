@@ -53,11 +53,15 @@ from pql_test_runner import (
     HAS_PSUTIL,
     HAS_PYADOMD,
     Environment,
+    ModelIdentifier,
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
     get_pbi_files_opened,
+    parse_model_identifier,
     resolve_local_xmla_connection,
+    resolve_local_xmla_connection_by_name,
+    resolve_service_xmla_connection_by_name,
     resolve_xmla_connection,
     retrieve_test_by_name,
     retrieve_tests,
@@ -486,35 +490,69 @@ def cmd_retrieve_tests(
     which returns ALL test functions registered in the model including those
     defined directly in functions.tmdl.
 
-    MODEL_PATH is the PBIP root directory — the folder that contains the
-    .pbip file and the .SemanticModel sub-folder.  You may also pass the
-    .SemanticModel directory or the .pbip file directly.
+    MODEL_PATH accepts three formats:
+
+    \b
+      local/<model_name>          Connect to a locally-open Power BI
+                                  Desktop instance by model name.
+      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
+                                  a remote workspace by display names.
+      <filesystem_path>           Traditional PBIP root directory.
 
     \b
     Examples:
       pql-test retrieve-tests ../examples
+      pql-test retrieve-tests local/SampleModel
+      pql-test retrieve-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
       pql-test retrieve-tests ../examples/SampleModel.SemanticModel --local
-      pql-test retrieve-tests ../examples/SampleModel.SemanticModel
     """
-    abs_path = str(Path(model_path).resolve())
-    if not Path(abs_path).exists():
-        click.echo(f"Error: Model path not found: {abs_path}", err=True)
-        sys.exit(1)
-
+    ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
 
-    # Resolve a live connection before discovery so RetrieveTestsV2/V1 can be used.
     conn = None
-    if local_mode:
-        conn = resolve_local_xmla_connection(abs_path)
+    abs_path: str = ""
+
+    if ident.kind == "local":
+        # local/<model_name> — resolve local connection by name
+        conn = resolve_local_xmla_connection_by_name(ident.model_name)
         if conn is None:
             click.echo(
-                "Warning: --local specified but no matching Power BI Desktop instance found. "
-                "Falling back to file-based discovery.",
+                f"Warning: No matching Power BI Desktop instance found for model '{ident.model_name}'. "
+                "Make sure the model is open in Power BI Desktop.",
                 err=True,
             )
-    elif any([tenant_id, workspace_id, dataset_id]):
-        conn = resolve_xmla_connection(abs_path, opts)
+        abs_path = f"local/{ident.model_name}"
+
+    elif ident.kind == "service":
+        # workspace.semanticmodel — Fabric CLI dot notation
+        conn = resolve_service_xmla_connection_by_name(
+            ident.workspace_name, ident.model_name, opts,
+        )
+        if conn is None:
+            click.echo(
+                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
+                err=True,
+            )
+            sys.exit(1)
+        abs_path = ident.raw
+
+    else:
+        # Traditional filesystem path
+        abs_path = str(Path(model_path).resolve())
+        if not Path(abs_path).exists():
+            click.echo(f"Error: Model path not found: {abs_path}", err=True)
+            sys.exit(1)
+
+        if local_mode:
+            conn = resolve_local_xmla_connection(abs_path)
+            if conn is None:
+                click.echo(
+                    "Warning: --local specified but no matching Power BI Desktop instance found. "
+                    "Falling back to file-based discovery.",
+                    err=True,
+                )
+        elif any([tenant_id, workspace_id, dataset_id]):
+            conn = resolve_xmla_connection(abs_path, opts)
 
     if test_name:
         test = retrieve_test_by_name(abs_path, test_name, connection=conn)
@@ -551,19 +589,59 @@ def cmd_retrieve_tests(
 @click.argument("name")
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="With --human: also print the full DAX source.")
-def cmd_retrieve_test(model_path: str, name: str, human: bool, verbose: bool) -> None:
+@conn_options
+def cmd_retrieve_test(
+    model_path: str,
+    name: str,
+    human: bool,
+    verbose: bool,
+    tenant_id: str | None,
+    workspace_id: str | None,
+    dataset_id: str | None,
+    client_id: str | None,
+    client_secret: str | None,
+    environment: str,
+) -> None:
     """Show a specific DAX test suite by name.
 
     Outputs a JSON object by default. Use --human for formatted text.
 
-    MODEL_PATH is the PBIP root directory containing the .pbip file.
-    """
-    abs_path = str(Path(model_path).resolve())
-    if not Path(abs_path).exists():
-        click.echo(f"Error: Model path not found: {abs_path}", err=True)
-        sys.exit(1)
+    MODEL_PATH accepts three formats:
 
-    test = retrieve_test_by_name(abs_path, name)
+    \b
+      local/<model_name>          Connect to a locally-open Power BI
+                                  Desktop instance by model name.
+      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
+                                  a remote workspace by display names.
+      <filesystem_path>           Traditional PBIP root directory.
+    """
+    ident = parse_model_identifier(model_path)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+
+    conn = None
+    abs_path: str = ""
+
+    if ident.kind == "local":
+        conn = resolve_local_xmla_connection_by_name(ident.model_name)
+        abs_path = f"local/{ident.model_name}"
+    elif ident.kind == "service":
+        conn = resolve_service_xmla_connection_by_name(
+            ident.workspace_name, ident.model_name, opts,
+        )
+        if conn is None:
+            click.echo(
+                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
+                err=True,
+            )
+            sys.exit(1)
+        abs_path = ident.raw
+    else:
+        abs_path = str(Path(model_path).resolve())
+        if not Path(abs_path).exists():
+            click.echo(f"Error: Model path not found: {abs_path}", err=True)
+            sys.exit(1)
+
+    test = retrieve_test_by_name(abs_path, name, connection=conn)
     if not test:
         if human:
             click.echo(f'No test found with name: "{name}"')
@@ -646,87 +724,134 @@ def cmd_run_tests(
     Use --log-format to emit CI-native annotations for Azure DevOps or
     GitHub Actions pipelines.
 
-    MODEL_PATH is the PBIP root directory containing the .pbip file.
-    You may also pass the .SemanticModel directory directly.
+    MODEL_PATH accepts three formats:
+
+    \b
+      local/<model_name>          Connect to a locally-open Power BI
+                                  Desktop instance by model name.
+      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
+                                  a remote workspace by display names.
+      <filesystem_path>           Traditional PBIP root directory.
 
     \b
     Examples:
       pql-test run-tests ../examples
-      pql-test run-tests ../examples/SampleModel.SemanticModel
+      pql-test run-tests local/SampleModel
+      pql-test run-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
       pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
-      pql-test run-tests ../examples/SampleModel.SemanticModel --log-format azuredevops
     """
-    abs_path = str(Path(model_path).resolve())
-    if not Path(abs_path).exists():
-        click.echo(f"Error: Model path not found: {abs_path}", err=True)
-        sys.exit(1)
-
+    ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
 
     pre_warnings: list[str] = []
+    conn = None
+    abs_path: str = ""
 
-    if local_mode:
-        # Mirrors Invoke-DQVTesting -Local: enumerate open PBI Desktop instances
-        # via process inspection and match to this model's .pbip stem.
-        if verbose:
-            try:
-                instances = get_pbi_files_opened()
-                if instances:
-                    click.echo("\nDetected Power BI Desktop instances:")
-                    for inst in instances:
-                        click.echo(f"  \u2022 {inst.model_name}  \u2192  {inst.server} / {inst.catalog}")
-                else:
-                    click.echo("\nNo Power BI Desktop instances detected.")
-            except ImportError:
-                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
-
-        conn = resolve_local_xmla_connection(abs_path)
+    if ident.kind == "local":
+        # local/<model_name> — resolve local connection by name
+        conn = resolve_local_xmla_connection_by_name(ident.model_name)
+        abs_path = f"local/{ident.model_name}"
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            from pql_test_runner import _find_pbip_file as _fpf
-            from pathlib import Path as _Path
-            _pbip = _fpf(abs_path)
-            _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
             pre_warnings.append(
-                "--local specified but no matching Power BI Desktop instance found. "
+                f"No matching Power BI Desktop instance found for model '{ident.model_name}'. "
                 "Make sure the model is open in Power BI Desktop."
             )
             click.echo(
-                f"\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
-                f"Looking for model: '{_searched_name}'\n"
-                f"Make sure '{_searched_name}' is open in Power BI Desktop.\n"
+                f"\nWarning: No matching Power BI Desktop instance found for model '{ident.model_name}'.\n"
+                f"Make sure '{ident.model_name}' is open in Power BI Desktop.\n"
                 f"Tip: run with --verbose to see all detected instances.",
                 err=True,
             )
-    else:
-        conn = resolve_xmla_connection(abs_path, opts)
+
+    elif ident.kind == "service":
+        # workspace.semanticmodel — Fabric CLI dot notation
+        conn = resolve_service_xmla_connection_by_name(
+            ident.workspace_name, ident.model_name, opts,
+        )
+        abs_path = ident.raw
         if conn:
             click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            pre_warnings.append(
-                "No XMLA connection detected. Tests will be reported as skipped. "
-                "Open the model in Power BI Desktop (--local) or supply "
-                "--tenant-id, --workspace-id, --dataset-id."
-            )
             click.echo(
-                "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
-                "Options:\n"
-                "  \u2022 Open the model in Power BI Desktop and use --local\n"
-                "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
-                "    (and --client-id, --client-secret for service-principal auth)\n",
+                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
                 err=True,
             )
+            sys.exit(1)
+
+    else:
+        # Traditional filesystem path
+        abs_path = str(Path(model_path).resolve())
+        if not Path(abs_path).exists():
+            click.echo(f"Error: Model path not found: {abs_path}", err=True)
+            sys.exit(1)
+
+        if local_mode:
+            if verbose:
+                try:
+                    instances = get_pbi_files_opened()
+                    if instances:
+                        click.echo("\nDetected Power BI Desktop instances:")
+                        for inst in instances:
+                            click.echo(f"  \u2022 {inst.model_name}  \u2192  {inst.server} / {inst.catalog}")
+                    else:
+                        click.echo("\nNo Power BI Desktop instances detected.")
+                except ImportError:
+                    click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+
+            conn = resolve_local_xmla_connection(abs_path)
+            if conn:
+                click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
+            else:
+                from pql_test_runner import _find_pbip_file as _fpf
+                from pathlib import Path as _Path
+                _pbip = _fpf(abs_path)
+                _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
+                pre_warnings.append(
+                    "--local specified but no matching Power BI Desktop instance found. "
+                    "Make sure the model is open in Power BI Desktop."
+                )
+                click.echo(
+                    f"\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
+                    f"Looking for model: '{_searched_name}'\n"
+                    f"Make sure '{_searched_name}' is open in Power BI Desktop.\n"
+                    f"Tip: run with --verbose to see all detected instances.",
+                    err=True,
+                )
+        else:
+            conn = resolve_xmla_connection(abs_path, opts)
+            if conn:
+                click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
+            else:
+                pre_warnings.append(
+                    "No XMLA connection detected. Tests will be reported as skipped. "
+                    "Open the model in Power BI Desktop (--local) or supply "
+                    "--tenant-id, --workspace-id, --dataset-id."
+                )
+                click.echo(
+                    "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
+                    "Options:\n"
+                    "  \u2022 Open the model in Power BI Desktop and use --local\n"
+                    "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
+                    "    (and --client-id, --client-secret for service-principal auth)\n",
+                    err=True,
+                )
 
     skip_message = (
-        "No matching Power BI Desktop instance found. "
+        f"No matching Power BI Desktop instance found for model '{ident.model_name}'. "
         "Make sure the model is open in Power BI Desktop."
-        if local_mode and not conn
+        if ident.kind == "local" and not conn
         else (
-            "No XMLA connection available. "
-            "Open the model in Power BI Desktop or supply "
-            "--tenant-id, --workspace-id, and --dataset-id."
+            "No matching Power BI Desktop instance found. "
+            "Make sure the model is open in Power BI Desktop."
+            if local_mode and not conn
+            else (
+                "No XMLA connection available. "
+                "Open the model in Power BI Desktop or supply "
+                "--tenant-id, --workspace-id, and --dataset-id."
+            )
         )
     )
 

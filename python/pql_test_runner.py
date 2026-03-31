@@ -167,6 +167,74 @@ def get_api_endpoints(environment: Environment = Environment.PUBLIC) -> Endpoint
 
 
 # ---------------------------------------------------------------------------
+# Model identifier parsing
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ModelIdentifier:
+    """Parsed model identifier from the CLI model_path argument.
+
+    Supports three formats:
+
+    * ``local/<model_name>`` — connect to a locally-open Power BI Desktop
+      instance matching *model_name* (case-insensitive).  File-based test
+      discovery is skipped; only live XMLA discovery is used.
+    * ``<workspace>.<semantic_model>`` — connect to a remote Fabric /
+      Power BI Premium workspace using the workspace and semantic-model
+      display names directly, following the Fabric CLI dot notation
+      (e.g. ``fab run``).  No local file path is needed.
+    * A regular filesystem path — legacy behaviour, unchanged.
+    """
+
+    kind: str
+    """One of ``'local'``, ``'service'``, or ``'path'``."""
+    model_name: Optional[str] = None
+    """Semantic-model display name (``local`` and ``service`` modes)."""
+    workspace_name: Optional[str] = None
+    """Workspace display name (``service`` mode only)."""
+    raw: str = ""
+    """The original model_path string as supplied by the user."""
+
+
+def parse_model_identifier(model_path: str) -> ModelIdentifier:
+    """Parse a *model_path* CLI argument into a :class:`ModelIdentifier`.
+
+    Detection rules (applied in order):
+
+    1. Starts with ``local/`` **and** the path does not exist on the local
+       filesystem → ``kind='local'``, *model_name* is the remainder.
+    2. Does **not** start with ``./``, ``/``, or ``\\``; contains at least
+       one ``.``; the value does not exist on the filesystem → ``kind='service'``,
+       split on the **last** dot into *workspace_name* and *model_name*.
+    3. Otherwise → ``kind='path'`` (traditional filesystem path).
+    """
+    # 1. local/<model_name>
+    if model_path.startswith("local/") and not Path(model_path).exists():
+        name = model_path[len("local/"):]
+        return ModelIdentifier(kind="local", model_name=name, raw=model_path)
+
+    # 2. workspace.semanticmodel (Fabric CLI dot notation)
+    if (
+        not model_path.startswith(("./", "/", "\\"))
+        and "." in model_path
+        and not Path(model_path).exists()
+    ):
+        dot_idx = model_path.rfind(".")
+        ws = model_path[:dot_idx]
+        sm = model_path[dot_idx + 1:]
+        if ws and sm:
+            return ModelIdentifier(
+                kind="service",
+                workspace_name=ws,
+                model_name=sm,
+                raw=model_path,
+            )
+
+    # 3. Filesystem path (default)
+    return ModelIdentifier(kind="path", raw=model_path)
+
+
+# ---------------------------------------------------------------------------
 # Public data types
 # ---------------------------------------------------------------------------
 
@@ -720,6 +788,87 @@ def resolve_xmla_connection(
     # Use process-based detection first (mirrors Get-PowerBIFilesOpened), which
     # also resolves the correct catalog GUID via $SYSTEM.DBSCHEMA_CATALOGS.
     return resolve_local_xmla_connection(model_path)
+
+
+def resolve_service_xmla_connection_by_name(
+    workspace_name: str,
+    semantic_model_name: str,
+    opts: XmlaConnectionOptions,
+) -> Optional[ResolvedXmlaConnection]:
+    """
+    Resolve a remote XMLA connection using workspace and semantic-model
+    **display names** directly, skipping the GUID-based REST API resolution.
+
+    This mirrors the Fabric CLI ``fab run <workspace>.<semantic_model>`` flow
+    where display names are supplied by the caller instead of GUIDs.
+
+    *tenant_id*, *client_id*, and *client_secret* must still be provided
+    inside *opts* for service-principal authentication.
+    """
+    if not opts.tenant_id or not opts.client_id or not opts.client_secret:
+        return None
+
+    endpoints = get_api_endpoints(opts.environment)
+    token = _acquire_service_principal_token(
+        opts.tenant_id,
+        opts.client_id,
+        opts.client_secret,
+        login_url=endpoints.login_url,
+        resource_url=endpoints.resource_url,
+    )
+    xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
+    server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
+    return ResolvedXmlaConnection(
+        server=server,
+        catalog=semantic_model_name,
+        tenant_id=opts.tenant_id,
+        client_id=opts.client_id,
+        client_secret=opts.client_secret,
+        access_token=token,
+    )
+
+
+def resolve_local_xmla_connection_by_name(
+    model_name: str,
+) -> Optional[ResolvedXmlaConnection]:
+    """
+    Resolve a local XMLA connection by matching *model_name* against
+    running Power BI Desktop instances (case-insensitive).
+
+    Used by the ``local/<model_name>`` model-identifier format where no
+    local filesystem path is available.
+    """
+    try:
+        instances = get_pbi_files_opened()
+    except ImportError:
+        port = _detect_local_pbi_desktop_port()
+        if port:
+            return ResolvedXmlaConnection(server=port, catalog="")
+        return None
+
+    if not instances:
+        port_str = _detect_local_pbi_desktop_port()
+        if port_str:
+            return ResolvedXmlaConnection(server=port_str, catalog="")
+        return None
+
+    for inst in instances:
+        if inst.model_name.lower() == model_name.lower():
+            return ResolvedXmlaConnection(
+                server=inst.server,
+                catalog=inst.catalog,
+            )
+
+    # No exact name match — if there is exactly one unnamed instance, use it
+    unnamed = [i for i in instances if not i.model_name]
+    named = [i for i in instances if i.model_name]
+    if unnamed and not named and len(instances) == 1:
+        return ResolvedXmlaConnection(
+            server=instances[0].server,
+            catalog=instances[0].catalog,
+        )
+
+    return None
 
 
 # ---------------------------------------------------------------------------
