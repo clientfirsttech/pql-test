@@ -550,3 +550,83 @@ class TestRunTestsLogFormat:
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
         assert "--log-format" in stdout
+
+
+# ---------------------------------------------------------------------------
+# Model identifier format tests (local/<name>, workspace.model)
+# ---------------------------------------------------------------------------
+
+class TestModelIdentifierFormats:
+    """CLI tests for the new model identifier formats."""
+
+    def test_local_prefix_accepted_by_retrieve_tests(self):
+        """'local/SampleModel' is accepted; no file-system path required."""
+        stdout, stderr, code = run_cli(["retrieve-tests", "local/SampleModel"])
+        combined = stdout + stderr
+        # Should not get "Model path not found" error
+        assert "Model path not found" not in combined
+        # Should output a JSON array (empty is fine — no connection)
+        assert code == 0
+
+    def test_local_prefix_accepted_by_run_tests(self):
+        """'local/SampleModel' is accepted by run-tests."""
+        stdout, stderr, code = run_cli(["run-tests", "local/SampleModel"])
+        combined = stdout + stderr
+        assert "Model path not found" not in combined
+        # Should show summary (0 total since no connection)
+        assert "total" in stdout
+
+    def test_local_prefix_shows_model_name_in_warning(self):
+        """Warning message mentions the model name from local/<name>."""
+        stdout, stderr, _ = run_cli(["run-tests", "local/MyTestModel"])
+        combined = stdout + stderr
+        assert "MyTestModel" in combined
+
+    def test_service_format_exits_1_without_credentials(self):
+        """'workspace.model' without auth credentials → exit 1."""
+        _, stderr, code = run_cli(["run-tests", "MyWorkspace.MyModel"])
+        assert code == 1
+        assert "tenant-id" in stderr.lower() or "client-id" in stderr.lower()
+
+    def test_service_format_accepted_by_retrieve_tests(self):
+        """'workspace.model' → exit 1 with credential error (not path error)."""
+        _, stderr, code = run_cli(["retrieve-tests", "MyWorkspace.MyModel"])
+        assert code == 1
+        # Should be a credentials error, not a file path error
+        assert "Model path not found" not in stderr
+
+    def test_service_format_accepted_by_retrieve_test(self):
+        """'workspace.model' → exit 1 with credential error (not path error)."""
+        _, stderr, code = run_cli(["retrieve-test", "MyWorkspace.MyModel", "SomeSuite"])
+        assert code == 1
+        assert "Model path not found" not in stderr
+
+    def test_local_prefix_accepted_by_retrieve_test(self):
+        """'local/SampleModel' is accepted by retrieve-test."""
+        stdout, _, code = run_cli(["retrieve-test", "local/SampleModel", "Missing.Tests"])
+        # No connection → test not found is expected
+        assert code == 1
+        assert "null" in stdout or "No test found" in stdout
+
+    def test_run_tests_help_mentions_local_model_format(self):
+        """run-tests help text mentions the local/<model_name> format."""
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "local/" in stdout
+
+    def test_run_tests_help_mentions_service_format(self):
+        """run-tests help text mentions the workspace.model format."""
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "Fabric CLI" in stdout or "dot notation" in stdout
+
+    def test_retrieve_tests_help_mentions_local_model_format(self):
+        """retrieve-tests help text mentions the local/<model_name> format."""
+        stdout, _, code = run_cli(["retrieve-tests", "--help"])
+        assert code == 0
+        assert "local/" in stdout
+
+    def test_local_model_run_tests_shows_summary_line(self):
+        """local/<model_name> always shows a summary even without a connection."""
+        stdout, _, _ = run_cli(["run-tests", "local/AnyModel"])
+        assert "passed" in stdout and "failed" in stdout and "total" in stdout

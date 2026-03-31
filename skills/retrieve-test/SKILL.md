@@ -5,17 +5,28 @@ description: Show details for a single DAX test suite by name. Returns a JSON ob
 
 Run `pql-test retrieve-test MODEL_PATH NAME` to fetch the definition of a specific DAX test suite from a Power BI Project (PBIP) semantic model.
 
-MODEL_PATH is the PBIP root directory containing the `.pbip` file and the `.SemanticModel` sub-folder, or the `.SemanticModel` directory itself.
+MODEL_PATH accepts three formats:
+- **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory itself).
+- **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name.
+- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation (requires `--tenant-id`, `--client-id`, `--client-secret`).
 
 NAME is the exact name of the DAX test suite to retrieve (e.g. `Calcs.DEV.Tests`).
 
 Options:
 - `--human` — Output in human-readable formatted text instead of JSON.
 - `--verbose` — With `--human`: also print the full DAX source of the test suite. With JSON output: adds a `"source"` field to the returned object.
+- `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
+- `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
+- `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
+- `--client-id ID` — Service principal client ID (or set `PQL_CLIENT_ID` env var).
+- `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
+- `--environment ENV` — Cloud environment (or set `PQL_ENVIRONMENT` env var).
 
 Usage:
 ```
 pql-test retrieve-test ../examples "Calcs.DEV.Tests"
+pql-test retrieve-test local/SampleModel "Calcs.DEV.Tests"
+pql-test retrieve-test "MyWorkspace.MyModel" "Calcs.DEV.Tests" --tenant-id ... --client-id ... --client-secret ...
 pql-test retrieve-test ../examples "Calcs.DEV.Tests" --human
 pql-test retrieve-test ../examples "Calcs.DEV.Tests" --human --verbose
 ```

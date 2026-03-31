@@ -24,6 +24,7 @@ from pql_test_runner import (
     HAS_PYADOMD,
     Environment,
     LocalPbiInstance,
+    ModelIdentifier,
     PqlTest,
     ResolvedXmlaConnection,
     TestResult,
@@ -34,7 +35,10 @@ from pql_test_runner import (
     _find_pbip_file,
     _find_semantic_model_dir,
     get_pbi_files_opened,
+    parse_model_identifier,
     resolve_local_xmla_connection,
+    resolve_local_xmla_connection_by_name,
+    resolve_service_xmla_connection_by_name,
     resolve_xmla_connection,
     retrieve_test_by_name,
     retrieve_tests,
@@ -1459,3 +1463,197 @@ class TestRetrieveTestsViaDax:
         result = retrieve_tests(model_dir)
         assert len(result) == 1
         assert result[0].file_path.endswith(".dax")
+
+
+# ---------------------------------------------------------------------------
+# parse_model_identifier
+# ---------------------------------------------------------------------------
+
+class TestParseModelIdentifier:
+    """Tests for model identifier format detection."""
+
+    def test_local_prefix_returns_local_kind(self):
+        """'local/SampleModel' → kind='local', model_name='SampleModel'."""
+        ident = parse_model_identifier("local/SampleModel")
+        assert ident.kind == "local"
+        assert ident.model_name == "SampleModel"
+        assert ident.raw == "local/SampleModel"
+
+    def test_local_prefix_with_spaces_in_name(self):
+        """'local/My Model' → kind='local', model_name='My Model'."""
+        ident = parse_model_identifier("local/My Model")
+        assert ident.kind == "local"
+        assert ident.model_name == "My Model"
+
+    def test_local_prefix_existing_path_uses_path_kind(self, tmp_path):
+        """If 'local/<name>' exists on disk, treat it as a filesystem path."""
+        local_dir = tmp_path / "local" / "Model"
+        local_dir.mkdir(parents=True)
+        ident = parse_model_identifier(str(local_dir))
+        assert ident.kind == "path"
+
+    def test_dotted_name_returns_service_kind(self):
+        """'MyWorkspace.MyModel' → kind='service'."""
+        ident = parse_model_identifier("MyWorkspace.MyModel")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+        assert ident.raw == "MyWorkspace.MyModel"
+
+    def test_dotted_name_splits_on_last_dot(self):
+        """'My.Complex.Workspace.MyModel' → workspace='My.Complex.Workspace'."""
+        ident = parse_model_identifier("My.Complex.Workspace.MyModel")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My.Complex.Workspace"
+        assert ident.model_name == "MyModel"
+
+    def test_dotted_name_existing_path_uses_path_kind(self, tmp_path):
+        """If a dotted path exists on disk, treat it as a filesystem path."""
+        dotted_dir = tmp_path / "ws.model"
+        dotted_dir.mkdir()
+        ident = parse_model_identifier(str(dotted_dir))
+        assert ident.kind == "path"
+
+    def test_relative_path_returns_path_kind(self, tmp_path):
+        """'./examples/Model' → kind='path' even if it doesn't exist."""
+        ident = parse_model_identifier("./some.dotted.path")
+        assert ident.kind == "path"
+
+    def test_absolute_path_returns_path_kind(self, tmp_path):
+        """/absolute/path → kind='path'."""
+        ident = parse_model_identifier("/some/absolute/path")
+        assert ident.kind == "path"
+
+    def test_plain_directory_returns_path_kind(self, tmp_path):
+        """'examples' → kind='path' (no dot, no local/ prefix)."""
+        ident = parse_model_identifier("examples")
+        assert ident.kind == "path"
+        assert ident.raw == "examples"
+
+    def test_backslash_path_returns_path_kind(self):
+        """Windows-style path → kind='path'."""
+        ident = parse_model_identifier("\\\\server\\share\\model.sm")
+        assert ident.kind == "path"
+
+
+# ---------------------------------------------------------------------------
+# resolve_service_xmla_connection_by_name
+# ---------------------------------------------------------------------------
+
+class TestResolveServiceXmlaConnectionByName:
+    """Tests for building XMLA connections from workspace + model display names."""
+
+    def test_returns_connection_with_valid_credentials(self):
+        """Full credentials → connection with expected server and catalog."""
+        opts = XmlaConnectionOptions(
+            tenant_id="t-1", client_id="c-1", client_secret="s-1",
+        )
+        with patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"):
+            conn = resolve_service_xmla_connection_by_name("MyWorkspace", "MyModel", opts)
+        assert conn is not None
+        assert "MyWorkspace" in conn.server
+        assert conn.catalog == "MyModel"
+        assert conn.access_token == "fake-token"
+        assert "powerbi://api.powerbi.com" in conn.server
+
+    def test_returns_none_without_tenant_id(self):
+        """Missing tenant_id → None."""
+        opts = XmlaConnectionOptions(client_id="c-1", client_secret="s-1")
+        conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
+        assert conn is None
+
+    def test_returns_none_without_client_id(self):
+        """Missing client_id → None."""
+        opts = XmlaConnectionOptions(tenant_id="t-1", client_secret="s-1")
+        conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
+        assert conn is None
+
+    def test_returns_none_without_client_secret(self):
+        """Missing client_secret → None."""
+        opts = XmlaConnectionOptions(tenant_id="t-1", client_id="c-1")
+        conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
+        assert conn is None
+
+    def test_uses_correct_environment_endpoint(self):
+        """USGov environment → USGov XMLA prefix."""
+        opts = XmlaConnectionOptions(
+            tenant_id="t", client_id="c", client_secret="s",
+            environment=Environment.US_GOV,
+        )
+        with patch("pql_test_runner._acquire_service_principal_token", return_value="tok"):
+            conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
+        assert conn is not None
+        assert "powerbigov.us" in conn.server
+
+
+# ---------------------------------------------------------------------------
+# resolve_local_xmla_connection_by_name
+# ---------------------------------------------------------------------------
+
+class TestResolveLocalXmlaConnectionByName:
+    """Tests for resolving local connections by model name."""
+
+    def test_returns_connection_for_matching_instance(self):
+        """Matching model name → connection returned."""
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_local_xmla_connection_by_name("SampleModel")
+        assert conn is not None
+        assert conn.server == inst.server
+
+    def test_matching_is_case_insensitive(self):
+        """Model name match is case-insensitive."""
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_local_xmla_connection_by_name("SAMPLEMODEL")
+        assert conn is not None
+
+    def test_returns_none_when_no_match(self):
+        """No matching model → None."""
+        inst = LocalPbiInstance(
+            model_name="OtherModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_local_xmla_connection_by_name("SampleModel")
+        assert conn is None
+
+    def test_returns_none_when_no_instances(self):
+        """No running instances → None."""
+        with (
+            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+        ):
+            conn = resolve_local_xmla_connection_by_name("SampleModel")
+        assert conn is None
+
+    def test_falls_back_to_port_file_when_psutil_unavailable(self):
+        """psutil ImportError → port-file fallback."""
+        fallback_server = f"localhost:{_MOCK_AS_PORT_A}"
+        with (
+            patch("pql_test_runner.get_pbi_files_opened", side_effect=ImportError("psutil")),
+            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=fallback_server),
+        ):
+            conn = resolve_local_xmla_connection_by_name("SampleModel")
+        assert conn is not None
+        assert conn.server == fallback_server
+
+    def test_returns_single_unnamed_instance(self):
+        """Single unnamed instance → connection returned."""
+        inst = LocalPbiInstance(
+            model_name="",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_local_xmla_connection_by_name("AnyModel")
+        assert conn is not None

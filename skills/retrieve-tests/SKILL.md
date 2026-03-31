@@ -5,7 +5,10 @@ description: List all DAX test suites (*.Tests.dax files) found in a PBIP semant
 
 Run `pql-test retrieve-tests MODEL_PATH` to discover all DAX test suites stored in a Power BI Project (PBIP) semantic model.
 
-MODEL_PATH is the PBIP root directory — the folder that contains the `.pbip` file and the `.SemanticModel` sub-folder. You may also pass the `.SemanticModel` directory or the `.pbip` file directly.
+MODEL_PATH accepts three formats:
+- **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory / `.pbip` file directly).
+- **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name, without requiring a local file path.
+- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation. Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`).
 
 Options:
 - `--test NAME` — Show only the named test suite.
@@ -21,6 +24,8 @@ Options:
 Usage:
 ```
 pql-test retrieve-tests ../examples
+pql-test retrieve-tests local/SampleModel
+pql-test retrieve-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
 pql-test retrieve-tests ../examples/SampleModel.SemanticModel --human
 pql-test retrieve-tests ../examples --test "Calcs.DEV.Tests" --human --verbose
 ```

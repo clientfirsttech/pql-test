@@ -25,6 +25,10 @@ Microsoft Fabric workspace endpoint.
     - [3. Install the wheel on another machine](#3-install-the-wheel-on-another-machine)
     - [4. Distribution options](#4-distribution-options)
     - [Updating the version](#updating-the-version)
+  - [Model Path Formats](#model-path-formats)
+    - [Filesystem path (default)](#filesystem-path-default)
+    - [Local model name (`local/<model_name>`)](#local-model-name-localmodel_name)
+    - [Fabric CLI dot notation (`workspace.semanticmodel`)](#fabric-cli-dot-notation-workspacesemanticmodel)
   - [PBIP Model Layout](#pbip-model-layout)
   - [Writing Test Files](#writing-test-files)
     - [Standard test schema (4 columns)](#standard-test-schema-4-columns)
@@ -194,6 +198,71 @@ python -m build           # produce new dist/pql_test-0.2.0-py3-none-any.whl
 
 ---
 
+## Model Path Formats
+
+The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
+`run-tests` supports three formats:
+
+| Format | Mode | Description |
+|---|---|---|
+| `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
+| `local/<model_name>` | Local | Connect to a locally-open Power BI Desktop instance by model name |
+| `<workspace>.<semantic_model>` | Service | Fabric CLI dot notation — connect to a remote workspace by display names |
+
+### Filesystem path (default)
+
+Pass the PBIP root directory, the `.SemanticModel` sub-folder, or the `.pbip`
+file directly. Tests are discovered by scanning `DAXQueries/` for `*.Tests.dax`
+files. When a live connection is available (`--local` or `--tenant-id`), tests
+are also queried from the model via `PQL.Assert.RetrieveTestsV2()`.
+
+```bash
+pql-test run-tests ./examples/SampleModel
+pql-test run-tests ./examples/SampleModel/SampleModel.SemanticModel
+```
+
+### Local model name (`local/<model_name>`)
+
+Use `local/<model_name>` to connect to a locally-open Power BI Desktop
+instance **by model name** without providing a local file path. This is
+useful when the test `.dax` files may not exist locally yet (e.g. tests are
+defined directly in the model's `functions.tmdl`). Test discovery uses
+`PQL.Assert.RetrieveTestsV2()` via the live XMLA connection.
+
+```bash
+# Open SampleModel in Power BI Desktop first, then:
+pql-test retrieve-tests local/SampleModel
+pql-test run-tests local/SampleModel
+```
+
+### Fabric CLI dot notation (`workspace.semanticmodel`)
+
+Use `<workspace>.<semantic_model>` to connect to a remote Power BI Premium /
+Microsoft Fabric workspace using display names, following the Fabric CLI
+convention (similar to `fab run`). This bypasses the GUID-based REST API
+resolution and builds the XMLA connection directly from the names provided.
+
+Service-principal credentials (`--tenant-id`, `--client-id`,
+`--client-secret`) are still required for authentication.
+
+```bash
+pql-test retrieve-tests "MyWorkspace.MySemanticModel" \
+  --tenant-id  $PQL_TENANT_ID \
+  --client-id  $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+
+pql-test run-tests "MyWorkspace.MySemanticModel" \
+  --tenant-id  $PQL_TENANT_ID \
+  --client-id  $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+```
+
+> **Note:** When `MODEL_PATH` contains a `.` and does not exist on the local
+> filesystem, it is interpreted as Fabric CLI dot notation. If a local
+> directory with dots in its name exists, it is treated as a filesystem path.
+
+---
+
 ## PBIP Model Layout
 
 `pql-test` expects a standard [PBIP](https://learn.microsoft.com/en-us/power-bi/developer/projects/projects-overview)
@@ -332,7 +401,7 @@ pql-test retrieve-tests <modelPath> [--verbose]
 
 | Argument | Required | Description |
 |---|---|---|
-| `<modelPath>` | ✅ | Path to the PBIP model root directory |
+| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `--verbose`, `-v` | ❌ | Also print file paths and connection info |
 
 **Example:**
@@ -376,6 +445,20 @@ Connection: none detected — open the model in Power BI Desktop or supply
 pql-test retrieve-tests ./examples/SampleModel --test "Calculations.DEV.Tests"
 ```
 
+**Using `local/<model_name>` (no local file path needed):**
+
+```bash
+# Open SampleModel in Power BI Desktop first
+pql-test retrieve-tests local/SampleModel
+```
+
+**Using Fabric CLI dot notation:**
+
+```bash
+pql-test retrieve-tests "MyWorkspace.MySemanticModel" \
+  --tenant-id $PQL_TENANT_ID --client-id $PQL_CLIENT_ID --client-secret $PQL_CLIENT_SECRET
+```
+
 ---
 
 ### retrieve-test
@@ -390,7 +473,7 @@ pql-test retrieve-test <modelPath> <name> [--verbose]
 
 | Argument | Required | Description |
 |---|---|---|
-| `<modelPath>` | ✅ | Path to the PBIP model root directory |
+| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `<name>` | ✅ | Test suite name (file stem without `.dax`) |
 | `--verbose`, `-v` | ❌ | Also print the full DAX source |
 
@@ -431,7 +514,7 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 
 | Argument | Required | Description |
 |---|---|---|
-| `<modelPath>` | ✅ | Path to the PBIP model root directory |
+| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `--test <name>` | ❌ | Run only the named test suite |
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
 | `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
@@ -446,6 +529,13 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 pql-test run-tests ./examples/SampleModel
 ```
 
+**Run using `local/<model_name>` (no local file path needed):**
+
+```bash
+# Open SampleModel in Power BI Desktop first
+pql-test run-tests local/SampleModel
+```
+
 **Run all suites against a remote Power BI Premium / Fabric workspace:**
 
 ```bash
@@ -453,6 +543,15 @@ pql-test run-tests ./examples/SampleModel \
   --tenant-id  00000000-0000-0000-0000-000000000000 \
   --workspace-id 11111111-1111-1111-1111-111111111111 \
   --dataset-id   22222222-2222-2222-2222-222222222222
+```
+
+**Run using Fabric CLI dot notation (no local file path or GUIDs needed):**
+
+```bash
+pql-test run-tests "MyWorkspace.MySemanticModel" \
+  --tenant-id  $PQL_TENANT_ID \
+  --client-id  $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
 ```
 
 **Run a single named test suite:**
