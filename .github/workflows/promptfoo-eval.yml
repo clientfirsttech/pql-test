@@ -181,8 +181,8 @@ jobs:
           # If every non-pass was a provider/API error, treat it as a
           # non-blocking warning (GitHub Models may not be provisioned).
           if errors and not failed:
-              print(f'\n::warning::{errors} test(s) could not be evaluated (provider/API error).', file=sys.stderr)
-              print('::warning::GitHub Models may be unavailable – this does not indicate a skill defect.', file=sys.stderr)
+              print(f'\n::warning::{errors} test(s) could not be evaluated (provider/API error).')
+              print('::warning::GitHub Models may be unavailable – this does not indicate a skill defect.')
               sys.exit(0)
 
           if failed:
