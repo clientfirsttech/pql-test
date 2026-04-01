@@ -1,0 +1,34 @@
+table 'Group Fact'
+	lineageTag: a5f2b3c1-5c87-42c9-876e-a1531143c25a
+
+	column Group
+		dataType: string
+		lineageTag: fa535e95-ed1b-45d5-b6d9-96bc5e796f98
+		summarizeBy: none
+		sourceColumn: Group
+
+		annotation SummarizationSetBy = Automatic
+
+	column Total
+		dataType: int64
+		formatString: 0
+		lineageTag: 7eff806b-8af8-415e-a607-1cc65f83ea15
+		summarizeBy: sum
+		sourceColumn: Total
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Group Fact' = m
+		mode: import
+		queryGroup: RLS
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSAeJYnWglIyDLCMwCiRnDxUyUYmMB", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Group = _t, Total = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Total", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

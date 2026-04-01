@@ -1,0 +1,26 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+queryGroup RLS
+
+	annotation PBI_QueryGroupOrder = 0
+
+annotation __PBI_TimeIntelligenceEnabled = 1
+
+annotation PBI_ProTooling = ["TMDLView_Desktop","DaxQueryView_Desktop","DevMode","TMDL-Extension","MCP-PBIModeling"]
+
+annotation PBI_QueryOrder = ["Groups","Group Fact"]
+
+ref table Groups
+ref table 'Group Fact'
+
+ref role West
+ref role East
+
+ref cultureInfo en-US
+

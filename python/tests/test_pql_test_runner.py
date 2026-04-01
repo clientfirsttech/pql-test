@@ -1235,13 +1235,19 @@ class TestResolveLocalXmlaConnection:
             server=real_server,      # dynamic: actual port from the running instance
             catalog="SampleModel",
         )]
-        rows = [
+        # First call: RetrieveTestsV2 discovery — must return Name-keyed rows.
+        # Subsequent calls: test execution — return assertion result rows.
+        discovery_rows = [
+            {"Name": "Calculations.DEV.Tests", "Description": "basic check", "PQLAssert_ImpersonatedUserName": ""},
+            {"Name": "Schema.DEV.Tests", "Description": "", "PQLAssert_ImpersonatedUserName": ""},
+        ]
+        result_rows = [
             {"TestName": "check 1", "Expected": "1", "Actual": "1", "Passed": "true"},
             {"TestName": "check 2", "Expected": "foo", "Actual": "foo", "Passed": "true"},
         ]
         with (
             patch("pql_test_runner.get_pbi_files_opened", return_value=instances),
-            patch("pql_test_runner._execute_dax_query", return_value=rows),
+            patch("pql_test_runner._execute_dax_query", side_effect=[discovery_rows, result_rows, result_rows]),
         ):
             conn = resolve_local_xmla_connection(sample_model_path)
             assert conn is not None

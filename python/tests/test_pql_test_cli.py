@@ -24,7 +24,10 @@ _CLI = str(Path(__file__).parent.parent / "pql_test_cli.py")
 
 def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
     """Run the CLI in a subprocess and return (stdout, stderr, returncode)."""
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    # Strip PQL_* vars so that credentials loaded by test_live_service.py at
+    # collection time do not bleed into subprocesses that don't expect them.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+    env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
         [sys.executable, _CLI, *args],
         capture_output=True,
@@ -629,4 +632,49 @@ class TestModelIdentifierFormats:
     def test_local_model_run_tests_shows_summary_line(self):
         """local/<model_name> always shows a summary even without a connection."""
         stdout, _, _ = run_cli(["run-tests", "local/AnyModel"])
+        assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+
+# ---------------------------------------------------------------------------
+# RLS_Model real-model tests
+# ---------------------------------------------------------------------------
+
+class TestRlsModel:
+    """CLI tests against the real RLS_Model example in examples/."""
+
+    def test_retrieve_tests_finds_rls_suite(self, rls_model_path):
+        """retrieve-tests discovers the RLS.ANY.Tests suite in the RLS model."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        assert code == 0
+        assert "RLS.ANY.Tests" in stdout
+
+    def test_retrieve_tests_returns_non_empty_list(self, rls_model_path):
+        """retrieve-tests returns a non-empty JSON array for the RLS model."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        assert code == 0
+        assert stdout.strip() != "[]"
+
+    def test_retrieve_tests_has_single_suite(self, rls_model_path):
+        """The RLS model contains exactly one test suite."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        assert code == 0
+        suites = json.loads(stdout)
+        assert len(suites) == 1
+        assert suites[0]["name"] == "RLS.ANY.Tests"
+
+    def test_retrieve_test_returns_rls_suite(self, rls_model_path):
+        """retrieve-test returns the RLS.ANY.Tests suite when requested by name."""
+        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "RLS.ANY.Tests"])
+        assert code == 0
+        assert "RLS.ANY.Tests" in stdout
+
+    def test_retrieve_test_exits_1_for_missing_suite(self, rls_model_path):
+        """retrieve-test exits 1 when the requested suite does not exist."""
+        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "Missing.Tests"])
+        assert code == 1
+        assert stdout.strip() == "null"
+
+    def test_run_tests_shows_summary_line(self, rls_model_path):
+        """run-tests always prints a passed/failed/total summary for the RLS model."""
+        stdout, _, _ = run_cli(["run-tests", rls_model_path])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout

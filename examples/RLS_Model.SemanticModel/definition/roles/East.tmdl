@@ -1,0 +1,7 @@
+role East
+	modelPermission: read
+
+	tablePermission Groups = [Group Name] == "East"
+
+	annotation PBI_Id = 2efe7eb399ba46e086c3b43df8819fdd
+

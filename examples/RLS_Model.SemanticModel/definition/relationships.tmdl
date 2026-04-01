@@ -1,0 +1,4 @@
+relationship 63733ad7-bdb1-13d8-80ea-df87415f334b
+	fromColumn: 'Group Fact'.Group
+	toColumn: Groups.Group
+
