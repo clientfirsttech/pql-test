@@ -143,18 +143,47 @@ jobs:
           results = data.get('results', {}).get('results', [])
 
           passed = sum(1 for r in results if r.get('success'))
-          failed = sum(1 for r in results if not r.get('success'))
           total  = len(results)
 
-          print(f'\npromptfoo results: {passed}/{total} passed')
+          # Distinguish API / provider errors from genuine assertion failures.
+          # When the provider returns an error the result has no gradingResult
+          # (or gradingResult is None) and the response typically contains an
+          # error message.
+          errors  = 0
+          failed  = 0
+          for r in results:
+              if r.get('success'):
+                  continue
+              grading = r.get('gradingResult')
+              response = r.get('response', {}) or {}
+              has_error = (
+                  grading is None
+                  or response.get('error') is not None
+                  or 'API call error' in (response.get('output', '') or '')
+              )
+              if has_error:
+                  errors += 1
+              else:
+                  failed += 1
+
+          print(f'\npromptfoo results: {passed}/{total} passed, {failed} failed, {errors} error(s)')
           for r in results:
               status = '✓' if r.get('success') else '✗'
-              desc   = r.get('description') or r.get('testCase', {}).get('description', '(no description)')
+              desc   = r.get('description') or (r.get('testCase') or {}).get('description', '(no description)')
               print(f'  {status}  {desc}')
               if not r.get('success'):
-                  for a in r.get('gradingResult', {}).get('componentResults', []):
+                  grading = r.get('gradingResult') or {}
+                  for a in (grading.get('componentResults') or []):
                       if not a.get('pass'):
-                          print(f'       ↳ FAILED assertion: {a.get("assertion", {}).get("type")} = {a.get("assertion", {}).get("value")}')
+                          assertion = a.get('assertion') or {}
+                          print(f'       ↳ FAILED assertion: {assertion.get("type")} = {assertion.get("value")}')
+
+          # If every non-pass was a provider/API error, treat it as a
+          # non-blocking warning (GitHub Models may not be provisioned).
+          if errors and not failed:
+              print(f'\n::warning::{errors} test(s) could not be evaluated (provider/API error).')
+              print('::warning::GitHub Models may be unavailable – this does not indicate a skill defect.')
+              sys.exit(0)
 
           if failed:
               print(f'\n{failed} test(s) failed', file=sys.stderr)
