@@ -156,20 +156,20 @@ jobs:
       - name: Install ADOMD.NET client libraries
         shell: pwsh
         run: |
-          # Install NuGet provider silently
-          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
-          # Download the ADOMD client package
-          $pkg = Install-Package `
-            -Name "Microsoft.AnalysisServices.AdomdClient.retail.amd64" `
-            -ProviderName NuGet `
-            -Scope CurrentUser `
-            -SkipDependencies `
-            -Force `
-            -ErrorAction SilentlyContinue
-          if ($pkg) {
-            Write-Host "ADOMD.NET installed: $($pkg.Version)"
+          # Use nuget.exe (pre-installed on windows-latest) instead of the
+          # PowerShell PackageManagement provider, which can fail to locate
+          # the NuGet provider on newer runner images.
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+          if ($LASTEXITCODE -eq 0) {
+            $installed = Get-ChildItem $outputDir -Directory `
+              | Where-Object Name -like 'Microsoft.AnalysisServices.AdomdClient*' `
+              | Select-Object -First 1
+            Write-Host "ADOMD.NET installed: $($installed.Name)"
           } else {
-            Write-Warning "ADOMD.NET package install skipped – may already be available via .NET SDK"
+            Write-Warning "ADOMD.NET package install failed – pyadomd may still work if assemblies are in the GAC"
           }
 
       # -----------------------------------------------------------------------
@@ -218,7 +218,7 @@ jobs:
       # Upload the JSON results file so they are available as pipeline artifacts
       # -----------------------------------------------------------------------
       - name: Upload test results
-        if: always()
+        if: always() && steps.result-name.outputs.filename != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.result-name.outputs.filename }}
@@ -229,12 +229,17 @@ jobs:
       # Print a brief summary to the Actions log
       # -----------------------------------------------------------------------
       - name: Summarise results
-        if: always()
+        if: always() && steps.result-name.outputs.filename != ''
         shell: python
         run: |
           import json, pathlib, sys, os
 
-          results_file = pathlib.Path(r"${{ steps.result-name.outputs.filename }}")
+          results_path = r"${{ steps.result-name.outputs.filename }}"
+          if not results_path:
+              print("No result filename set – earlier steps may have been skipped.")
+              sys.exit(0)
+
+          results_file = pathlib.Path(results_path)
           if not results_file.exists():
               print("No results file produced – the run-tests step may have failed before writing output.")
               sys.exit(0)
