@@ -7,5 +7,5 @@
     "BestPractices.ANY.Tests",
     "Query 1"
   ],
-  "defaultTab": "DataQuality.DEV.Tests"
+  "defaultTab": "Calculations.DEV.Tests"
 }

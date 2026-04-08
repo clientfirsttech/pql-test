@@ -759,8 +759,21 @@ def cmd_run_tests(
 
     if ident.kind == "local":
         # local/<model_name> — resolve local connection by name
-        conn = resolve_local_xmla_connection_by_name(ident.model_name)
         abs_path = f"local/{ident.model_name}"
+
+        if verbose:
+            try:
+                instances = get_pbi_files_opened()
+                if instances:
+                    click.echo("\nDetected Power BI Desktop instances:")
+                    for inst in instances:
+                        click.echo(f"  \u2022 '{inst.model_name}'  \u2192  {inst.server} / {inst.catalog}")
+                else:
+                    click.echo("\nNo Power BI Desktop instances detected.")
+            except ImportError:
+                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+
+        conn = resolve_local_xmla_connection_by_name(ident.model_name)
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:

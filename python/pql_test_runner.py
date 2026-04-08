@@ -38,7 +38,7 @@ import re
 import sys
 import time
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as _dc_replace
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
@@ -251,7 +251,9 @@ class PqlTest:
     description: Optional[str] = None
     """Optional description (FUNCTION name when present in the DAX source)."""
     impersonated_user_name: Optional[str] = None
-    """RLS impersonation user from PQL.Assert.RetrieveTestsV2 (live discovery only)."""
+    """RLS impersonation user (AAD UPN) from PQL.Assert.RetrieveTestsV2.  Used with service endpoints."""
+    role_name: Optional[str] = None
+    """RLS role name from PQL.Assert.RetrieveTestsV2 (PQLAssert_RoleName annotation).  Used with local connections."""
 
 
 @dataclass
@@ -317,6 +319,10 @@ class ResolvedXmlaConnection:
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     access_token: Optional[str] = None
+    effective_user_name: Optional[str] = None
+    """AAD UPN passed as EffectiveUserName; used for service-endpoint RLS simulation."""
+    roles: Optional[str] = None
+    """Semi-colon-separated role name(s) passed as Roles=; used for local-AS RLS simulation."""
 
 
 @dataclass
@@ -539,6 +545,32 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
         model_name = title[:idx].strip() if idx > 0 else title
         pbi_pid_to_model[pid] = model_name
 
+    # Step 1b — command-line fallback.
+    # When window enumeration returns nothing (UAC elevation mismatch or
+    # Microsoft Store isolation), scan PBIDesktop.exe processes and extract
+    # the model name from the file-path argument:
+    #   PBIDesktop.exe "C:\...\RLS_Model.pbip"  →  "RLS_Model"
+    # This is more reliable than EnumWindows in those scenarios because
+    # psutil can access the process list even across elevation boundaries.
+    if not pbi_pid_to_model:
+        for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                _pname = (_fp.info.get("name") or "").lower()
+                if _pname != "pbidesktop.exe":
+                    continue
+                _pid = int(_fp.info.get("pid") or 0)
+                if not _pid:
+                    continue
+                _model = ""
+                for _arg in (_fp.info.get("cmdline") or [])[1:]:
+                    _p = Path(_arg)
+                    if _p.suffix.lower() in (".pbix", ".pbip"):
+                        _model = _p.stem
+                        break
+                pbi_pid_to_model[_pid] = _model
+            except (_psutil.NoSuchProcess, _psutil.AccessDenied):
+                continue
+
     pbi_pids = set(pbi_pid_to_model.keys())
 
     # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
@@ -748,7 +780,11 @@ def resolve_xmla_connection(
     Priority:
       1. Remote Power BI Premium / Fabric workspace (when tenant_id,
          workspace_id, dataset_id are all provided), matching Invoke-DQVTesting.
-      2. Local Power BI Desktop instance (auto-detected via port file).
+      2. ``local/<model_name>`` identifier — name-based local detection via
+         ``resolve_local_xmla_connection_by_name``.  Never falls back to an
+         arbitrary running PBI Desktop instance.
+      3. Filesystem path — process-based local detection via
+         ``resolve_local_xmla_connection``.
 
     Returns None when no connection can be established.
     """
@@ -784,7 +820,14 @@ def resolve_xmla_connection(
             access_token=token,
         )
 
-    # Option 2 — local Power BI Desktop
+    # Option 2 — local/<model_name> identifier
+    # When model_path uses the local/<model_name> format, use name-based
+    # matching so we never fall back to an arbitrary running PBI instance.
+    ident = parse_model_identifier(model_path)
+    if ident.kind == "local":
+        return resolve_local_xmla_connection_by_name(ident.model_name)
+
+    # Option 3 — local Power BI Desktop (filesystem path)
     # Use process-based detection first (mirrors Get-PowerBIFilesOpened), which
     # also resolves the correct catalog GUID via $SYSTEM.DBSCHEMA_CATALOGS.
     return resolve_local_xmla_connection(model_path)
@@ -977,6 +1020,10 @@ def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
             + f"Password={conn.client_secret};"
             + "Integrated Security=ClaimsToken;"
         )
+    if conn.roles:
+        return base + f"Roles={conn.roles};"
+    if conn.effective_user_name:
+        return base + f"EffectiveUserName={conn.effective_user_name};"
     return base
 
 
@@ -1094,6 +1141,9 @@ def _retrieve_tests_via_dax(
         impersonated_user = (
             _get_col(row, "PQLAssert_ImpersonatedUserName") or None
         ) if has_v2_columns else None
+        role_name = (
+            _get_col(row, "PQLAssert_RoleName") or None
+        ) if has_v2_columns else None
         tests.append(
             PqlTest(
                 name=name,
@@ -1101,6 +1151,7 @@ def _retrieve_tests_via_dax(
                 source=f"EVALUATE {name}()",
                 description=description,
                 impersonated_user_name=impersonated_user,
+                role_name=role_name,
             )
         )
     return tests
@@ -1202,8 +1253,23 @@ def run_test(
             )
         ]
 
+    # When the test declares RLS metadata (from RetrieveTestsV2), create a
+    # per-test connection that applies the correct impersonation:
+    #   • Local connections (localhost:…): use Roles=<role_name> — local AS
+    #     does not accept AAD UPNs for EffectiveUserName.
+    #   • Service connections (XMLA endpoint): use EffectiveUserName=<UPN>.
+    effective_connection = connection
+    if connection:
+        _is_local = connection.server.lower().startswith("localhost:")
+        if _is_local and test.role_name:
+            effective_connection = _dc_replace(connection, roles=test.role_name)
+        elif not _is_local and test.impersonated_user_name:
+            effective_connection = _dc_replace(
+                connection, effective_user_name=test.impersonated_user_name
+            )
+
     try:
-        rows = _execute_dax_query(connection, test.source)
+        rows = _execute_dax_query(effective_connection, test.source)
 
         if not rows:
             return [

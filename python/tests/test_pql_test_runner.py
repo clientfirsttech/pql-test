@@ -649,6 +649,213 @@ class TestRunTestWithMockedXmla:
         assert results[0].passed is True
         assert results[0].test_name == "t1"
 
+    def test_role_name_applied_as_roles_for_local_connection(self):
+        """
+        Local connection + PqlTest.role_name →  Roles= in the connection string.
+        This is the fix for the "not a properly formed account name" error that
+        occurs when trying to use an AAD UPN with EffectiveUserName against a
+        local PBI Desktop Analysis Services instance.
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name="West",
+        )
+        rows = [{"TestName": "West test", "Expected": "0", "Actual": "0", "Passed": "true"}]
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        # _make_conn() returns localhost:50001 — a local connection
+        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+            result = run_test(test, self._make_conn())
+
+        assert len(result) == 1
+        assert result[0].passed is True
+        assert len(captured) == 1
+        assert captured[0].roles == "West"
+        assert captured[0].effective_user_name is None
+
+    def test_impersonated_user_applied_as_effective_user_name_for_service_connection(self):
+        """
+        Service connection + PqlTest.impersonated_user_name → EffectiveUserName=
+        in the connection string (AAD UPN works against XMLA endpoints).
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name="West",
+        )
+        rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
+        service_conn = ResolvedXmlaConnection(
+            server="powerbi://api.powerbi.com/v1.0/myorg/MyWorkspace",
+            catalog="RLS_Model",
+        )
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+            result = run_test(test, service_conn)
+
+        assert result[0].passed is True
+        assert captured[0].effective_user_name == "west@contoso.com"
+        assert captured[0].roles is None
+
+    def test_no_rls_applied_when_role_name_absent_on_local_connection(self):
+        """
+        Local connection + impersonated_user_name only (no role_name) → no
+        impersonation applied.  This avoids crashing with an invalid UPN.
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name=None,
+        )
+        rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+            run_test(test, self._make_conn())
+
+        assert captured[0].roles is None
+        assert captured[0].effective_user_name is None
+
+    def test_no_effective_user_name_when_impersonation_not_set(self):
+        """Without impersonated_user_name the connection is used unchanged."""
+        test = PqlTest(
+            name="Schema.DEV.Tests",
+            file_path="",
+            source="EVALUATE Schema.DEV.Tests()",
+            impersonated_user_name=None,
+        )
+        rows = [{"TestName": "t", "Expected": "1", "Actual": "1", "Passed": "true"}]
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+            run_test(test, self._make_conn())
+
+        assert captured[0].effective_user_name is None
+        assert captured[0].roles is None
+
+    def test_rls_does_not_mutate_original_connection(self):
+        """
+        The per-test Roles= connection must be a copy; the original connection
+        object must remain unmodified so other tests in the same suite are unaffected.
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name="West",
+        )
+        rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
+        original_conn = self._make_conn()
+
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            run_test(test, original_conn)
+
+        assert original_conn.roles is None
+        assert original_conn.effective_user_name is None
+
+
+# ---------------------------------------------------------------------------
+# _build_connection_string — RLS overrides (Roles= and EffectiveUserName=)
+# ---------------------------------------------------------------------------
+
+class TestBuildConnectionStringEffectiveUserName:
+    """Unit tests for the EffectiveUserName connection string path."""
+
+    def test_effective_user_name_appended_to_connection_string(self):
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(
+            server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+            catalog="RLS_Model",
+            effective_user_name="west@contoso.com",
+        )
+        cs = _build_connection_string(conn)
+        assert "EffectiveUserName=west@contoso.com;" in cs
+
+    def test_no_effective_user_name_field_absent(self):
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(server="localhost:50001", catalog="RLS_Model")
+        cs = _build_connection_string(conn)
+        assert "EffectiveUserName" not in cs
+
+    def test_effective_user_name_not_added_when_token_auth(self):
+        """Bearer token auth takes priority; EffectiveUserName is not added."""
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(
+            server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+            catalog="RLS_Model",
+            access_token="tok123",
+            effective_user_name="west@contoso.com",
+        )
+        cs = _build_connection_string(conn)
+        assert "EffectiveUserName" not in cs
+        assert "Password=tok123;" in cs
+
+    def test_roles_appended_to_connection_string(self):
+        """Roles= property is added for local connections using named-role RLS."""
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(
+            server="localhost:50001",
+            catalog="RLS_Model",
+            roles="West",
+        )
+        cs = _build_connection_string(conn)
+        assert "Roles=West;" in cs
+        assert "EffectiveUserName" not in cs
+
+    def test_roles_takes_priority_over_effective_user_name(self):
+        """When both Roles and EffectiveUserName are set, Roles= wins."""
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(
+            server="localhost:50001",
+            catalog="RLS_Model",
+            roles="West",
+            effective_user_name="west@contoso.com",
+        )
+        cs = _build_connection_string(conn)
+        assert "Roles=West;" in cs
+        assert "EffectiveUserName" not in cs
+
+    def test_roles_not_added_when_token_auth(self):
+        """Bearer token auth takes priority; Roles= is not added."""
+        from pql_test_runner import _build_connection_string
+        conn = ResolvedXmlaConnection(
+            server="localhost:50001",
+            catalog="RLS_Model",
+            access_token="tok123",
+            roles="West",
+        )
+        cs = _build_connection_string(conn)
+        assert "Roles" not in cs
+        assert "Password=tok123;" in cs
+
 
 # ---------------------------------------------------------------------------
 # run_tests (multiple tests)
@@ -1051,6 +1258,240 @@ class TestGetPbiFilesOpened:
         assert instances[0].model_name == ""
         assert instances[0].server == f"localhost:{port}"
 
+    def test_cmdline_fallback_resolves_model_name_from_pbip_argument(self):
+        """
+        Step 1b: when _get_pbi_process_window_titles() returns empty, the
+        command-line fallback scans PBIDesktop.exe processes and extracts the
+        model name from a .pbip file-path argument.
+
+        This is the fix for the scenario where PBI Desktop and the terminal run
+        at different UAC elevation levels, so EnumWindows returns no titles.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        port = _MOCK_AS_PORT_A
+
+        msmdsrv_proc = _make_mock_process(
+            pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+
+        # PBIDesktop.exe process with a .pbip path in its cmdline
+        pbi_proc = MagicMock()
+        pbi_proc.info = {
+            "pid": pbi_pid,
+            "name": "PBIDesktop.exe",
+            "cmdline": [r"C:\Program Files\...\PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
+        }
+
+        def _fake_process_iter(attrs):
+            if "cmdline" in attrs:
+                # Step 1b scan: returns pbi_proc
+                return [pbi_proc]
+            # msmdsrv scan
+            return [msmdsrv_proc]
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "RLS_Model"
+        assert instances[0].server == f"localhost:{port}"
+
+    def test_cmdline_fallback_resolves_model_name_from_pbix_argument(self):
+        """Step 1b also recognises .pbix (legacy) file-path arguments."""
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 200
+        port = _MOCK_AS_PORT_B
+
+        msmdsrv_proc = _make_mock_process(
+            pid=888, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+
+        pbi_proc = MagicMock()
+        pbi_proc.info = {
+            "pid": pbi_pid,
+            "name": "PBIDesktop.exe",
+            "cmdline": [r"C:\...\PBIDesktop.exe", r"C:\Reports\SalesReport.pbix"],
+        }
+
+        def _fake_process_iter(attrs):
+            if "cmdline" in attrs:
+                return [pbi_proc]
+            return [msmdsrv_proc]
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "SalesReport"
+
+    def test_cmdline_fallback_two_models_both_resolved(self):
+        """
+        Two PBI Desktop instances open with different models: both are resolved
+        correctly via the cmdline fallback so local/<name> matching works.
+        This directly reproduces the user's scenario (RLS_Model + SampleModel
+        both open, window titles unavailable, both showing as empty strings).
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid_rls = 100
+        pbi_pid_sample = 200
+
+        msmdsrv_rls = _make_mock_process(
+            pid=901, name="msmdsrv.exe", ppid=pbi_pid_rls, listen_port=_MOCK_AS_PORT_A
+        )
+        msmdsrv_sample = _make_mock_process(
+            pid=902, name="msmdsrv.exe", ppid=pbi_pid_sample, listen_port=_MOCK_AS_PORT_B
+        )
+
+        pbi_proc_rls = MagicMock()
+        pbi_proc_rls.info = {
+            "pid": pbi_pid_rls,
+            "name": "PBIDesktop.exe",
+            "cmdline": [r"PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
+        }
+        pbi_proc_sample = MagicMock()
+        pbi_proc_sample.info = {
+            "pid": pbi_pid_sample,
+            "name": "PBIDesktop.exe",
+            "cmdline": [r"PBIDesktop.exe", r"C:\Models\SampleModel.pbip"],
+        }
+
+        def _fake_process_iter(attrs):
+            if "cmdline" in attrs:
+                return [pbi_proc_rls, pbi_proc_sample]
+            return [msmdsrv_rls, msmdsrv_sample]
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 2
+        names = {i.model_name for i in instances}
+        assert names == {"RLS_Model", "SampleModel"}
+
+    def test_cmdline_fallback_empty_model_name_when_no_file_arg(self):
+        """
+        When PBIDesktop.exe was opened without a file (new blank report), the
+        cmdline fallback leaves model_name as '' rather than raising an error.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        port = _MOCK_AS_PORT_A
+
+        msmdsrv_proc = _make_mock_process(
+            pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+        # _find_pbi_ancestor_pid calls proc.ppid() (method, not .info["ppid"]).
+        # Set it so the tree-walk returns the right integer and stops immediately.
+        msmdsrv_proc.ppid.return_value = pbi_pid
+
+        pbi_proc = MagicMock()
+        pbi_proc.info = {
+            "pid": pbi_pid,
+            "name": "PBIDesktop.exe",
+            "cmdline": [r"PBIDesktop.exe"],  # no file argument
+        }
+
+        def _fake_process_iter(attrs):
+            if "cmdline" in attrs:
+                return [pbi_proc]
+            return [msmdsrv_proc]
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == ""
+
+    def test_cmdline_fallback_skips_non_pbidesktop_processes(self):
+        """Step 1b only picks up PBIDesktop.exe, not other processes."""
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        other_proc = MagicMock()
+        other_proc.info = {
+            "pid": 999,
+            "name": "notepad.exe",
+            "cmdline": [r"notepad.exe", r"C:\file.pbip"],
+        }
+        msmdsrv_proc = _make_mock_process(
+            pid=111, name="msmdsrv.exe", ppid=999, listen_port=_MOCK_AS_PORT_A
+        )
+
+        def _fake_process_iter(attrs):
+            if "cmdline" in attrs:
+                return [other_proc]
+            return [msmdsrv_proc]
+
+        with (
+            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        # msmdsrv found but its parent (notepad) is not a PBI process → empty model name
+        assert len(instances) == 1
+        assert instances[0].model_name == ""
+
+    def test_window_titles_take_priority_over_cmdline_fallback(self):
+        """
+        Step 1b only activates when window titles return nothing.  When
+        _get_pbi_process_window_titles() returns titles, Step 1b is skipped.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        port = _MOCK_AS_PORT_A
+
+        msmdsrv_proc = _make_mock_process(
+            pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+
+        # Window title returns a name; a conflicting cmdline name should NOT be used
+        with (
+            patch(
+                "pql_test_runner._get_pbi_process_window_titles",
+                return_value={pbi_pid: "WindowTitleModel - Power BI Desktop"},
+            ),
+            patch("pql_test_runner._psutil.process_iter", return_value=[msmdsrv_proc]),
+            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "WindowTitleModel"
+
 
 # ---------------------------------------------------------------------------
 # resolve_local_xmla_connection — mirrors Pester -Local flag tests
@@ -1319,6 +1760,43 @@ class TestRetrieveTestsViaDax:
         assert t.name == "Calcs.DEV.Tests"
         assert t.description == "Calculation tests"
         assert t.impersonated_user_name == "alice@contoso.com"
+
+    def test_v2_role_name_column_populated(self):
+        """PQLAssert_RoleName column from V2 rows → PqlTest.role_name."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "RLS.ANY.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": "west@contoso.com",
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_RoleName]": "West",
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert len(result) == 1
+        t = result[0]
+        assert t.role_name == "West"
+        assert t.impersonated_user_name == "west@contoso.com"
+
+    def test_v2_role_name_none_when_column_absent(self):
+        """If PQLAssert_RoleName column is missing, role_name is None (no crash)."""
+        rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": None,
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
+                # PQLAssert_RoleName intentionally absent
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is not None
+        assert result[0].role_name is None
 
     def test_v2_source_is_evaluate_expression(self):
         """source must be 'EVALUATE <name>()' for live-discovered tests."""
@@ -1663,3 +2141,113 @@ class TestResolveLocalXmlaConnectionByName:
         with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("AnyModel")
         assert conn is not None
+
+
+# ---------------------------------------------------------------------------
+# resolve_xmla_connection — local/<model_name> routing (regression tests)
+#
+# Bug: when 'local/<model_name>' was passed and the named PBI Desktop instance
+# was not found, resolve_xmla_connection fell through to
+# resolve_local_xmla_connection(), which had model_name=None and returned the
+# FIRST running PBI Desktop instance (e.g. SampleModel) rather than None.
+# This caused the wrong model's tests to run silently.
+# Fix: resolve_xmla_connection now detects kind='local' and delegates to
+# resolve_local_xmla_connection_by_name() — which always matches by name.
+# ---------------------------------------------------------------------------
+
+class TestResolveXmlaConnectionLocalRouting:
+    """Regression tests for local/<model_name> routing in resolve_xmla_connection."""
+
+    def test_local_path_routes_to_name_based_resolver(self):
+        """
+        resolve_xmla_connection('local/SampleModel', opts) must call
+        resolve_local_xmla_connection_by_name, not resolve_local_xmla_connection.
+        The name-based resolver performs an exact (case-insensitive) match and
+        never returns an arbitrary running instance.
+        """
+        opts = XmlaConnectionOptions()
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="SampleModel-GUID",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_xmla_connection("local/SampleModel", opts)
+        assert conn is not None
+        assert conn.server == inst.server
+        assert conn.catalog == inst.catalog
+
+    def test_local_path_returns_none_when_named_model_not_open(self):
+        """
+        When 'local/RLS_Model' is supplied but only SampleModel is running,
+        resolve_xmla_connection must return None — not SampleModel's connection.
+        This is the exact scenario that triggered the original bug.
+        """
+        opts = XmlaConnectionOptions()
+        # Only SampleModel is open; RLS_Model is not
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="SampleModel-GUID",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_xmla_connection("local/RLS_Model", opts)
+        assert conn is None
+
+    def test_local_path_does_not_call_path_based_resolver(self):
+        """
+        resolve_local_xmla_connection (path-based) must NOT be called when the
+        model_path uses the 'local/<name>' format.  If it were called with a
+        non-existent path, it could return an unrelated running instance.
+        """
+        opts = XmlaConnectionOptions()
+        with (
+            patch(
+                "pql_test_runner.resolve_local_xmla_connection_by_name",
+                return_value=None,
+            ) as mock_by_name,
+            patch(
+                "pql_test_runner.resolve_local_xmla_connection",
+            ) as mock_by_path,
+        ):
+            resolve_xmla_connection("local/RLS_Model", opts)
+
+        mock_by_name.assert_called_once_with("RLS_Model")
+        mock_by_path.assert_not_called()
+
+    def test_local_path_matching_is_case_insensitive(self):
+        """Name matching propagated through resolve_xmla_connection → by_name is case-insensitive."""
+        opts = XmlaConnectionOptions()
+        inst = LocalPbiInstance(
+            model_name="rls_model",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_xmla_connection("local/RLS_Model", opts)
+        assert conn is not None
+
+    def test_run_tests_from_model_skips_wrong_instance(self):
+        """
+        End-to-end: run_tests_from_model('local/RLS_Model') when only SampleModel
+        is open must produce skipped results — not run tests against SampleModel.
+        This directly reproduces the user-visible symptom of the original bug.
+        """
+        # Only SampleModel is open
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="SampleModel-GUID",
+        )
+        with (
+            patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]),
+            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+        ):
+            suite = run_tests_from_model(
+                "local/RLS_Model",
+                skip_message="No matching Power BI Desktop instance found for model 'RLS_Model'.",
+            )
+        # Connection is None → all tests are skipped, never executed against SampleModel
+        assert all(r.skipped for r in suite.results), (
+            "Expected all results to be skipped when the named model is not open"
+        )
