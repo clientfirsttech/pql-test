@@ -8,11 +8,11 @@
 #    SKILL.md frontmatter, and (best-effort) gh copilot CLI install check.
 #
 #  Stage 2 – promptfoo-eval
-#    Sends each skill's instructions to GitHub Copilot (github:gpt-4o-mini)
-#    and asserts that the model returns the expected CLI flags and commands.
-#    Uses the built-in GITHUB_TOKEN; no third-party API keys required.
-#    Marked continue-on-error inside the reusable workflow when GitHub Models
-#    is unavailable, but the job itself must complete to unblock stage 3.
+#    Sends each skill's instructions to GitHub Models (gpt-4o-mini) via plain
+#    Python urllib.request and asserts that the model returns the expected CLI
+#    flags and commands.  Uses the built-in GITHUB_TOKEN; no third-party API
+#    keys required.  Marked continue-on-error when GitHub Models is unavailable,
+#    but the job itself must complete to unblock stage 3.
 #
 #  Stage 3 – run-tests-remote
 #    Installs pql-test on a Windows runner (required for ADOMD.NET / pyadomd),
@@ -61,10 +61,10 @@ jobs:
       contents: read
 
   # ---------------------------------------------------------------------------
-  # Stage 2: promptfoo skill evaluation via GitHub Copilot
+  # Stage 2: skill evaluation via GitHub Models (plain HTTP, no axios)
   # ---------------------------------------------------------------------------
   promptfoo-eval:
-    name: Stage 2 – Promptfoo skill evaluation
+    name: Stage 2 – Skill evaluation
     needs: validate-plugin
     uses: ./.github/workflows/promptfoo-eval.yml
     with:
