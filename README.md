@@ -263,6 +263,71 @@ pql-test run-tests "MyWorkspace.MySemanticModel" \
 
 ---
 
+## Example Models
+
+This repository includes three example PBIP semantic models in the `examples/` directory for testing and demonstration purposes:
+
+### SampleModel
+
+**Path:** `examples/SampleModel.SemanticModel`  
+**Purpose:** General-purpose test model demonstrating comprehensive test coverage  
+**Dataset ID:** Set via `PQL_DATASET_ID` environment variable  
+
+Contains test suites for:
+- `BestPractices.ANY.Tests.dax` — PQL best-practice rule checks (5-column schema)
+- `Calculations.DEV.Tests.dax` — Measure / calculation correctness tests
+- `DataQuality.DEV.Tests.dax` — Row counts, null checks, uniqueness, referential integrity
+- `Schema.DEV.Tests.dax` — Table / column / relationship existence
+
+**Usage:**
+```bash
+pql-test run-tests ./examples/SampleModel
+pql-test run-tests ./examples/SampleModel.SemanticModel --local
+```
+
+### RLS_Model (Row-Level Security)
+
+**Path:** `examples/RLS_Model.SemanticModel`  
+**Purpose:** Demonstrates testing Row-Level Security (RLS) role filters  
+**Dataset ID:** Set via `PQL_DATASET_ID_RLS` environment variable  
+
+Contains test suites for:
+- `RLS.ANY.Tests.dax` — Validates that RLS role filters restrict data access correctly
+
+**Usage:**
+```bash
+pql-test run-tests ./examples/RLS_Model.SemanticModel \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_RLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+```
+
+### OLS_Model (Object-Level Security)
+
+**Path:** `examples/OLS_Model.SemanticModel`  
+**Purpose:** Demonstrates testing Object-Level Security (OLS) role permissions  
+**Dataset ID:** Set via `PQL_DATASET_ID_OLS` environment variable  
+
+Contains test suites for:
+- `OLS Admin.dax` — Tests administrative role permissions (full access)
+- `OLS_West.dax` — Tests restricted role permissions (regional data access)
+
+**Usage:**
+```bash
+pql-test run-tests ./examples/OLS_Model.SemanticModel \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_OLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+```
+
+> **Note:** RLS and OLS models require remote Power BI Premium / Fabric workspace connections to test security roles effectively, as local Power BI Desktop sessions bypass security filters.
+
+---
+
 ## PBIP Model Layout
 
 `pql-test` expects a standard [PBIP](https://learn.microsoft.com/en-us/power-bi/developer/projects/projects-overview)
@@ -706,17 +771,21 @@ pql-test run-tests ./examples/SampleModel `
 
 All flags can be supplied via environment variables instead (useful for CI/CD):
 
-| Flag | Environment variable |
-|---|---|
-| `--tenant-id` | `PQL_TENANT_ID` |
-| `--workspace-id` | `PQL_WORKSPACE_ID` |
-| `--dataset-id` | `PQL_DATASET_ID` |
-| `--client-id` | `PQL_CLIENT_ID` |
-| `--client-secret` | `PQL_CLIENT_SECRET` |
-| `--environment` | `PQL_ENVIRONMENT` |
+| Flag | Environment variable | Description |
+|---|---|---|
+| `--tenant-id` | `PQL_TENANT_ID` | Azure AD tenant ID |
+| `--workspace-id` | `PQL_WORKSPACE_ID` | Power BI workspace GUID |
+| `--dataset-id` | `PQL_DATASET_ID` | Dataset / semantic model GUID (SampleModel) |
+|  | `PQL_DATASET_ID_RLS` | Dataset GUID for RLS_Model (optional) |
+|  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
+| `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
+| `--client-secret` | `PQL_CLIENT_SECRET` | Service principal client secret |
+| `--environment` | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) |
 
 Place these in a `python/tests/.env` file (git-ignored) for local development
 — copy `python/tests/.env.example` to get started.
+
+> **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
 
 The CLI uses a **service-principal OAuth2 client-credentials flow** (via MSAL)
 to acquire a bearer token, then calls the Power BI REST API to resolve names,

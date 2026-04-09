@@ -51,14 +51,14 @@ def tmp_model(tmp_path: Path):
 
 @pytest.fixture
 def sample_model_path() -> str:
-    """Absolute path to the real examples/ directory in the repository."""
+    """Absolute path to the SampleModel.SemanticModel directory in examples/."""
     here = Path(__file__).parent
-    # Search upward from tests/ to find examples/
+    # Search upward from tests/ to find examples/SampleModel.SemanticModel
     for parent in [here.parent, here.parent.parent]:
-        candidate = parent / "examples"
+        candidate = parent / "examples" / "SampleModel.SemanticModel"
         if candidate.exists():
             return str(candidate)
-    pytest.skip("examples/ directory not found — skipping real-model tests")
+    pytest.skip("SampleModel.SemanticModel not found — skipping sample model tests")
 
 
 @pytest.fixture
@@ -70,3 +70,14 @@ def rls_model_path() -> str:
         if candidate.exists():
             return str(candidate)
     pytest.skip("RLS_Model.SemanticModel not found — skipping RLS model tests")
+
+
+@pytest.fixture
+def ols_model_path() -> str:
+    """Absolute path to the OLS_Model.SemanticModel directory in examples/."""
+    here = Path(__file__).parent
+    for parent in [here.parent, here.parent.parent]:
+        candidate = parent / "examples" / "OLS_Model.SemanticModel"
+        if candidate.exists():
+            return str(candidate)
+    pytest.skip("OLS_Model.SemanticModel not found — skipping OLS model tests")

@@ -65,13 +65,19 @@ def _require_credentials() -> None:
         )
 
 
-def _live_opts() -> XmlaConnectionOptions:
+def _live_opts(dataset_id: str | None = None) -> XmlaConnectionOptions:
+    """
+    Create XmlaConnectionOptions for live service connection.
+    
+    Args:
+        dataset_id: Optional dataset ID override. If None, uses PQL_DATASET_ID env var.
+    """
     raw_env = _env("PQL_ENVIRONMENT")
     environment = Environment(raw_env) if raw_env else Environment.PUBLIC
     return XmlaConnectionOptions(
         tenant_id=_env("PQL_TENANT_ID"),
         workspace_id=_env("PQL_WORKSPACE_ID"),
-        dataset_id=_env("PQL_DATASET_ID"),
+        dataset_id=dataset_id or _env("PQL_DATASET_ID"),
         client_id=_env("PQL_CLIENT_ID"),
         client_secret=_env("PQL_CLIENT_SECRET"),
         environment=environment,
@@ -139,10 +145,71 @@ class TestLiveService:
         dax_files = _collect_dax_test_files(sample_model_path)
         suite = run_tests_from_model(sample_model_path, conn_opts=_live_opts())
 
-        executed_suites = {r.test_name.rsplit(".", 1)[0] for r in suite.results}
-        expected_suites = {Path(f).stem for f in dax_files}
+        # Extract unique suite names from test results
+        executed_suite_count = len({r.suite_name for r in suite.results if r.suite_name})
+        expected_suite_count = len(dax_files)
 
-        missing = expected_suites - executed_suites
-        assert not missing, (
-            f"These DAX test suites were discovered but produced no results: {missing}"
+        assert executed_suite_count == expected_suite_count, (
+            f"Expected {expected_suite_count} test suites from {expected_suite_count} DAX files, "
+            f"but got {executed_suite_count} suites"
+        )
+
+    def test_run_tests_on_rls_model(self, rls_model_path):
+        """
+        Test that RLS model tests can be executed against the live service.
+        Uses PQL_DATASET_ID_RLS if configured, otherwise skips.
+        """
+        _require_credentials()
+        rls_dataset_id = _env("PQL_DATASET_ID_RLS")
+        if not rls_dataset_id:
+            pytest.skip("PQL_DATASET_ID_RLS not configured — skipping RLS model tests")
+
+        suite = run_tests_from_model(rls_model_path, conn_opts=_live_opts(rls_dataset_id))
+
+        print(f"\n=== RLS Model Test Results ===")
+        print(f"Total tests: {suite.total}")
+        print(f"Passed: {suite.passed}")
+        print(f"Failed: {suite.failed}")
+        print(f"Skipped: {suite.skipped}")
+        print(f"\nTest suites: {sorted({r.suite_name for r in suite.results if r.suite_name})}")
+        print(f"\nSample test names:")
+        for r in suite.results[:10]:
+            status = "✓  PASS" if r.passed else "✗ FAIL"
+            print(f"  {status}: {r.test_name}")
+        if len(suite.results) > 10:
+            print(f"  ... and {len(suite.results) - 10} more tests")
+
+        assert suite.total > 0, (
+            "Expected at least one test result from RLS_Model. "
+            "Check that *.Tests.dax files exist under examples/RLS_Model.SemanticModel/DAXQueries/."
+        )
+
+    def test_run_tests_on_ols_model(self, ols_model_path):
+        """
+        Test that OLS model tests can be executed against the live service.
+        Uses PQL_DATASET_ID_OLS if configured, otherwise skips.
+        """
+        _require_credentials()
+        ols_dataset_id = _env("PQL_DATASET_ID_OLS")
+        if not ols_dataset_id or ols_dataset_id == "<your-ols-model-guid>":
+            pytest.skip("PQL_DATASET_ID_OLS not configured — skipping OLS model tests")
+
+        suite = run_tests_from_model(ols_model_path, conn_opts=_live_opts(ols_dataset_id))
+
+        print(f"\n=== OLS Model Test Results ===")
+        print(f"Total tests: {suite.total}")
+        print(f"Passed: {suite.passed}")
+        print(f"Failed: {suite.failed}")
+        print(f"Skipped: {suite.skipped}")
+        print(f"\nTest suites: {sorted({r.suite_name for r in suite.results if r.suite_name})}")
+        print(f"\nSample test names:")
+        for r in suite.results[:10]:
+            status = "✓ PASS" if r.passed else "✗ FAIL"
+            print(f"  {status}: {r.test_name}")
+        if len(suite.results) > 10:
+            print(f"  ... and {len(suite.results) - 10} more tests")
+
+        assert suite.total > 0, (
+            "Expected at least one test result from OLS_Model. "
+            "Check that *.Tests.dax files exist under examples/OLS_Model.SemanticModel/DAXQueries/."
         )

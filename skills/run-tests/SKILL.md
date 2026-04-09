@@ -30,13 +30,32 @@ Exit codes: `0` = all tests passed, `1` = one or more tests failed.
 
 Usage:
 ```
-pql-test run-tests ../examples
+# Run tests against SampleModel (general testing)
+pql-test run-tests ../examples/SampleModel
 pql-test run-tests local/SampleModel
 pql-test run-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
 pql-test run-tests ../examples/SampleModel.SemanticModel --local
 pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
 pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
 pql-test run-tests ../examples/SampleModel.SemanticModel --log-format azuredevops
+
+# Run tests against RLS_Model (Row-Level Security testing)
+pql-test run-tests ../examples/RLS_Model.SemanticModel \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_RLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+
+# Run tests against OLS_Model (Object-Level Security testing)  
+pql-test run-tests ../examples/OLS_Model.SemanticModel \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_OLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+
+# General remote connection example
 pql-test run-tests ../examples \
   --tenant-id $PQL_TENANT_ID \
   --workspace-id $PQL_WORKSPACE_ID \

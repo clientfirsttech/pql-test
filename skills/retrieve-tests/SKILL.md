@@ -23,9 +23,28 @@ Options:
 
 Usage:
 ```
-pql-test retrieve-tests ../examples
+# Retrieve tests from SampleModel
+pql-test retrieve-tests ../examples/SampleModel
 pql-test retrieve-tests local/SampleModel
 pql-test retrieve-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
 pql-test retrieve-tests ../examples/SampleModel.SemanticModel --human
 pql-test retrieve-tests ../examples --test "Calcs.DEV.Tests" --human --verbose
+
+# Retrieve tests from RLS_Model (Row-Level Security)
+pql-test retrieve-tests ../examples/RLS_Model.SemanticModel \
+  --human \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_RLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
+
+# Retrieve tests from OLS_Model (Object-Level Security)
+pql-test retrieve-tests ../examples/OLS_Model.SemanticModel \
+  --human --verbose \
+  --tenant-id $PQL_TENANT_ID \
+  --workspace-id $PQL_WORKSPACE_ID \
+  --dataset-id $PQL_DATASET_ID_OLS \
+  --client-id $PQL_CLIENT_ID \
+  --client-secret $PQL_CLIENT_SECRET
 ```
