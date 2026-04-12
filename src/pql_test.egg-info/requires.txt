@@ -1,4 +1,0 @@
-msal<2,>=1.34
-msal_extensions
-azure-identity>=1.15.0
-requests

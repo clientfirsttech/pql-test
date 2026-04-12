@@ -1,2 +1,0 @@
-[console_scripts]
-pql-test = pql_test.main:main
