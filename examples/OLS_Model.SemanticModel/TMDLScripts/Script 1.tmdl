@@ -1,0 +1,11 @@
+createOrReplace
+
+	function 'OLS_West.ANY.Tests' =
+			() =>
+				UNION(
+					PQL.Assert.OLS.TableShouldBeHidden("West: Admin Table should be hidden", "Admin Table"),
+					PQL.Assert.OLS.ColumnShouldBeHidden("West: Hidden Column should be hidden", "Hidden Column Table", "Hidden Column")
+				)
+		lineageTag: ddaecaf7-43b9-4c74-a8ad-6a22c617ff83
+
+		annotation PQLAssert_ImpersonatedUserName = atlas.kerski@cftechnologiesllc.com

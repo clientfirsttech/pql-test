@@ -1,0 +1,629 @@
+{
+  "model_path": "C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\SampleModel.SemanticModel",
+  "passed": 50,
+  "failed": 12,
+  "skipped": 0,
+  "total": 62,
+  "results": [
+    {
+      "test_name": "[Error Prevention] Relationship columns should be of the same data type",
+      "expected": "All relationship columns should have matching data types",
+      "actual": "ALL RELATIONSHIP COLUMNS HAVE MATCHING DATA TYPES",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Formatting] Provide format string for measures",
+      "expected": "All visible measures should have format strings assigned",
+      "actual": "MEASURES WITHOUT FORMAT STRING FOUND (2): DateDim[Date Filter], MarvelFact[Number of Characters Title By Date]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Formatting] Do not summarize numeric columns",
+      "expected": "Numeric columns should have SummarizeBy set to None",
+      "actual": "NUMERIC COLUMNS WITH SUMMARIZE BY FOUND (6): DataTypes[Currency] (SummarizeBy: Sum), DataTypes[Decimal Number] (SummarizeBy: Sum), DataTypes[Whole Number] (SummarizeBy: Sum), MarvelFact[Appearances] (SummarizeBy: Sum), MarvelFact[ID] (SummarizeBy: Count), Timezone[UTC_Offset_Hours] (SummarizeBy: Default)",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Formatting] Mark row labels",
+      "expected": "Tables should have at least one column marked as a row label",
+      "actual": "TABLES WITHOUT ROW LABELS FOUND (7): _Measures, AlignmentDim, DataTypes, DateDim, EyeColorDim, MarvelFact, Timezone",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Formatting] Mark primary keys",
+      "expected": "Columns on the 'One' side of relationships should have IsKey = true",
+      "actual": "PRIMARY KEY COLUMNS NOT MARKED AS KEYS FOUND (2): EyeColorDim[EyeID], AlignmentDim[AlignmentID]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Formatting] Hide fact table columns",
+      "expected": "Numeric columns used in aggregation measures should be hidden",
+      "actual": "ALL FACT TABLE COLUMNS USED IN AGGREGATIONS ARE HIDDEN",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[DAX Expressions] Column references should be fully qualified",
+      "expected": "All column references should be fully qualified (Table[Column])",
+      "actual": "MEASURES WITH UNQUALIFIED COLUMN REFERENCES FOUND (1): MarvelFact[Number of Characters Title By Date]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[DAX Expressions] Use the TREATAS function instead of INTERSECT",
+      "expected": "Measures should use TREATAS instead of INTERSECT for virtual relationships",
+      "actual": "NO MEASURES USE INTERSECT",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Maintenance] Remove unnecessary measures",
+      "expected": "Hidden measures not referenced by any DAX expression should be removed",
+      "actual": "NO UNNECESSARY HIDDEN MEASURES FOUND",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Maintenance] Remove unnecessary columns",
+      "expected": "Hidden columns not referenced by any DAX expression, relationship, hierarchy, or SortBy should be removed",
+      "actual": "UNNECESSARY HIDDEN COLUMNS FOUND (14): _Measures[], MarvelSource[ALIGN], MarvelSource[ALIVE], MarvelSource[Appearances], MarvelSource[EYE], MarvelSource[FIRST APPEARANCE], MarvelSource[GSM], MarvelSource[HAIR], MarvelSource[ID], MarvelSource[Name], MarvelSource[page_id], MarvelSource[SEX], MarvelSource[urlslug], MarvelSource[Year]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Maintenance] Visible objects with no description",
+      "expected": "All visible tables, measures, and columns should have descriptions",
+      "actual": "OBJECTS WITHOUT DESCRIPTIONS (38) | Tables (5): 'AlignmentDim', 'DataTypes', 'DateDim', 'EyeColorDim', 'MarvelFact' | Measures (5): DateDim[Date Filter], MarvelFact[Number of Characters], MarvelFact[Number of Characters Title By Date], MarvelFact[Rank of Appearances], MarvelFact[Running Total of Character Appearances] | Columns (28): AlignmentDim[Alignment], AlignmentDim[AlignmentID], AlignmentDim[AlignmentKey], DataTypes[Boolean], DataTypes[Currency], DataTypes[Date], DataTypes[Decimal Number], DataTypes[Text], DataTypes[Whole Number], DateDim[Date], DateDim[DateID], DateDim[DateKey], DateDim[Month Year], DateDim[MonthYearSort], DateDim[Year], EyeColorDim[Eye Color], EyeColorDim[EyeID], EyeColorDim[EyeKey], MarvelFact[AlignmentID], MarvelFact[Appearances], MarvelFact[DateID], MarvelFact[EyeID], MarvelFact[ID], MarvelFact[Name], MarvelFact[Test Change], Timezone[Display_Name], Timezone[Timezone], Timezone[UTC_Offset_Hours]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Performance] Avoid bi-directional relationships against high-cardinality columns",
+      "expected": "No bi-directional relationships on high-cardinality columns (>1M)",
+      "actual": "NO HIGH-CARDINALITY BI-DIRECTIONAL RELATIONSHIPS",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Performance] Remove auto-date table",
+      "expected": "No auto-date tables should exist in the model",
+      "actual": "NO AUTO-DATE TABLES",
+      "passed": true,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Performance] Do not use floating point data types",
+      "expected": "No columns should use Number data type",
+      "actual": "NUMBER DATA TYPE COLUMNS FOUND (2): DataTypes[Decimal Number], Timezone[UTC_Offset_Hours]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "[Performance] Set IsAvailableInMdx to false on non-attribute columns",
+      "expected": "Hidden columns should have IsAvailableInMdx = false",
+      "actual": "HIDDEN COLUMNS WITH ISAVAILABLEINMDX=TRUE FOUND (22): _Measures[Measure Group], _Measures[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], AlignmentDim[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], DataTypes[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], DateDim[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], EyeColorDim[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], MarvelFact[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], MarvelSource[ALIGN], MarvelSource[ALIVE], MarvelSource[Appearances], MarvelSource[EYE], MarvelSource[FIRST APPEARANCE], MarvelSource[GSM], MarvelSource[HAIR], MarvelSource[ID], MarvelSource[Name], MarvelSource[page_id], MarvelSource[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61], MarvelSource[SEX], MarvelSource[urlslug], MarvelSource[Year], Timezone[RowNumber-2662979B-1795-4F74-8F37-6A1BA8059B61]",
+      "passed": false,
+      "suite_name": "BestPractices.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 952.9999999795109
+    },
+    {
+      "test_name": "Calculations: Number of Characters equals COUNTROWS",
+      "expected": "16386",
+      "actual": "16376",
+      "passed": false,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Calculations: Number of Characters is greater than 1000",
+      "expected": "> 1000",
+      "actual": "16386",
+      "passed": true,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Calculations: Running Total of Character Appearances is non-negative",
+      "expected": ">= 0",
+      "actual": "16376",
+      "passed": true,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Calculations: Running Total of Character Appearances does not exceed total row count",
+      "expected": "<= 16376",
+      "actual": "16376",
+      "passed": true,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Calculations: Number of Characters Title By Date starts with correct prefix",
+      "expected": "Starts with 'Number of Characters that first appeared '",
+      "actual": "Number of Characters that first appeared between October, 1939 and March, 2026",
+      "passed": true,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Calculations: Number of Characters returns 0 not blank for a date with no data",
+      "expected": "0",
+      "actual": "10",
+      "passed": false,
+      "suite_name": "Calculations.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 31.00000007543713
+    },
+    {
+      "test_name": "Data Quality: MarvelFact has rows",
+      "expected": "Table has rows",
+      "actual": "HAS ROWS (16376)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: DateDim has rows",
+      "expected": "Table has rows",
+      "actual": "HAS ROWS (1039)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: AlignmentDim has rows",
+      "expected": "Table has rows",
+      "actual": "HAS ROWS (4)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: EyeColorDim has rows",
+      "expected": "Table has rows",
+      "actual": "HAS ROWS (25)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[Name] is not null",
+      "expected": "Column has non-NULL values",
+      "actual": "HAS VALUES (16375 distinct)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[Appearances] is not null",
+      "expected": "Column has non-NULL values",
+      "actual": "HAS VALUES (358 distinct)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[DateID] is not null",
+      "expected": "Column has non-NULL values",
+      "actual": "HAS VALUES (833 distinct)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[EyeID] is not null",
+      "expected": "Column has non-NULL values",
+      "actual": "HAS VALUES (25 distinct)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[AlignmentID] is not null",
+      "expected": "Column has non-NULL values",
+      "actual": "HAS VALUES (4 distinct)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: Appearances is non-negative",
+      "expected": "All values >= 0",
+      "actual": "ALL NON-NEGATIVE (Min=1)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: MarvelFact[Name] has no leading/trailing spaces",
+      "expected": "All values trimmed",
+      "actual": "ALL TRIMMED (16375 rows)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: AlignmentDim[AlignmentID] is unique",
+      "expected": "All values distinct",
+      "actual": "ALL DISTINCT (4 rows)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: AlignmentDim[Alignment] is unique",
+      "expected": "All values distinct",
+      "actual": "ALL DISTINCT (4 rows)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: EyeColorDim[EyeID] is unique",
+      "expected": "All values distinct",
+      "actual": "ALL DISTINCT (25 rows)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: EyeColorDim[Eye Color] is unique",
+      "expected": "All values distinct",
+      "actual": "DUPLICATES FOUND (23 distinct of 25 rows)",
+      "passed": false,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: DateDim[DateID] is unique",
+      "expected": "All values distinct",
+      "actual": "ALL DISTINCT (1039 rows)",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: AlignmentDim[Alignment] has no null or blank values",
+      "expected": "Column has no NULL or BLANK values (all values have content)",
+      "actual": "NO NULL/BLANK VALUES",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: EyeColorDim[Eye Color] has no null or blank values",
+      "expected": "Column has no NULL or BLANK values (all values have content)",
+      "actual": "NO NULL/BLANK VALUES",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: All MarvelFact.DateID values exist in DateDim",
+      "expected": "0",
+      "actual": "",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: All MarvelFact.AlignmentID values exist in AlignmentDim",
+      "expected": "0",
+      "actual": "",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Data Quality: All MarvelFact.EyeID values exist in EyeColorDim",
+      "expected": "0",
+      "actual": "",
+      "passed": true,
+      "suite_name": "DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 93.99999992456287
+    },
+    {
+      "test_name": "Schema: MarvelFact table exists",
+      "expected": "Table 'MarvelFact' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: DateDim table exists",
+      "expected": "Table 'DateDim' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: AlignmentDim table exists",
+      "expected": "Table 'AlignmentDim' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: EyeColorDim table exists",
+      "expected": "Table 'EyeColorDim' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[ID] exists",
+      "expected": "Column 'MarvelFact[ID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[Name] exists",
+      "expected": "Column 'MarvelFact[Name]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[Appearances] exists",
+      "expected": "Column 'MarvelFact[Appearances]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[DateID] exists",
+      "expected": "Column 'MarvelFact[DateID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[EyeID] exists",
+      "expected": "Column 'MarvelFact[EyeID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact[AlignmentID] exists",
+      "expected": "Column 'MarvelFact[AlignmentID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: DateDim[DateID] exists",
+      "expected": "Column 'DateDim[DateID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: DateDim[Date] exists",
+      "expected": "Column 'DateDim[Date]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: DateDim[Year] exists",
+      "expected": "Column 'DateDim[Year]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: AlignmentDim[AlignmentID] exists",
+      "expected": "Column 'AlignmentDim[AlignmentID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: AlignmentDim[Alignment] exists",
+      "expected": "Column 'AlignmentDim[Alignment]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: EyeColorDim[EyeID] exists",
+      "expected": "Column 'EyeColorDim[EyeID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: EyeColorDim[Eye Color] exists",
+      "expected": "Column 'EyeColorDim[Eye Color]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact-DateDim relationship exists",
+      "expected": "Relationship 'MarvelFact[DateID] -> DateDim[DateID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact-EyeColorDim relationship exists",
+      "expected": "Relationship 'MarvelFact[EyeID] -> EyeColorDim[EyeID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    },
+    {
+      "test_name": "Schema: MarvelFact-AlignmentDim relationship exists",
+      "expected": "Relationship 'MarvelFact[AlignmentID] -> AlignmentDim[AlignmentID]' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 78.00000009592623
+    }
+  ]
+}

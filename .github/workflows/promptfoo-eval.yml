@@ -1,0 +1,90 @@
+# Run LLM evaluations against the pql-test Copilot CLI plugin skills.
+#
+# Uses the GitHub Models API directly via plain Python urllib.request (stdlib).
+# No Node.js, no npm, no axios – zero external HTTP dependencies.
+#
+# The LLM eval step is marked continue-on-error so that the job does not
+# block PRs if GitHub Models access is not yet available for the repository.
+# The structural validation in validate-plugin.yml always runs and always
+# enforces correctness.
+
+name: Skill Evaluation
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - 'tests/promptfoo/**'
+      - '.github/workflows/promptfoo-eval.yml'
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'plugin.json'
+      - 'tests/promptfoo/**'
+      - '.github/workflows/promptfoo-eval.yml'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'GitHub Models model name (e.g. gpt-4o-mini, gpt-4o)'
+        required: false
+        default: 'gpt-4o-mini'
+  # Called by ci.yml to participate in the sequential pipeline
+  workflow_call:
+    inputs:
+      model:
+        description: 'GitHub Models model name'
+        type: string
+        required: false
+        default: 'gpt-4o-mini'
+
+jobs:
+  skill-eval:
+    name: Skill evaluation – GitHub Models (plain HTTP)
+    runs-on: ubuntu-latest
+    # Grant the token permission to call the GitHub Models API
+    permissions:
+      contents: read
+      models: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # -----------------------------------------------------------------------
+      # Run skill evaluations via direct HTTP calls to GitHub Models API.
+      # Uses only Python stdlib (urllib.request + json) – no axios or npm.
+      # Model can be overridden via the PQL_TEST_MODEL environment variable.
+      # -----------------------------------------------------------------------
+      - name: Run skill evaluation
+        id: eval
+        # continue-on-error so the job stays green when GitHub Models access
+        # is not yet provisioned for this repository
+        continue-on-error: true
+        working-directory: tests/promptfoo
+        run: python3 run_eval.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PQL_TEST_MODEL: ${{ inputs.model || 'gpt-4o-mini' }}
+
+      # -----------------------------------------------------------------------
+      # Upload results regardless of outcome
+      # -----------------------------------------------------------------------
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: tests/promptfoo/results.json
+          if-no-files-found: ignore
+
+      - name: Annotate if GitHub Models was unavailable
+        if: steps.eval.outcome == 'failure'
+        run: |
+          echo "::warning::Skill LLM evaluation could not complete – GitHub Models may require additional repository permissions or a Copilot subscription."
+          echo "::warning::Structural validation in validate-plugin.yml is the authoritative check."

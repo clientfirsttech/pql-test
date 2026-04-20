@@ -1,0 +1,8 @@
+DEFINE
+    FUNCTION OLS_Admin.ANY.Tests = () =>
+	UNION(
+		PQL.Assert.OLS.TableShouldBeVisible("Admin: Table should be visible", "Admin Table"),
+		PQL.Assert.OLS.ColumnShouldBeVisible("Admin: Hidden Column should be visible ", "Hidden Column Table", "Hidden Column")
+	)
+
+EVALUATE OLS_Admin.ANY.Tests()

@@ -1,0 +1,267 @@
+# Run pql-test against every PBIP model in the examples/ directory, connecting
+# to a real Power BI Premium / Microsoft Fabric XMLA endpoint.
+#
+# Why windows-latest?
+#   pyadomd (the ADOMD.NET XMLA driver used by pql-test) requires the
+#   Microsoft.AnalysisServices.AdomdClient NuGet package, which is a
+#   Windows/.NET component.  The job must run on a Windows runner.
+#
+# Required secrets (set in repo Settings → Secrets → Actions):
+#   PQL_TENANT_ID      – Azure AD tenant GUID
+#   PQL_WORKSPACE_ID   – Power BI workspace GUID
+#   PQL_DATASET_ID     – Dataset / semantic model GUID
+#   PQL_CLIENT_ID      – Service principal application (client) ID
+#   PQL_CLIENT_SECRET  – Service principal client secret
+#
+# Optional secrets:
+#   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, USGovHigh, DOD,
+#                        Germany, China).  Default: Public.
+#
+# Called from ci.yml as the final stage of the sequential pipeline, and can
+# also be triggered manually via workflow_dispatch for one-off remote runs.
+
+name: Run DAX Tests (Remote Workspace)
+
+on:
+  # Called by ci.yml after validate-plugin and promptfoo-eval succeed
+  workflow_call:
+    secrets:
+      PQL_TENANT_ID:
+        required: true
+      PQL_WORKSPACE_ID:
+        required: true
+      PQL_DATASET_ID:
+        required: true
+      PQL_CLIENT_ID:
+        required: true
+      PQL_CLIENT_SECRET:
+        required: true
+      PQL_ENVIRONMENT:
+        required: false
+    inputs:
+      environment:
+        description: 'Power BI cloud environment override'
+        type: string
+        required: false
+        default: 'Public'
+
+  # Manual trigger so the workflow can be run stand-alone for ad-hoc testing
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Power BI cloud environment (Public, USGov, USGovHigh, DOD, Germany, China)'
+        required: false
+        default: 'Public'
+      test_name:
+        description: 'Run only a specific test suite (leave blank for all)'
+        required: false
+        default: ''
+      verbose:
+        description: 'Enable verbose output'
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1: discover all PBIP models in examples/ and emit a matrix
+  # ---------------------------------------------------------------------------
+  discover-models:
+    name: Discover example PBIP models
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      models: ${{ steps.find-models.outputs.models }}
+      model_count: ${{ steps.find-models.outputs.model_count }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find PBIP SemanticModel directories
+        id: find-models
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, pathlib, sys
+
+          repo_root = pathlib.Path('.')
+          # Collect every .SemanticModel directory under examples/
+          models = sorted(
+              str(p).replace('\\', '/')
+              for p in repo_root.glob('examples/**/*.SemanticModel')
+              if p.is_dir()
+          )
+
+          if not models:
+              print('::warning::No .SemanticModel directories found in examples/')
+              models = []
+
+          print(f'Found {len(models)} model(s):')
+          for m in models:
+              print(f'  • {m}')
+
+          # Write outputs
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f'models={json.dumps(models)}\n')
+              fh.write(f'model_count={len(models)}\n')
+          PYEOF
+
+      - name: Show discovered models
+        run: |
+          echo "Models to test: ${{ steps.find-models.outputs.models }}"
+          echo "Total: ${{ steps.find-models.outputs.model_count }}"
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: run pql-test against each discovered model (matrix)
+  # ---------------------------------------------------------------------------
+  run-dax-tests:
+    name: DAX tests – ${{ matrix.model }}
+    needs: discover-models
+    if: ${{ needs.discover-models.outputs.model_count != '0' }}
+    runs-on: windows-latest   # pyadomd (ADOMD.NET) requires Windows + .NET
+    permissions:
+      contents: read
+
+    strategy:
+      # Run all models even if one fails so we get complete results
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.discover-models.outputs.models) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # Python environment
+      # -----------------------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install pql-test and dependencies
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          pip install ./python
+
+      # -----------------------------------------------------------------------
+      # Optional: install Microsoft.AnalysisServices.AdomdClient via NuGet
+      # so that pyadomd can find the native ADOMD.NET assemblies on the runner
+      # -----------------------------------------------------------------------
+      - name: Install ADOMD.NET client libraries
+        shell: pwsh
+        run: |
+          # Use nuget.exe (pre-installed on windows-latest) instead of the
+          # PowerShell PackageManagement provider, which can fail to locate
+          # the NuGet provider on newer runner images.
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+          if ($LASTEXITCODE -eq 0) {
+            $installed = Get-ChildItem $outputDir -Directory `
+              | Where-Object Name -like 'Microsoft.AnalysisServices.AdomdClient*' `
+              | Select-Object -First 1
+            Write-Host "ADOMD.NET installed: $($installed.Name)"
+          } else {
+            Write-Warning "ADOMD.NET package install failed – pyadomd may still work if assemblies are in the GAC"
+          }
+
+      # -----------------------------------------------------------------------
+      # Build result filename from the model path (safe for artifacts)
+      # -----------------------------------------------------------------------
+      - name: Compute result filename
+        id: result-name
+        shell: bash
+        run: |
+          SAFE=$(echo "${{ matrix.model }}" | tr '/\\. ' '----')
+          echo "filename=dax-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # Run pql-test
+      # -----------------------------------------------------------------------
+      - name: Run DAX tests for ${{ matrix.model }}
+        id: run-tests
+        shell: bash
+        run: |
+          ARGS=("${{ matrix.model }}")
+          ARGS+=(--log-format github)
+          ARGS+=(--output "${{ steps.result-name.outputs.filename }}")
+
+          # Optional: single test suite (workflow_dispatch only)
+          if [ -n "${{ inputs.test_name }}" ]; then
+            ARGS+=(--test "${{ inputs.test_name }}")
+          fi
+
+          # Optional: verbose output (workflow_dispatch only)
+          if [ "${{ inputs.verbose }}" = "true" ]; then
+            ARGS+=(--verbose)
+          fi
+
+          echo "Running: pql-test run-tests ${ARGS[*]}"
+          pql-test run-tests "${ARGS[@]}"
+        env:
+          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
+          PQL_DATASET_ID:    ${{ secrets.PQL_DATASET_ID }}
+          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+          # Use the secret if set; fall back to the input (or default Public)
+          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
+
+      # -----------------------------------------------------------------------
+      # Upload the JSON results file so they are available as pipeline artifacts
+      # -----------------------------------------------------------------------
+      - name: Upload test results
+        if: always() && steps.result-name.outputs.filename != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.result-name.outputs.filename }}
+          path: ${{ steps.result-name.outputs.filename }}
+          if-no-files-found: warn
+
+      # -----------------------------------------------------------------------
+      # Print a brief summary to the Actions log
+      # -----------------------------------------------------------------------
+      - name: Summarise results
+        if: always() && steps.result-name.outputs.filename != ''
+        shell: python
+        run: |
+          import json, pathlib, sys, os
+
+          results_path = r"${{ steps.result-name.outputs.filename }}"
+          if not results_path:
+              print("No result filename set – earlier steps may have been skipped.")
+              sys.exit(0)
+
+          results_file = pathlib.Path(results_path)
+          if not results_file.exists():
+              print("No results file produced – the run-tests step may have failed before writing output.")
+              sys.exit(0)
+
+          data = json.loads(results_file.read_text(encoding="utf-8"))
+          passed  = data.get("passed",  0)
+          failed  = data.get("failed",  0)
+          skipped = data.get("skipped", 0)
+          total   = data.get("total",   0)
+
+          print(f"\nModel : ${{ matrix.model }}")
+          print(f"Passed : {passed}/{total}")
+          print(f"Failed : {failed}")
+          print(f"Skipped: {skipped}")
+
+          if failed:
+              print("\nFailed tests:")
+              for r in data.get("results", []):
+                  if not r.get("passed") and not r.get("skipped"):
+                      print(f"  ✗  [{r['suite_name']}] {r['test_name']}")
+                      if r.get("error"):
+                          print(f"       error: {r['error']}")
+                      else:
+                          print(f"       expected : {r.get('expected')}")
+                          print(f"       actual   : {r.get('actual')}")

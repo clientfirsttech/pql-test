@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "RLS_Model"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "53aaea0b-f1f6-4467-a6f3-4b6c75543eb0"
+  }
+}

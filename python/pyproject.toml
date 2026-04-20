@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pql-test"
+version = "0.1.0"
+description = "CLI for discovering and running DAX tests in Power BI PBIP models via XMLA"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["power-bi", "power-query", "dax", "xmla", "testing", "pql"]
+dependencies = [
+    "pyadomd>=0.0.5",
+    "msal>=1.24.0",
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+pql-test = "pql_test_cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[tool.setuptools]
+py-modules = ["pql_test_cli", "pql_test_runner"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v"
+markers = [
+    "live: marks tests that require real Power BI / Fabric XMLA credentials (deselected by default)",
+]
+
+[tool.coverage.run]
+source = ["pql_test_runner", "pql_test_cli"]
+omit = ["tests/*"]

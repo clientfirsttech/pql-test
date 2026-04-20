@@ -1,0 +1,26 @@
+table 'Admin Table'
+	lineageTag: 8723b986-8b7a-46d7-97f2-4023e5056332
+
+	column Column1
+		dataType: int64
+		formatString: 0
+		lineageTag: 644c91d7-6d9e-414b-9867-0103567e9b99
+		summarizeBy: sum
+		sourceColumn: Column1
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Admin Table' = m
+		mode: import
+		queryGroup: OLS
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlSKjQUA", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Column1 = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Column1", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
