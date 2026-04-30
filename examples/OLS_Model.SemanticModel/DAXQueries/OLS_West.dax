@@ -1,0 +1,8 @@
+DEFINE
+    FUNCTION OLS_West.ANY.Tests = () =>
+	UNION(
+		PQL.Assert.OLS.TableShouldBeHidden("West: Admin Table should be hidden", "Admin Table"),
+		PQL.Assert.OLS.ColumnShouldBeHidden("West: Hidden Column should be hidden", "Hidden Column Table", "Hidden Column")
+	)
+
+EVALUATE OLS_West.ANY.Tests()

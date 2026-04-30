@@ -1,0 +1,93 @@
+# Master CI pipeline for the pql-test Copilot CLI plugin.
+#
+# Jobs run strictly in sequence.  Every earlier stage must succeed before the
+# next one starts.  A failure in any stage stops the pipeline.
+#
+#  Stage 1 – validate-plugin
+#    Static structural validation: plugin.json schema, skill directory layout,
+#    SKILL.md frontmatter, and (best-effort) gh copilot CLI install check.
+#
+#  Stage 2 – promptfoo-eval
+#    Sends each skill's instructions to GitHub Models (gpt-4o-mini) via plain
+#    Python urllib.request and asserts that the model returns the expected CLI
+#    flags and commands.  Uses the built-in GITHUB_TOKEN; no third-party API
+#    keys required.  Marked continue-on-error when GitHub Models is unavailable,
+#    but the job itself must complete to unblock stage 3.
+#
+#  Stage 3 – run-tests-remote
+#    Installs pql-test on a Windows runner (required for ADOMD.NET / pyadomd),
+#    discovers every .SemanticModel under examples/, and runs the full DAX
+#    test suite against the remote Power BI Premium / Fabric workspace.
+#    Requires five repository secrets (see below).
+#
+# Required secrets for stage 3:
+#   PQL_TENANT_ID      – Azure AD tenant GUID
+#   PQL_WORKSPACE_ID   – Power BI workspace GUID
+#   PQL_DATASET_ID     – Dataset / semantic model GUID
+#   PQL_CLIENT_ID      – Service principal application (client) ID
+#   PQL_CLIENT_SECRET  – Service principal client secret
+#
+# Optional secrets for stage 3:
+#   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, …).  Default: Public.
+
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'copilot/**'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'GitHub Models model for promptfoo (e.g. gpt-4o-mini)'
+        required: false
+        default: 'gpt-4o-mini'
+      environment:
+        description: 'Power BI cloud environment for DAX tests (Public, USGov, …)'
+        required: false
+        default: 'Public'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1: validate plugin structure
+  # ---------------------------------------------------------------------------
+  validate-plugin:
+    name: Stage 1 – Validate plugin structure
+    uses: ./.github/workflows/validate-plugin.yml
+    permissions:
+      contents: read
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: skill evaluation via GitHub Models (plain HTTP, no axios)
+  # ---------------------------------------------------------------------------
+  promptfoo-eval:
+    name: Stage 2 – Skill evaluation
+    needs: validate-plugin
+    uses: ./.github/workflows/promptfoo-eval.yml
+    with:
+      model: ${{ inputs.model || 'gpt-4o-mini' }}
+    permissions:
+      contents: read
+      models: read
+
+  # ---------------------------------------------------------------------------
+  # Stage 3: run DAX tests against a real remote workspace
+  # ---------------------------------------------------------------------------
+  run-tests-remote:
+    name: Stage 3 – Run DAX tests (remote workspace)
+    needs: promptfoo-eval
+    uses: ./.github/workflows/run-tests-remote.yml
+    with:
+      environment: ${{ inputs.environment || 'Public' }}
+    permissions:
+      contents: read
+    secrets:
+      PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+      PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
+      PQL_DATASET_ID:    ${{ secrets.PQL_DATASET_ID }}
+      PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+      PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+      PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT }}

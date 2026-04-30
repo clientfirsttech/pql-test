@@ -1,0 +1,35 @@
+table 'Hidden Column Table'
+	lineageTag: 1aa996e9-e0c1-4715-9472-d2b2c125d548
+
+	column 'Shown Column'
+		dataType: int64
+		formatString: 0
+		lineageTag: c4fe16e7-3508-4b84-b907-e99fc8eb9fee
+		summarizeBy: sum
+		sourceColumn: Shown Column
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Hidden Column'
+		dataType: int64
+		formatString: 0
+		lineageTag: 08c6ad45-7a29-4171-8d7d-943938514f95
+		summarizeBy: sum
+		sourceColumn: Hidden Column
+
+		annotation SummarizationSetBy = Automatic
+
+	partition 'Hidden Column Table' = m
+		mode: import
+		queryGroup: OLS
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSUTJWitWJVjICskyUYmMB", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [#"Shown Column" = _t, #"Hidden Column" = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Shown Column", Int64.Type}, {"Hidden Column", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

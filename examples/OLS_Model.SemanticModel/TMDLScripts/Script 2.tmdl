@@ -1,0 +1,11 @@
+createOrReplace
+
+	function 'OLS_Admin.ANY.Tests' =
+			() =>
+				UNION(
+					PQL.Assert.OLS.TableShouldBeVisible("Admin: Table should be visible", "Admin Table"),
+					PQL.Assert.OLS.ColumnShouldBeVisible("Admin: Hidden Column should be visible ", "Hidden Column Table", "Hidden Column")
+				)
+		lineageTag: 7e2f4480-b058-41c6-9f3a-a4300d97f97c
+		
+		annotation PQLAssert_ImpersonatedUserName = jkerski@cftechnologiesllc.com

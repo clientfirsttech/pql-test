@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"pqm-guide-remote": {
+			"url": "https://pqm.guide/api/mcp",
+			"type": "http"
+		}
+	},
+	"inputs": []
+}

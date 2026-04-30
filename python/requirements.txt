@@ -1,0 +1,6 @@
+# Runtime dependencies
+pyadomd>=0.0.5          # ADOMD.NET wrapper for XMLA queries (requires .NET on Windows)
+msal>=1.24.0            # Microsoft Authentication Library — service-principal token acquisition
+click>=8.1.0            # CLI framework
+python-dotenv>=1.0.0    # Load PQL_* credentials from a .env file
+psutil>=5.9.0           # Process + TCP port enumeration for local PBI Desktop detection

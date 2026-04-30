@@ -1,0 +1,15 @@
+// NOTE: PQL.Assert.BP functions return a 5-column schema
+// (TestName, Expected, Actual, Passed, RuleDescription).
+// This MUST be kept in a separate runner — never UNION with standard 4-column test results.
+
+DEFINE
+	FUNCTION BestPractices.ANY.Tests = () =>
+	UNION (
+		PQL.Assert.BP.CheckErrorPrevention(),
+		PQL.Assert.BP.CheckFormatting(),
+		PQL.Assert.BP.CheckDAXExpressions(),
+		PQL.Assert.BP.CheckMaintenance(),
+		PQL.Assert.BP.CheckPerformance()
+	)
+
+EVALUATE BestPractices.ANY.Tests()

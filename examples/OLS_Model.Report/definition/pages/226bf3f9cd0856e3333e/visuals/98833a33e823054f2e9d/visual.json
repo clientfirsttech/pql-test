@@ -1,0 +1,126 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "98833a33e823054f2e9d",
+  "position": {
+    "x": 423.63747918310105,
+    "y": 64.622666316066258,
+    "z": 1,
+    "height": 280.03155403628716,
+    "width": 425.07353843456917,
+    "tabOrder": 1
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Hidden Column Table"
+                        }
+                      },
+                      "Property": "Hidden Column"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(Hidden Column Table.Hidden Column)",
+              "nativeQueryRef": "Sum of Hidden Column"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Hidden Column Table"
+                        }
+                      },
+                      "Property": "Shown Column"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(Hidden Column Table.Shown Column)",
+              "nativeQueryRef": "Sum of Shown Column"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'With Column'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "d37f005063f1f23d8ab5",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Hidden Column Table"
+                  }
+                },
+                "Property": "Hidden Column"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "10b16cd99acc7cce4da8",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Hidden Column Table"
+                  }
+                },
+                "Property": "Shown Column"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}
