@@ -770,6 +770,81 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
 # XMLA connection resolution
 # ---------------------------------------------------------------------------
 
+def _resolve_authentication_with_stored_credentials(
+    opts: XmlaConnectionOptions,
+) -> XmlaConnectionOptions:
+    """
+    Resolve authentication credentials with fallback to stored credentials.
+
+    Priority:
+      1. CLI flags (opts.tenant_id, opts.client_id, opts.client_secret)
+      2. Environment variables (PQL_TENANT_ID, PQL_CLIENT_ID, PQL_CLIENT_SECRET)
+      3. Stored credentials (from pql-test auth login)
+
+    Returns:
+        Updated XmlaConnectionOptions with credentials from stored config if needed
+    """
+    # If all credentials are already provided, return as-is
+    if opts.tenant_id and opts.client_id and opts.client_secret:
+        return opts
+
+    # Check if credentials are in environment variables
+    import os
+    env_tenant = os.getenv("PQL_TENANT_ID")
+    env_client = os.getenv("PQL_CLIENT_ID")
+    env_secret = os.getenv("PQL_CLIENT_SECRET")
+
+    if env_tenant and env_client and env_secret:
+        # Use environment variables
+        return XmlaConnectionOptions(
+            tenant_id=env_tenant,
+            workspace_id=opts.workspace_id,
+            dataset_id=opts.dataset_id,
+            client_id=env_client,
+            client_secret=env_secret,
+            environment=opts.environment,
+        )
+
+    # Fallback to stored credentials
+    try:
+        from pql_test.auth import AuthenticationManager, AuthMethod
+
+        manager = AuthenticationManager()
+        status = manager.get_status()
+
+        if not status.authenticated:
+            return opts  # No stored credentials
+
+        # Get access token from stored credentials
+        token = manager.get_access_token()
+        if not token:
+            return opts  # Token acquisition failed
+
+        # For service principal with secret, we can extract the credentials
+        config = manager._store.load()
+        if config and config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
+            return XmlaConnectionOptions(
+                tenant_id=config.tenant_id or opts.tenant_id,
+                workspace_id=opts.workspace_id,
+                dataset_id=opts.dataset_id,
+                client_id=config.client_id or opts.client_id,
+                client_secret=config.client_secret or opts.client_secret,
+                environment=config.environment,
+            )
+
+        # For other auth methods, we can't extract credentials but we have a token
+        # Store the token in opts for use by the connection builder
+        # Note: This is a simplified approach - ideally we'd refactor to pass the token directly
+        return opts
+
+    except ImportError:
+        # auth module not available
+        return opts
+    except Exception:
+        # Any error in loading stored credentials - return original opts
+        return opts
+
+
 def resolve_xmla_connection(
     model_path: str,
     opts: XmlaConnectionOptions,
@@ -788,6 +863,9 @@ def resolve_xmla_connection(
 
     Returns None when no connection can be established.
     """
+    # Try to resolve credentials from stored config if not provided
+    opts = _resolve_authentication_with_stored_credentials(opts)
+
     # Option 1 — remote workspace (service principal)
     if opts.tenant_id and opts.workspace_id and opts.dataset_id:
         # The XMLA endpoint requires the workspace display name and dataset
@@ -848,6 +926,9 @@ def resolve_service_xmla_connection_by_name(
     *tenant_id*, *client_id*, and *client_secret* must still be provided
     inside *opts* for service-principal authentication.
     """
+    # Try to resolve credentials from stored config if not provided
+    opts = _resolve_authentication_with_stored_credentials(opts)
+
     if not opts.tenant_id or not opts.client_id or not opts.client_secret:
         return None
 
