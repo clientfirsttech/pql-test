@@ -23,3 +23,6 @@ venv/
 
 # pql-test config
 .pql-test/
+**/cache.abf
+**/localSettings.json
+**/.env

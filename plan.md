@@ -4,6 +4,8 @@
 
 ## Active Work
 
+- **Refactor authentication to match Fabric CLI pattern** — See [tasks/fabric-cli-auth-epic.md](tasks/fabric-cli-auth-epic.md)
+
 - Incorporate AIDD framework into pql-test repository
 - Set up agent-based development workflows with @aidd commands
 - Maintain CI pipeline: validate-plugin → promptfoo-eval → run-tests-remote
