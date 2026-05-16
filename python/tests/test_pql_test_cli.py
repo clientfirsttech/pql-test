@@ -18,8 +18,8 @@ import pytest
 
 from tests.conftest import make_dax_source
 
-# Path to the CLI entry point
-_CLI = str(Path(__file__).parent.parent / "pql_test_cli.py")
+# Run CLI as a module instead of script
+_CLI_MODULE = "pql_test.cli"
 
 
 def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
@@ -29,7 +29,7 @@ def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
-        [sys.executable, _CLI, *args],
+        [sys.executable, "-m", _CLI_MODULE, *args],
         capture_output=True,
         text=True,
         encoding="utf-8",

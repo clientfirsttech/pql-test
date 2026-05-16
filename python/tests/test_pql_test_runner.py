@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from unittest.mock import MagicMock
 
-from pql_test_runner import (
+from pql_test.runner import (
     HAS_PSUTIL,
     HAS_PYADOMD,
     Environment,
@@ -117,7 +117,7 @@ class TestFindPbiAncestorPid:
         pbi_pid = 100
         msmdsrv_proc = self._make_psutil_process(pid=999, ppid=pbi_pid)
 
-        with patch("pql_test_runner._psutil.Process", side_effect=lambda pid: self._make_psutil_process(pid, 0)):
+        with patch("pql_test.runner._psutil.Process", side_effect=lambda pid: self._make_psutil_process(pid, 0)):
             result = _find_pbi_ancestor_pid(msmdsrv_proc, {pbi_pid})
 
         assert result == pbi_pid
@@ -145,7 +145,7 @@ class TestFindPbiAncestorPid:
                 return intermediate_proc
             return self._make_psutil_process(pid, 0)  # top-level / unknown
 
-        with patch("pql_test_runner._psutil.Process", side_effect=_process_factory):
+        with patch("pql_test.runner._psutil.Process", side_effect=_process_factory):
             result = _find_pbi_ancestor_pid(msmdsrv_proc, {pbi_pid})
 
         assert result == pbi_pid
@@ -162,7 +162,7 @@ class TestFindPbiAncestorPid:
         proc = self._make_psutil_process(pid=999, ppid=unrelated_pid)
         top_proc = self._make_psutil_process(pid=unrelated_pid, ppid=0)
 
-        with patch("pql_test_runner._psutil.Process", return_value=top_proc):
+        with patch("pql_test.runner._psutil.Process", return_value=top_proc):
             result = _find_pbi_ancestor_pid(proc, {1234})
 
         assert result is None
@@ -386,8 +386,8 @@ class TestResolveXmlaConnection:
             dataset_id="ds-1",
         )
         with (
-            patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"),
-            patch("pql_test_runner._resolve_pbi_workspace_and_dataset_names", return_value=("ws-1", "ds-1")),
+            patch("pql_test.runner._acquire_service_principal_token", return_value="fake-token"),
+            patch("pql_test.runner._resolve_pbi_workspace_and_dataset_names", return_value=("ws-1", "ds-1")),
         ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is not None
@@ -400,8 +400,8 @@ class TestResolveXmlaConnection:
             tenant_id="t", workspace_id="w", dataset_id="d"
         )
         with (
-            patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"),
-            patch("pql_test_runner._resolve_pbi_workspace_and_dataset_names", return_value=("w", "d")),
+            patch("pql_test.runner._acquire_service_principal_token", return_value="fake-token"),
+            patch("pql_test.runner._resolve_pbi_workspace_and_dataset_names", return_value=("w", "d")),
         ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is not None
@@ -416,8 +416,8 @@ class TestResolveXmlaConnection:
             client_secret="secret-1",
         )
         with (
-            patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"),
-            patch("pql_test_runner._resolve_pbi_workspace_and_dataset_names", return_value=("ws-1", "ds-1")),
+            patch("pql_test.runner._acquire_service_principal_token", return_value="fake-token"),
+            patch("pql_test.runner._resolve_pbi_workspace_and_dataset_names", return_value=("ws-1", "ds-1")),
         ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is not None
@@ -429,8 +429,8 @@ class TestResolveXmlaConnection:
     def test_returns_none_without_params_and_no_local_pbi(self, tmp_path):
         opts = XmlaConnectionOptions()
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
         ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is None
@@ -439,9 +439,9 @@ class TestResolveXmlaConnection:
         (tmp_path / "MyModel.pbip").write_text("{}")
         opts = XmlaConnectionOptions()
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
             patch(
-                "pql_test_runner._detect_local_pbi_desktop_port",
+                "pql_test.runner._detect_local_pbi_desktop_port",
                 return_value=_MOCK_PORTFILE_SERVER,
             ),
         ):
@@ -454,9 +454,9 @@ class TestResolveXmlaConnection:
         """Local connections omit Initial Catalog regardless of pbip name."""
         (tmp_path / "SampleModel.pbip").write_text("{}")
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
             patch(
-                "pql_test_runner._detect_local_pbi_desktop_port",
+                "pql_test.runner._detect_local_pbi_desktop_port",
                 return_value=_MOCK_PORTFILE_SERVER,
             ),
         ):
@@ -470,10 +470,10 @@ class TestResolveXmlaConnection:
             tenant_id="t", workspace_id="w", dataset_id="d"
         )
         with (
-            patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"),
-            patch("pql_test_runner._resolve_pbi_workspace_and_dataset_names", return_value=("w", "d")),
+            patch("pql_test.runner._acquire_service_principal_token", return_value="fake-token"),
+            patch("pql_test.runner._resolve_pbi_workspace_and_dataset_names", return_value=("w", "d")),
             patch(
-                "pql_test_runner._detect_local_pbi_desktop_port",
+                "pql_test.runner._detect_local_pbi_desktop_port",
                 return_value=_MOCK_PORTFILE_SERVER,  # port is irrelevant; remote URL takes priority
             ),
         ):
@@ -486,8 +486,8 @@ class TestResolveXmlaConnection:
         # Also suppress local fallback so a running PBI Desktop doesn't interfere.
         opts = XmlaConnectionOptions(tenant_id="t", workspace_id="w")
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
         ):
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is None
@@ -543,32 +543,32 @@ class TestRunTestWithMockedXmla:
 
     def test_passes_when_passed_column_is_true(self):
         rows = [{"TestName": "My test", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert len(results) == 1
         assert results[0].passed is True
 
     def test_passes_when_passed_column_is_1(self):
         rows = [{"TestName": "t", "Expected": "x", "Actual": "x", "Passed": "1"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].passed is True
 
     def test_fails_when_passed_column_is_false(self):
         rows = [{"TestName": "Bad test", "Expected": "1", "Actual": "2", "Passed": "false"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].passed is False
 
     def test_test_name_used_from_row(self):
         rows = [{"TestName": "MyRowTest", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].test_name == "MyRowTest"
 
     def test_falls_back_to_suite_name_when_test_name_empty(self):
         rows = [{"TestName": "", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].test_name == "Calculations.DEV.Tests"
 
@@ -577,7 +577,7 @@ class TestRunTestWithMockedXmla:
             {"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"},
             {"TestName": "t2", "Expected": "2", "Actual": "3", "Passed": "false"},
         ]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert len(results) == 2
         assert results[0].passed is True
@@ -585,7 +585,7 @@ class TestRunTestWithMockedXmla:
 
     def test_message_includes_expected_and_actual(self):
         rows = [{"TestName": "t", "Expected": "42", "Actual": "99", "Passed": "false"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].expected == "42"
         assert results[0].actual == "99"
@@ -594,7 +594,7 @@ class TestRunTestWithMockedXmla:
 
     def test_suite_name_populated_from_test_name(self):
         rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].suite_name == "Calculations.DEV.Tests"
 
@@ -612,12 +612,12 @@ class TestRunTestWithMockedXmla:
                 "RuleDescription": "Avoid SELECT *",
             }
         ]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert "Rule: Avoid SELECT *" in results[0].message
 
     def test_returns_failed_result_on_empty_rows(self):
-        with patch("pql_test_runner._execute_dax_query", return_value=[]):
+        with patch("pql_test.runner._execute_dax_query", return_value=[]):
             results = run_test(self._make_test(), self._make_conn())
         assert len(results) == 1
         assert results[0].passed is False
@@ -625,7 +625,7 @@ class TestRunTestWithMockedXmla:
 
     def test_returns_failed_result_on_query_exception(self):
         with patch(
-            "pql_test_runner._execute_dax_query",
+            "pql_test.runner._execute_dax_query",
             side_effect=RuntimeError("XMLA connection failed"),
         ):
             results = run_test(self._make_test(), self._make_conn())
@@ -644,7 +644,7 @@ class TestRunTestWithMockedXmla:
                 "Calculations[Passed]": "true",
             }
         ]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_test(self._make_test(), self._make_conn())
         assert results[0].passed is True
         assert results[0].test_name == "t1"
@@ -672,7 +672,7 @@ class TestRunTestWithMockedXmla:
             return rows
 
         # _make_conn() returns localhost:50001 — a local connection
-        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
             result = run_test(test, self._make_conn())
 
         assert len(result) == 1
@@ -705,7 +705,7 @@ class TestRunTestWithMockedXmla:
             captured.append(conn)
             return rows
 
-        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
             result = run_test(test, service_conn)
 
         assert result[0].passed is True
@@ -732,7 +732,7 @@ class TestRunTestWithMockedXmla:
             captured.append(conn)
             return rows
 
-        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
             run_test(test, self._make_conn())
 
         assert captured[0].roles is None
@@ -754,7 +754,7 @@ class TestRunTestWithMockedXmla:
             captured.append(conn)
             return rows
 
-        with patch("pql_test_runner._execute_dax_query", side_effect=_capture_conn):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
             run_test(test, self._make_conn())
 
         assert captured[0].effective_user_name is None
@@ -775,7 +775,7 @@ class TestRunTestWithMockedXmla:
         rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
         original_conn = self._make_conn()
 
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             run_test(test, original_conn)
 
         assert original_conn.roles is None
@@ -881,7 +881,7 @@ class TestRunTests:
             {"TestName": "r2", "Expected": "2", "Actual": "2", "Passed": "true"},
         ]
         conn = ResolvedXmlaConnection(server=_MOCK_PORTFILE_SERVER, catalog="M")
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             results = run_tests(tests, connection=conn)
         assert len(results) == 2
 
@@ -894,7 +894,7 @@ class TestRunTestsFromModel:
     def test_returns_empty_suite_for_nonexistent_model(self):
         # Suppress local auto-detection so a running PBI Desktop doesn't cause
         # live discovery on a nonexistent path.
-        with patch("pql_test_runner.resolve_xmla_connection", return_value=None):
+        with patch("pql_test.runner.resolve_xmla_connection", return_value=None):
             suite = run_tests_from_model("/nonexistent/path/xyz")
         assert suite.total == 0
         assert suite.passed == 0
@@ -913,9 +913,9 @@ class TestRunTestsFromModel:
         )
         conn = ResolvedXmlaConnection(server=_MOCK_PORTFILE_SERVER, catalog="M")
         rows = [{"TestName": "t1", "Expected": "1", "Actual": "1", "Passed": "true"}]
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             with patch(
-                "pql_test_runner.resolve_xmla_connection", return_value=conn
+                "pql_test.runner.resolve_xmla_connection", return_value=conn
             ):
                 suite = run_tests_from_model(model_dir)
         assert suite.total == len(suite.results)
@@ -933,9 +933,9 @@ class TestRunTestsFromModel:
         # _retrieve_tests_via_dax returns None → falls back to file scan so
         # the discovery mock doesn't conflict with the execution mock.
         with (
-            patch("pql_test_runner._retrieve_tests_via_dax", return_value=None),
-            patch("pql_test_runner._execute_dax_query", return_value=exec_rows),
-            patch("pql_test_runner.resolve_xmla_connection", return_value=conn),
+            patch("pql_test.runner._retrieve_tests_via_dax", return_value=None),
+            patch("pql_test.runner._execute_dax_query", return_value=exec_rows),
+            patch("pql_test.runner.resolve_xmla_connection", return_value=conn),
         ):
             suite = run_tests_from_model(model_dir, test_name="Suite.A.Tests")
         assert len(suite.tests) == 1
@@ -980,9 +980,9 @@ class TestGetPbiFilesOpened:
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", return_value=[]),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", return_value=[]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
         ):
             result = get_pbi_files_opened()
         assert result == []
@@ -1000,12 +1000,12 @@ class TestGetPbiFilesOpened:
         fake_proc = _make_mock_process(pid=999, name="msmdsrv.exe", ppid=1234, listen_port=port)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={1234: "SampleModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
             patch(
-                "pql_test_runner._get_catalog_from_local_port",
+                "pql_test.runner._get_catalog_from_local_port",
                 return_value="",  # EVALUATE INFO.VIEW.MEASURES() succeeded; no catalog needed
             ),
         ):
@@ -1025,11 +1025,11 @@ class TestGetPbiFilesOpened:
         fake_proc = _make_mock_process(pid=100, name="msmdsrv.exe", ppid=200, listen_port=12345)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={200: "My Report Name - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value="My Report Name"),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value="My Report Name"),
         ):
             instances = get_pbi_files_opened()
         assert len(instances) == 1
@@ -1046,14 +1046,14 @@ class TestGetPbiFilesOpened:
         proc_b = _make_mock_process(pid=20, name="msmdsrv.exe", ppid=200, listen_port=_MOCK_AS_PORT_B)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={
                     100: "ModelA - Power BI Desktop",
                     200: "ModelB - Power BI Desktop",
                 },
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[proc_a, proc_b]),
-            patch("pql_test_runner._get_catalog_from_local_port", side_effect=["", ""]),
+            patch("pql_test.runner._psutil.process_iter", return_value=[proc_a, proc_b]),
+            patch("pql_test.runner._get_catalog_from_local_port", side_effect=["", ""]),
         ):
             instances = get_pbi_files_opened()
         assert len(instances) == 2
@@ -1067,10 +1067,10 @@ class TestGetPbiFilesOpened:
         other_proc = _make_mock_process(pid=50, name="PBIDesktop.exe", ppid=0, listen_port=9999)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={0: "SomeModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[other_proc]),
+            patch("pql_test.runner._psutil.process_iter", return_value=[other_proc]),
         ):
             instances = get_pbi_files_opened()
         assert instances == []
@@ -1088,10 +1088,10 @@ class TestGetPbiFilesOpened:
         bad_proc.net_connections.side_effect = runner._psutil.AccessDenied(pid=99)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={1234: "LockedModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[bad_proc]),
+            patch("pql_test.runner._psutil.process_iter", return_value=[bad_proc]),
         ):
             instances = get_pbi_files_opened()
         assert instances == []
@@ -1107,11 +1107,11 @@ class TestGetPbiFilesOpened:
         fake_proc = _make_mock_process(pid=30, name="msmdsrv.exe", ppid=300, listen_port=54321)
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={300: "FallbackModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=None),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=None),
         ):
             instances = get_pbi_files_opened()
         assert len(instances) == 1
@@ -1140,11 +1140,11 @@ class TestGetPbiFilesOpened:
 
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={1234: "StringListenModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1177,13 +1177,13 @@ class TestGetPbiFilesOpened:
 
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={pbi_pid: "TreeWalkModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._psutil.Process", return_value=intermediate_mock),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._psutil.Process", return_value=intermediate_mock),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1217,12 +1217,12 @@ class TestGetPbiFilesOpened:
 
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={pbi_pid: "GlobalConnModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._psutil.net_connections", return_value=[global_conn]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[global_conn]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1246,10 +1246,10 @@ class TestGetPbiFilesOpened:
         fake_proc = _make_mock_process(pid=500, name="msmdsrv.exe", ppid=100, listen_port=port)
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", return_value=[fake_proc]),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", return_value=[fake_proc]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1293,10 +1293,10 @@ class TestGetPbiFilesOpened:
             return [msmdsrv_proc]
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1329,10 +1329,10 @@ class TestGetPbiFilesOpened:
             return [msmdsrv_proc]
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1378,10 +1378,10 @@ class TestGetPbiFilesOpened:
             return [msmdsrv_rls, msmdsrv_sample]
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1420,10 +1420,10 @@ class TestGetPbiFilesOpened:
             return [msmdsrv_proc]
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1451,10 +1451,10 @@ class TestGetPbiFilesOpened:
             return [msmdsrv_proc]
 
         with (
-            patch("pql_test_runner._get_pbi_process_window_titles", return_value={}),
-            patch("pql_test_runner._psutil.process_iter", side_effect=_fake_process_iter),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", side_effect=_fake_process_iter),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1480,12 +1480,12 @@ class TestGetPbiFilesOpened:
         # Window title returns a name; a conflicting cmdline name should NOT be used
         with (
             patch(
-                "pql_test_runner._get_pbi_process_window_titles",
+                "pql_test.runner._get_pbi_process_window_titles",
                 return_value={pbi_pid: "WindowTitleModel - Power BI Desktop"},
             ),
-            patch("pql_test_runner._psutil.process_iter", return_value=[msmdsrv_proc]),
-            patch("pql_test_runner._psutil.net_connections", return_value=[]),
-            patch("pql_test_runner._get_catalog_from_local_port", return_value=""),
+            patch("pql_test.runner._psutil.process_iter", return_value=[msmdsrv_proc]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
         ):
             instances = get_pbi_files_opened()
 
@@ -1524,7 +1524,7 @@ class TestResolveLocalXmlaConnection:
         """
         (tmp_path / "SampleModel.pbip").write_text("{}")
         inst = self._make_instance("SampleModel")
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is not None
         assert conn.server == inst.server    # dynamic: derived from the detected instance
@@ -1538,8 +1538,8 @@ class TestResolveLocalXmlaConnection:
         """
         (tmp_path / "SampleModel.pbip").write_text("{}")
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
         ):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is None
@@ -1551,7 +1551,7 @@ class TestResolveLocalXmlaConnection:
         """
         (tmp_path / "SampleModel.pbip").write_text("{}")
         instances = [self._make_instance("OtherModel")]
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=instances):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=instances):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is None
 
@@ -1559,7 +1559,7 @@ class TestResolveLocalXmlaConnection:
         """Model name match is case-insensitive (mirrors PowerShell -eq behaviour)."""
         (tmp_path / "samplemodel.pbip").write_text("{}")
         instances = [self._make_instance("SAMPLEMODEL")]
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=instances):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=instances):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is not None
 
@@ -1571,7 +1571,7 @@ class TestResolveLocalXmlaConnection:
         """
         # tmp_path has no .pbip file
         inst = self._make_instance("AnyOpenModel", port=_MOCK_AS_PORT_B)
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is not None
         assert conn.server == inst.server  # dynamic: derived from the detected instance
@@ -1586,11 +1586,11 @@ class TestResolveLocalXmlaConnection:
         (tmp_path / "MyModel.pbip").write_text("{}")
         with (
             patch(
-                "pql_test_runner.get_pbi_files_opened",
+                "pql_test.runner.get_pbi_files_opened",
                 side_effect=ImportError("psutil not installed"),
             ),
             patch(
-                "pql_test_runner._detect_local_pbi_desktop_port",
+                "pql_test.runner._detect_local_pbi_desktop_port",
                 return_value=fallback_server,
             ),
         ):
@@ -1614,7 +1614,7 @@ class TestResolveLocalXmlaConnection:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[unnamed_inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[unnamed_inst]):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is not None
         assert conn.server == unnamed_inst.server
@@ -1627,7 +1627,7 @@ class TestResolveLocalXmlaConnection:
         (tmp_path / "SampleModel.pbip").write_text("{}")
         inst_a = LocalPbiInstance(model_name="", server=f"localhost:{_MOCK_AS_PORT_A}", catalog="")
         inst_b = LocalPbiInstance(model_name="", server=f"localhost:{_MOCK_AS_PORT_B}", catalog="")
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst_a, inst_b]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst_a, inst_b]):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is None
 
@@ -1641,11 +1641,11 @@ class TestResolveLocalXmlaConnection:
         semantic_dir.mkdir()
         with (
             patch(
-                "pql_test_runner.get_pbi_files_opened",
+                "pql_test.runner.get_pbi_files_opened",
                 side_effect=ImportError("psutil not installed"),
             ),
             patch(
-                "pql_test_runner._detect_local_pbi_desktop_port",
+                "pql_test.runner._detect_local_pbi_desktop_port",
                 return_value=fallback_server,
             ),
         ):
@@ -1687,8 +1687,8 @@ class TestResolveLocalXmlaConnection:
             {"TestName": "check 2", "Expected": "foo", "Actual": "foo", "Passed": "true"},
         ]
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=instances),
-            patch("pql_test_runner._execute_dax_query", side_effect=[discovery_rows, result_rows, result_rows]),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=instances),
+            patch("pql_test.runner._execute_dax_query", side_effect=[discovery_rows, result_rows, result_rows]),
         ):
             conn = resolve_local_xmla_connection(sample_model_path)
             assert conn is not None
@@ -1717,7 +1717,7 @@ class TestResolveLocalXmlaConnection:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="SampleModel",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection(str(tmp_path))
         assert conn is not None  # connection resolved fine
         assert conn.server == inst.server  # dynamic: derived from the instance
@@ -1731,7 +1731,7 @@ class TestResolveLocalXmlaConnection:
 # _retrieve_tests_via_dax
 # ---------------------------------------------------------------------------
 
-from pql_test_runner import _retrieve_tests_via_dax  # noqa: E402
+from pql_test.runner import _retrieve_tests_via_dax  # noqa: E402
 
 
 class TestRetrieveTestsViaDax:
@@ -1751,7 +1751,7 @@ class TestRetrieveTestsViaDax:
             }
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1772,7 +1772,7 @@ class TestRetrieveTestsViaDax:
             }
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1792,7 +1792,7 @@ class TestRetrieveTestsViaDax:
             }
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1808,7 +1808,7 @@ class TestRetrieveTestsViaDax:
             }
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1824,7 +1824,7 @@ class TestRetrieveTestsViaDax:
             }
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1841,7 +1841,7 @@ class TestRetrieveTestsViaDax:
             for i in range(3)
         ]
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1865,7 +1865,7 @@ class TestRetrieveTestsViaDax:
             return v1_rows
 
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", side_effect=_fake_execute):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_fake_execute):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1883,7 +1883,7 @@ class TestRetrieveTestsViaDax:
             return v1_rows
 
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", side_effect=_fake_execute):
+        with patch("pql_test.runner._execute_dax_query", side_effect=_fake_execute):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is not None
@@ -1896,7 +1896,7 @@ class TestRetrieveTestsViaDax:
     def test_returns_none_when_both_dax_queries_fail(self):
         """If both V2 and V1 raise, None is returned (sentinel for file scan)."""
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", side_effect=Exception("error")):
+        with patch("pql_test.runner._execute_dax_query", side_effect=Exception("error")):
             result = _retrieve_tests_via_dax(conn)
 
         assert result is None
@@ -1918,7 +1918,7 @@ class TestRetrieveTestsViaDax:
             [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
         )
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", return_value=rows):
+        with patch("pql_test.runner._execute_dax_query", return_value=rows):
             result = retrieve_tests(model_dir, connection=conn)
 
         assert len(result) == 1
@@ -1932,7 +1932,7 @@ class TestRetrieveTestsViaDax:
             [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
         )
         conn = MagicMock()
-        with patch("pql_test_runner._execute_dax_query", side_effect=Exception("network error")):
+        with patch("pql_test.runner._execute_dax_query", side_effect=Exception("network error")):
             result = retrieve_tests(model_dir, connection=conn)
 
         # Falls back to file scan → finds the .Tests.dax file
@@ -2032,7 +2032,7 @@ class TestResolveServiceXmlaConnectionByName:
         opts = XmlaConnectionOptions(
             tenant_id="t-1", client_id="c-1", client_secret="s-1",
         )
-        with patch("pql_test_runner._acquire_service_principal_token", return_value="fake-token"):
+        with patch("pql_test.runner._acquire_service_principal_token", return_value="fake-token"):
             conn = resolve_service_xmla_connection_by_name("MyWorkspace", "MyModel", opts)
         assert conn is not None
         assert "MyWorkspace" in conn.server
@@ -2064,7 +2064,7 @@ class TestResolveServiceXmlaConnectionByName:
             tenant_id="t", client_id="c", client_secret="s",
             environment=Environment.US_GOV,
         )
-        with patch("pql_test_runner._acquire_service_principal_token", return_value="tok"):
+        with patch("pql_test.runner._acquire_service_principal_token", return_value="tok"):
             conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
         assert conn is not None
         assert "powerbigov.us" in conn.server
@@ -2084,7 +2084,7 @@ class TestResolveLocalXmlaConnectionByName:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("SampleModel")
         assert conn is not None
         assert conn.server == inst.server
@@ -2096,7 +2096,7 @@ class TestResolveLocalXmlaConnectionByName:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("SAMPLEMODEL")
         assert conn is not None
 
@@ -2107,15 +2107,15 @@ class TestResolveLocalXmlaConnectionByName:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("SampleModel")
         assert conn is None
 
     def test_returns_none_when_no_instances(self):
         """No running instances → None."""
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[]),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
         ):
             conn = resolve_local_xmla_connection_by_name("SampleModel")
         assert conn is None
@@ -2124,8 +2124,8 @@ class TestResolveLocalXmlaConnectionByName:
         """psutil ImportError → port-file fallback."""
         fallback_server = f"localhost:{_MOCK_AS_PORT_A}"
         with (
-            patch("pql_test_runner.get_pbi_files_opened", side_effect=ImportError("psutil")),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=fallback_server),
+            patch("pql_test.runner.get_pbi_files_opened", side_effect=ImportError("psutil")),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=fallback_server),
         ):
             conn = resolve_local_xmla_connection_by_name("SampleModel")
         assert conn is not None
@@ -2138,7 +2138,7 @@ class TestResolveLocalXmlaConnectionByName:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("AnyModel")
         assert conn is not None
 
@@ -2171,7 +2171,7 @@ class TestResolveXmlaConnectionLocalRouting:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="SampleModel-GUID",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_xmla_connection("local/SampleModel", opts)
         assert conn is not None
         assert conn.server == inst.server
@@ -2190,7 +2190,7 @@ class TestResolveXmlaConnectionLocalRouting:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="SampleModel-GUID",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_xmla_connection("local/RLS_Model", opts)
         assert conn is None
 
@@ -2203,11 +2203,11 @@ class TestResolveXmlaConnectionLocalRouting:
         opts = XmlaConnectionOptions()
         with (
             patch(
-                "pql_test_runner.resolve_local_xmla_connection_by_name",
+                "pql_test.runner.resolve_local_xmla_connection_by_name",
                 return_value=None,
             ) as mock_by_name,
             patch(
-                "pql_test_runner.resolve_local_xmla_connection",
+                "pql_test.runner.resolve_local_xmla_connection",
             ) as mock_by_path,
         ):
             resolve_xmla_connection("local/RLS_Model", opts)
@@ -2223,7 +2223,7 @@ class TestResolveXmlaConnectionLocalRouting:
             server=f"localhost:{_MOCK_AS_PORT_A}",
             catalog="",
         )
-        with patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]):
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_xmla_connection("local/RLS_Model", opts)
         assert conn is not None
 
@@ -2240,8 +2240,8 @@ class TestResolveXmlaConnectionLocalRouting:
             catalog="SampleModel-GUID",
         )
         with (
-            patch("pql_test_runner.get_pbi_files_opened", return_value=[inst]),
-            patch("pql_test_runner._detect_local_pbi_desktop_port", return_value=None),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
         ):
             suite = run_tests_from_model(
                 "local/RLS_Model",

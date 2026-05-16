@@ -32,7 +32,7 @@ try:
 except ImportError:
     pass  # python-dotenv missing; rely on env vars being set externally
 
-from pql_test_runner import (
+from pql_test.runner import (
     HAS_PYADOMD,
     Environment,
     XmlaConnectionOptions,

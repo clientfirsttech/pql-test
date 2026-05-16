@@ -57,7 +57,7 @@ except ImportError:
 
 import click
 
-from pql_test_runner import (
+from pql_test.runner import (
     HAS_MSAL,
     HAS_PSUTIL,
     HAS_PYADOMD,

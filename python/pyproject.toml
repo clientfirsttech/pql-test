@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pql-test = "pql_test_cli:main"
+pql-test = "pql_test.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -27,7 +27,7 @@ dev = [
 ]
 
 [tool.setuptools]
-py-modules = ["pql_test_cli", "pql_test_runner"]
+packages = ["pql_test", "pql_test.auth"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -40,5 +40,5 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["pql_test_runner", "pql_test_cli"]
+source = ["pql_test"]
 omit = ["tests/*"]
