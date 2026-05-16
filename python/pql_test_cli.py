@@ -895,6 +895,227 @@ def cmd_run_tests(
 
 
 # ---------------------------------------------------------------------------
+# auth command group
+# ---------------------------------------------------------------------------
+
+@cli.group("auth")
+def auth() -> None:
+    """Manage authentication for pql-test."""
+
+
+@auth.command("login")
+@click.option(
+    "-u",
+    "--user",
+    "--client-id",
+    "user_or_client",
+    help="Username or client ID for authentication",
+)
+@click.option(
+    "-p",
+    "--password",
+    help="Password, client secret, or certificate password (prompts if not provided)",
+)
+@click.option(
+    "--tenant",
+    "--tenant-id",
+    "tenant_id",
+    help="Azure AD tenant ID",
+)
+@click.option(
+    "--certificate",
+    help="Path to certificate file (.pem or .p12) for certificate-based auth",
+)
+@click.option(
+    "--federated-token",
+    help="Federated credential token for workload identity",
+)
+@click.option(
+    "--identity",
+    is_flag=True,
+    help="Use managed identity authentication (Azure VM/Container)",
+)
+@click.option(
+    "--environment",
+    type=click.Choice(["Public", "USGov", "USGovHigh", "USGovDoD", "Germany", "China"]),
+    default="Public",
+    help="Azure cloud environment",
+)
+def cmd_auth_login(
+    user_or_client: str | None,
+    password: str | None,
+    tenant_id: str | None,
+    certificate: str | None,
+    federated_token: str | None,
+    identity: bool,
+    environment: str,
+) -> None:
+    """
+    Log in to pql-test with persistent authentication.
+
+    Examples:
+
+      # Interactive browser login
+      pql-test auth login
+
+      # Service principal with secret
+      pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+
+      # Service principal with certificate
+      pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+
+      # Managed identity (system-assigned)
+      pql-test auth login --identity
+
+      # Managed identity (user-assigned)
+      pql-test auth login --identity -u <client-id>
+    """
+    from pql_test.auth import AuthenticationManager, AuthMethod, CredentialConfig
+
+    manager = AuthenticationManager()
+
+    # Determine authentication method from provided arguments
+    if identity:
+        # Managed identity
+        config = CredentialConfig(
+            method=AuthMethod.MANAGED_IDENTITY,
+            client_id=user_or_client,  # For user-assigned MI
+            use_system_assigned_identity=(user_or_client is None),
+            environment=environment,
+            account_name="Managed Identity",
+        )
+        click.echo("Authenticating with managed identity...")
+
+    elif federated_token:
+        # Federated credential
+        if not all([user_or_client, tenant_id]):
+            click.echo(
+                "Error: Federated credential requires --user (client ID) and --tenant",
+                err=True,
+            )
+            sys.exit(1)
+
+        config = CredentialConfig(
+            method=AuthMethod.SERVICE_PRINCIPAL_FEDERATED,
+            client_id=user_or_client,
+            tenant_id=tenant_id,
+            federated_token=federated_token,
+            environment=environment,
+            account_name=f"SP {user_or_client}",
+        )
+        click.echo("Authenticating with federated credential...")
+
+    elif certificate:
+        # Certificate-based auth
+        if not all([user_or_client, tenant_id]):
+            click.echo(
+                "Error: Certificate auth requires --user (client ID) and --tenant",
+                err=True,
+            )
+            sys.exit(1)
+
+        config = CredentialConfig(
+            method=AuthMethod.SERVICE_PRINCIPAL_CERT,
+            client_id=user_or_client,
+            tenant_id=tenant_id,
+            certificate_path=certificate,
+            certificate_password=password,  # Optional
+            environment=environment,
+            account_name=f"SP {user_or_client}",
+        )
+        click.echo("Authenticating with certificate...")
+
+    elif user_or_client and password:
+        # Service principal with secret
+        if not tenant_id:
+            click.echo(
+                "Error: Service principal auth requires --tenant",
+                err=True,
+            )
+            sys.exit(1)
+
+        config = CredentialConfig(
+            method=AuthMethod.SERVICE_PRINCIPAL_SECRET,
+            client_id=user_or_client,
+            client_secret=password,
+            tenant_id=tenant_id,
+            environment=environment,
+            account_name=f"SP {user_or_client}",
+        )
+        click.echo("Authenticating with service principal...")
+
+    else:
+        # Interactive browser login
+        if not tenant_id:
+            tenant_id = click.prompt("Azure AD tenant ID", type=str)
+
+        config = CredentialConfig(
+            method=AuthMethod.INTERACTIVE,
+            tenant_id=tenant_id,
+            environment=environment,
+            account_name="Interactive User",
+        )
+        click.echo("Launching browser for interactive authentication...")
+
+    try:
+        # Test that we can create a credential before saving
+        credential = manager._factory.create(config, manager._cloud_config)
+
+        # Save the configuration
+        manager.save_credential(config)
+
+        click.echo(f"✅ Successfully authenticated to {environment} cloud")
+        click.echo(f"   Method: {config.method.value}")
+        if config.account_name:
+            click.echo(f"   Account: {config.account_name}")
+
+    except Exception as e:
+        click.echo(f"❌ Authentication failed: {e}", err=True)
+        sys.exit(1)
+
+
+@auth.command("logout")
+def cmd_auth_logout() -> None:
+    """Log out and clear stored credentials."""
+    from pql_test.auth import AuthenticationManager
+
+    manager = AuthenticationManager()
+
+    status = manager.get_status()
+    if not status.authenticated:
+        click.echo("Not currently authenticated.")
+        return
+
+    manager.clear_credential()
+    click.echo("✅ Successfully logged out")
+    click.echo("   Stored credentials have been cleared.")
+
+
+@auth.command("status")
+def cmd_auth_status() -> None:
+    """Show current authentication status."""
+    from pql_test.auth import AuthenticationManager
+
+    manager = AuthenticationManager()
+    status = manager.get_status()
+
+    if not status.authenticated:
+        click.echo("Status: Not authenticated")
+        click.echo("\nTo log in, run: pql-test auth login")
+        return
+
+    click.echo("Status: Authenticated")
+    click.echo(f"  Method: {status.method.value if status.method else 'Unknown'}")
+    if status.account_name:
+        click.echo(f"  Account: {status.account_name}")
+    if status.tenant_id:
+        click.echo(f"  Tenant: {status.tenant_id}")
+    if status.client_id:
+        click.echo(f"  Client ID: {status.client_id}")
+    click.echo(f"  Environment: {status.environment}")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
