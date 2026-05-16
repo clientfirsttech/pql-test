@@ -1045,31 +1045,132 @@ def cmd_auth_login(
         click.echo("Authenticating with service principal...")
 
     else:
-        # Interactive browser login
-        if not tenant_id:
-            tenant_id = click.prompt("Azure AD tenant ID", type=str)
-
-        config = CredentialConfig(
-            method=AuthMethod.INTERACTIVE,
-            tenant_id=tenant_id,
-            environment=environment,
-            account_name="Interactive User",
-        )
-        click.echo("Launching browser for interactive authentication...")
+        # No specific method flags provided - prompt the user
+        if not any([user_or_client, password, tenant_id]):
+            # Fully interactive mode - ask how they want to authenticate
+            click.echo("How would you like to authenticate pql-test?")
+            click.echo()
+            click.echo("  1. Interactive with a web browser (recommended)")
+            click.echo("  2. Service principal with secret")
+            click.echo("  3. Service principal with certificate")
+            click.echo("  4. Managed identity")
+            click.echo()
+            
+            choice = click.prompt(
+                "Select authentication method",
+                type=click.IntRange(1, 4),
+                default=1,
+            )
+            
+            if choice == 1:
+                # Interactive browser - no tenant ID needed
+                config = CredentialConfig(
+                    method=AuthMethod.INTERACTIVE,
+                    tenant_id=None,  # Let Azure Identity discover from login
+                    environment=environment,
+                    account_name="Interactive User",
+                )
+                click.echo("\nLaunching browser for interactive authentication...")
+            
+            elif choice == 2:
+                # Service principal with secret
+                tenant_id = click.prompt("Azure AD tenant ID", type=str)
+                client_id = click.prompt("Client ID", type=str)
+                client_secret = click.prompt("Client secret", hide_input=True)
+                
+                config = CredentialConfig(
+                    method=AuthMethod.SERVICE_PRINCIPAL_SECRET,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    tenant_id=tenant_id,
+                    environment=environment,
+                    account_name=f"SP {client_id}",
+                )
+                click.echo("\nAuthenticating with service principal...")
+            
+            elif choice == 3:
+                # Service principal with certificate
+                tenant_id = click.prompt("Azure AD tenant ID", type=str)
+                client_id = click.prompt("Client ID", type=str)
+                cert_path = click.prompt("Certificate path", type=str)
+                cert_password = click.prompt(
+                    "Certificate password (optional, press Enter to skip)",
+                    default="",
+                    hide_input=True,
+                    show_default=False,
+                )
+                
+                config = CredentialConfig(
+                    method=AuthMethod.SERVICE_PRINCIPAL_CERT,
+                    client_id=client_id,
+                    tenant_id=tenant_id,
+                    certificate_path=cert_path,
+                    certificate_password=cert_password if cert_password else None,
+                    environment=environment,
+                    account_name=f"SP {client_id}",
+                )
+                click.echo("\nAuthenticating with certificate...")
+            
+            else:  # choice == 4
+                # Managed identity
+                use_user_assigned = click.confirm(
+                    "Use user-assigned managed identity? (no = system-assigned)",
+                    default=False,
+                )
+                
+                if use_user_assigned:
+                    client_id = click.prompt("Client ID for user-assigned MI", type=str)
+                    config = CredentialConfig(
+                        method=AuthMethod.MANAGED_IDENTITY,
+                        client_id=client_id,
+                        use_system_assigned_identity=False,
+                        environment=environment,
+                        account_name="Managed Identity (User-Assigned)",
+                    )
+                else:
+                    config = CredentialConfig(
+                        method=AuthMethod.MANAGED_IDENTITY,
+                        use_system_assigned_identity=True,
+                        environment=environment,
+                        account_name="Managed Identity (System-Assigned)",
+                    )
+                click.echo("\nAuthenticating with managed identity...")
+        else:
+            # Partial flags provided but not enough - default to interactive
+            # Interactive browser login - no tenant ID needed
+            config = CredentialConfig(
+                method=AuthMethod.INTERACTIVE,
+                tenant_id=None,  # Let Azure Identity discover from login
+                environment=environment,
+                account_name="Interactive User",
+            )
+            click.echo("Launching browser for interactive authentication...")
 
     try:
-        # Test that we can create a credential before saving
+        # Create the credential and test it by acquiring a token
+        # This triggers the actual authentication flow (browser for interactive, etc.)
         credential = manager._factory.create(config, manager._cloud_config)
-
-        # Save the configuration
+        
+        # Get scope for Power BI service
+        scope = manager._cloud_config.get_resource_scope(environment)
+        
+        # Trigger authentication by getting a token
+        click.echo()
+        token = credential.get_token(scope)
+        
+        # Save the configuration after successful authentication
         manager.save_credential(config)
 
+        click.echo()
         click.echo(f"✅ Successfully authenticated to {environment} cloud")
         click.echo(f"   Method: {config.method.value}")
         if config.account_name:
             click.echo(f"   Account: {config.account_name}")
+        click.echo()
+        click.echo("Credentials saved. Future commands will use this authentication automatically.")
 
     except Exception as e:
+        click.echo()
         click.echo(f"❌ Authentication failed: {e}", err=True)
         sys.exit(1)
 
