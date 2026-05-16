@@ -783,9 +783,13 @@ def _resolve_authentication_with_stored_credentials(
 
     Returns:
         Updated XmlaConnectionOptions with credentials from stored config if needed
+        
+    Note: Only applies stored credentials when NO credentials are provided at all.
+          Partial credentials are left as-is to preserve validation behavior.
     """
-    # If all credentials are already provided, return as-is
-    if opts.tenant_id and opts.client_id and opts.client_secret:
+    # If any credentials are already provided (even partial), return as-is
+    # This preserves the existing validation behavior where partial credentials fail
+    if opts.tenant_id or opts.client_id or opts.client_secret:
         return opts
 
     # Check if credentials are in environment variables
@@ -794,18 +798,18 @@ def _resolve_authentication_with_stored_credentials(
     env_client = os.getenv("PQL_CLIENT_ID")
     env_secret = os.getenv("PQL_CLIENT_SECRET")
 
-    if env_tenant and env_client and env_secret:
-        # Use environment variables
+    if env_tenant or env_client or env_secret:
+        # Use environment variables (may be partial, but that's intentional)
         return XmlaConnectionOptions(
-            tenant_id=env_tenant,
+            tenant_id=env_tenant or opts.tenant_id,
             workspace_id=opts.workspace_id,
             dataset_id=opts.dataset_id,
-            client_id=env_client,
-            client_secret=env_secret,
+            client_id=env_client or opts.client_id,
+            client_secret=env_secret or opts.client_secret,
             environment=opts.environment,
         )
 
-    # Fallback to stored credentials
+    # Fallback to stored credentials only when NO credentials provided at all
     try:
         from pql_test.auth import AuthenticationManager, AuthMethod
 
@@ -815,12 +819,7 @@ def _resolve_authentication_with_stored_credentials(
         if not status.authenticated:
             return opts  # No stored credentials
 
-        # Get access token from stored credentials
-        token = manager.get_access_token()
-        if not token:
-            return opts  # Token acquisition failed
-
-        # For service principal with secret, we can extract the credentials
+        # For service principal with secret, extract the credentials
         config = manager._store.load()
         if config and config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
             return XmlaConnectionOptions(
@@ -832,9 +831,7 @@ def _resolve_authentication_with_stored_credentials(
                 environment=config.environment,
             )
 
-        # For other auth methods, we can't extract credentials but we have a token
-        # Store the token in opts for use by the connection builder
-        # Note: This is a simplified approach - ideally we'd refactor to pass the token directly
+        # For other auth methods, we can't extract credentials
         return opts
 
     except ImportError:
