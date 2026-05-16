@@ -431,6 +431,84 @@ The `DEV` / `ANY` segment is a convention indicating the environment scope;
 
 ---
 
+## Authentication
+
+`pql-test` supports persistent authentication similar to Fabric CLI, eliminating the need to pass credentials on every command.
+
+### Quick Start
+
+```powershell
+# Log in once with service principal
+pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+
+# Or log in with interactive browser authentication
+pql-test auth login
+
+# Now run tests without credential flags
+pql-test run-tests ./examples/SampleModel --workspace-id <id> --dataset-id <id>
+
+# Check authentication status
+pql-test auth status
+
+# Log out when done
+pql-test auth logout
+```
+
+### Authentication Methods
+
+#### Interactive User Authentication
+
+Browser-based Azure AD login:
+
+```powershell
+pql-test auth login --tenant <tenant-id>
+```
+
+#### Service Principal with Secret
+
+```powershell
+pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+```
+
+#### Service Principal with Certificate
+
+```powershell
+# PEM certificate
+pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+
+# P12/PFX with password
+pql-test auth login -u <client-id> --certificate cert.p12 -p <cert-password> --tenant <tenant-id>
+```
+
+#### Managed Identity (Azure VM/Container)
+
+```powershell
+# System-assigned
+pql-test auth login --identity
+
+# User-assigned
+pql-test auth login --identity -u <client-id>
+```
+
+### Credential Priority
+
+When running commands like `run-tests`, credentials are resolved in this order:
+
+1. **CLI flags** (`--tenant-id`, `--client-id`, `--client-secret`) — Highest priority
+2. **Environment variables** (`PQL_TENANT_ID`, `PQL_CLIENT_ID`, `PQL_CLIENT_SECRET`)
+3. **Stored credentials** (from `pql-test auth login`) — Lowest priority
+
+This ensures backward compatibility with existing CI/CD pipelines while providing a better developer experience for interactive use.
+
+### Secure Storage
+
+Credentials are stored securely using the platform keyring:
+- **Windows**: Windows Credential Manager
+- **macOS**: Keychain
+- **Linux**: Secret Service API (GNOME Keyring, KWallet)
+
+---
+
 ## Commands
 
 All commands are run from within the `python/` directory with the virtual
