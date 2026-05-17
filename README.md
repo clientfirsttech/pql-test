@@ -38,6 +38,15 @@ Microsoft Fabric workspace endpoint.
     - [Standard test schema (4 columns)](#standard-test-schema-4-columns)
     - [Best-practices test schema (5 columns)](#best-practices-test-schema-5-columns)
     - [Naming convention](#naming-convention)
+  - [Authentication](#authentication)
+    - [Quick Start](#quick-start)
+    - [Authentication Methods](#authentication-methods)
+      - [Interactive User Authentication](#interactive-user-authentication)
+      - [Service Principal with Secret](#service-principal-with-secret)
+      - [Service Principal with Certificate](#service-principal-with-certificate)
+      - [Managed Identity (Azure VM/Container)](#managed-identity-azure-vmcontainer)
+    - [Credential Priority](#credential-priority)
+    - [Secure Storage](#secure-storage)
   - [Commands](#commands)
     - [check-prereqs](#check-prereqs)
     - [retrieve-tests](#retrieve-tests)
@@ -246,8 +255,18 @@ Microsoft Fabric workspace using display names, following the Fabric CLI
 convention (similar to `fab run`). This bypasses the GUID-based REST API
 resolution and builds the XMLA connection directly from the names provided.
 
-Service-principal credentials (`--tenant-id`, `--client-id`,
-`--client-secret`) are still required for authentication.
+**With persistent authentication** (recommended):
+
+```bash
+# Log in once
+pql-test auth login
+
+# Then run commands without credential flags
+pql-test retrieve-tests "MyWorkspace.MySemanticModel"
+pql-test run-tests "MyWorkspace.MySemanticModel"
+```
+
+**Legacy approach** (credentials via flags - still supported for CI/CD):
 
 ```bash
 pql-test retrieve-tests "MyWorkspace.MySemanticModel" \
@@ -438,13 +457,16 @@ The `DEV` / `ANY` segment is a convention indicating the environment scope;
 ### Quick Start
 
 ```powershell
-# Log in once with service principal
-pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
-
-# Or log in with interactive browser authentication
+# Log in once - interactive browser prompt
 pql-test auth login
 
+# Or with service principal
+pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+
 # Now run tests without credential flags
+pql-test run-tests "MyWorkspace.MySemanticModel"
+
+# Or with GUID-based connection
 pql-test run-tests ./examples/SampleModel --workspace-id <id> --dataset-id <id>
 
 # Check authentication status
@@ -458,11 +480,13 @@ pql-test auth logout
 
 #### Interactive User Authentication
 
-Browser-based Azure AD login:
+Browser-based Azure AD login (no tenant ID required):
 
 ```powershell
-pql-test auth login --tenant <tenant-id>
+pql-test auth login
 ```
+
+This opens a browser window for you to sign in with your Azure AD credentials. Azure Identity automatically discovers your tenant.
 
 #### Service Principal with Secret
 
