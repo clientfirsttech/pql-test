@@ -43,6 +43,16 @@ from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
 
+# Force UTF-8 on stdout/stderr so Unicode glyphs (e.g. ✗, ✓) and any non-ASCII
+# data in DAX results don't crash on Windows, where stdout defaults to cp1252.
+# Wrapped in try/except because in pytest capture and some embedded contexts
+# stdout/stderr can be a buffer object that doesn't expose .reconfigure().
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 # ---------------------------------------------------------------------------
 # ADOMD.NET loading
 #
