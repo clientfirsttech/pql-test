@@ -7,6 +7,7 @@
 - Incorporate AIDD framework into pql-test repository
 - Set up agent-based development workflows with @aidd commands
 - Maintain CI pipeline: validate-plugin → promptfoo-eval → run-tests-remote
+- Plan Public-cloud Execute DAX Queries REST support with capacity checks and XMLA fallback — see [tasks/execute-dax-queries-rest-epic.md](tasks/execute-dax-queries-rest-epic.md)
 
 ## Completed Work
 
