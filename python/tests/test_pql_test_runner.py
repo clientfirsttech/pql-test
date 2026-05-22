@@ -102,7 +102,7 @@ class TestFindPbiAncestorPid:
 
     def _make_psutil_process(self, pid: int, ppid: int) -> MagicMock:
         """Minimal mock that supports .ppid() and psutil exceptions."""
-        import pql_test_runner as runner
+        from pql_test import runner
         proc = MagicMock()
         proc.ppid.return_value = ppid
         proc.pid = pid
@@ -112,7 +112,7 @@ class TestFindPbiAncestorPid:
         """msmdsrv.exe is a direct child of PBIDesktop.exe."""
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         pbi_pid = 100
         msmdsrv_proc = self._make_psutil_process(pid=999, ppid=pbi_pid)
@@ -138,7 +138,7 @@ class TestFindPbiAncestorPid:
         # intermediate's parent is PBIDesktop
         intermediate_proc = self._make_psutil_process(pid=intermediate_pid, ppid=pbi_pid)
 
-        import pql_test_runner as runner
+        from pql_test import runner
 
         def _process_factory(pid: int) -> MagicMock:
             if pid == intermediate_pid:
@@ -174,7 +174,7 @@ class TestFindPbiAncestorPid:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         proc = self._make_psutil_process(pid=999, ppid=50)
         proc.ppid.side_effect = runner._psutil.NoSuchProcess(pid=999)
@@ -790,7 +790,7 @@ class TestBuildConnectionStringEffectiveUserName:
     """Unit tests for the EffectiveUserName connection string path."""
 
     def test_effective_user_name_appended_to_connection_string(self):
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="powerbi://api.powerbi.com/v1.0/myorg/WS",
             catalog="RLS_Model",
@@ -800,14 +800,14 @@ class TestBuildConnectionStringEffectiveUserName:
         assert "EffectiveUserName=west@contoso.com;" in cs
 
     def test_no_effective_user_name_field_absent(self):
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(server="localhost:50001", catalog="RLS_Model")
         cs = _build_connection_string(conn)
         assert "EffectiveUserName" not in cs
 
     def test_effective_user_name_not_added_when_token_auth(self):
         """Bearer token auth takes priority; EffectiveUserName is not added."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="powerbi://api.powerbi.com/v1.0/myorg/WS",
             catalog="RLS_Model",
@@ -820,7 +820,7 @@ class TestBuildConnectionStringEffectiveUserName:
 
     def test_roles_appended_to_connection_string(self):
         """Roles= property is added for local connections using named-role RLS."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -832,7 +832,7 @@ class TestBuildConnectionStringEffectiveUserName:
 
     def test_roles_takes_priority_over_effective_user_name(self):
         """When both Roles and EffectiveUserName are set, Roles= wins."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -845,7 +845,7 @@ class TestBuildConnectionStringEffectiveUserName:
 
     def test_roles_not_added_when_token_auth(self):
         """Bearer token auth takes priority; Roles= is not added."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -963,7 +963,7 @@ class TestGetPbiFilesOpened:
 
     def test_raises_import_error_when_psutil_unavailable(self):
         """Mirrors Pester: meaningful error when prerequisite is missing."""
-        import pql_test_runner as runner
+        from pql_test import runner
         original = runner.HAS_PSUTIL
         try:
             runner.HAS_PSUTIL = False
@@ -1082,7 +1082,7 @@ class TestGetPbiFilesOpened:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
         bad_proc = MagicMock()
         bad_proc.info = {"pid": 99, "name": "msmdsrv.exe", "ppid": 1234}
         bad_proc.net_connections.side_effect = runner._psutil.AccessDenied(pid=99)
@@ -1160,7 +1160,7 @@ class TestGetPbiFilesOpened:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         port = _MOCK_AS_PORT_A
         pbi_pid = 1000

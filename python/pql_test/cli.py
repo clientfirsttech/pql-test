@@ -1221,6 +1221,13 @@ def cmd_auth_status() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # Windows default codepage (cp1252) can't encode the ✅ / ❌ status markers
+    # we emit. Force UTF-8 so the CLI works in a default PowerShell session.
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(encoding="utf-8", errors="replace")
     cli()
 
 

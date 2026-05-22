@@ -230,9 +230,13 @@ files. When a live connection is available (`--local` or `--tenant-id`), tests
 are also queried from the model via `PQL.Assert.RetrieveTestsV2()`.
 
 ```bash
-pql-test run-tests ./examples/SampleModel
-pql-test run-tests ./examples/SampleModel/SampleModel.SemanticModel
+pql-test run-tests ./examples/SampleModel.SemanticModel
 ```
+
+> Note: this repo's `examples/` directory holds three flat PBIP layouts side-by-side
+> (`SampleModel.SemanticModel/`, `RLS_Model.SemanticModel/`, `OLS_Model.SemanticModel/`
+> with their respective `.pbip` files). Pass the specific `.SemanticModel` directory
+> rather than `./examples/` as the root.
 
 ### Local model name (`local/<model_name>`)
 
@@ -304,7 +308,7 @@ Contains test suites for:
 
 **Usage:**
 ```bash
-pql-test run-tests ./examples/SampleModel
+pql-test run-tests ./examples/SampleModel.SemanticModel
 pql-test run-tests ./examples/SampleModel.SemanticModel --local
 ```
 
@@ -467,7 +471,7 @@ pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
 pql-test run-tests "MyWorkspace.MySemanticModel"
 
 # Or with GUID-based connection
-pql-test run-tests ./examples/SampleModel --workspace-id <id> --dataset-id <id>
+pql-test run-tests ./examples/SampleModel.SemanticModel --workspace-id <id> --dataset-id <id>
 
 # Check authentication status
 pql-test auth status
@@ -578,7 +582,7 @@ pql-test retrieve-tests <modelPath> [--verbose]
 **Example:**
 
 ```bash
-pql-test retrieve-tests ./examples/SampleModel
+pql-test retrieve-tests ./examples/SampleModel.SemanticModel
 ```
 
 ```
@@ -593,17 +597,17 @@ Found 4 DAX test suite(s):
 **With `--verbose`:**
 
 ```bash
-pql-test retrieve-tests ./examples/SampleModel --verbose
+pql-test retrieve-tests ./examples/SampleModel.SemanticModel --verbose
 ```
 
 ```
 Found 4 DAX test suite(s):
 
   • BestPractices.ANY.Tests
-    File: /examples/SampleModel/SampleModel.SemanticModel/DAXQueries/BestPractices.ANY.Tests.dax
+    File: /examples/SampleModel.SemanticModel/DAXQueries/BestPractices.ANY.Tests.dax
   • Calculations.DEV.Tests
     DAX function: Calcs.DEV.Tests
-    File: /examples/SampleModel/SampleModel.SemanticModel/DAXQueries/Calculations.DEV.Tests.dax
+    File: /examples/SampleModel.SemanticModel/DAXQueries/Calculations.DEV.Tests.dax
   ...
 
 Connection: none detected — open the model in Power BI Desktop or supply
@@ -613,7 +617,7 @@ Connection: none detected — open the model in Power BI Desktop or supply
 **Filter to a single suite using `--test`:**
 
 ```bash
-pql-test retrieve-tests ./examples/SampleModel --test "Calculations.DEV.Tests"
+pql-test retrieve-tests ./examples/SampleModel.SemanticModel --test "Calculations.DEV.Tests"
 ```
 
 **Using `local/<model_name>` (no local file path needed):**
@@ -651,7 +655,7 @@ pql-test retrieve-test <modelPath> <name> [--verbose]
 **Example:**
 
 ```bash
-pql-test retrieve-test ./examples/SampleModel "DataQuality.DEV.Tests"
+pql-test retrieve-test ./examples/SampleModel.SemanticModel "DataQuality.DEV.Tests"
 ```
 
 ```
@@ -663,7 +667,7 @@ Found 1 DAX test suite(s):
 **With `--verbose`** (shows the full DAX source):
 
 ```bash
-pql-test retrieve-test ./examples/SampleModel "DataQuality.DEV.Tests" --verbose
+pql-test retrieve-test ./examples/SampleModel.SemanticModel "DataQuality.DEV.Tests" --verbose
 ```
 
 ---
@@ -697,7 +701,7 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 **Run all suites against a locally-open Power BI Desktop model:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel
+pql-test run-tests ./examples/SampleModel.SemanticModel
 ```
 
 **Run using `local/<model_name>` (no local file path needed):**
@@ -710,7 +714,7 @@ pql-test run-tests local/SampleModel
 **Run all suites against a remote Power BI Premium / Fabric workspace:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel \
+pql-test run-tests ./examples/SampleModel.SemanticModel \
   --tenant-id  00000000-0000-0000-0000-000000000000 \
   --workspace-id 11111111-1111-1111-1111-111111111111 \
   --dataset-id   22222222-2222-2222-2222-222222222222
@@ -728,20 +732,20 @@ pql-test run-tests "MyWorkspace.MySemanticModel" \
 **Run a single named test suite:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel --test "Calculations.DEV.Tests"
+pql-test run-tests ./examples/SampleModel.SemanticModel --test "Calculations.DEV.Tests"
 ```
 
 **Save JSON results to a file while still printing to the console:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel --output results.json
+pql-test run-tests ./examples/SampleModel.SemanticModel --output results.json
 ```
 
 The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` array with per-assertion detail. Example structure:
 
 ```json
 {
-  "model_path": "/examples/SampleModel",
+  "model_path": "/examples/SampleModel.SemanticModel",
   "passed": 5,
   "failed": 1,
   "skipped": 0,
@@ -756,7 +760,7 @@ The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` a
 **Emit Azure DevOps pipeline annotations:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel --log-format azuredevops
+pql-test run-tests ./examples/SampleModel.SemanticModel --log-format azuredevops
 ```
 
 This emits `##[group]` / `##[endgroup]` / `##[error]` / `##[warning]` and a final `##vso[task.complete result=Failed|Succeeded;]` command, making failures visible directly in the Azure DevOps pipeline log.
@@ -764,7 +768,7 @@ This emits `##[group]` / `##[endgroup]` / `##[error]` / `##[warning]` and a fina
 **Emit GitHub Actions workflow annotations:**
 
 ```bash
-pql-test run-tests ./examples/SampleModel --log-format github
+pql-test run-tests ./examples/SampleModel.SemanticModel --log-format github
 ```
 
 This emits `::group::` / `::endgroup::` / `::error::` / `::warning::` / `::notice::` commands, surfacing failures as annotations on the GitHub Actions summary page.
@@ -772,7 +776,7 @@ This emits `::group::` / `::endgroup::` / `::error::` / `::warning::` / `::notic
 **Combine `--log-format` with `--output` in CI pipelines:**
 
 ```powershell
-pql-test run-tests ./examples/SampleModel `
+pql-test run-tests ./examples/SampleModel.SemanticModel `
   --log-format azuredevops `
   --output pql-test-results.json `
   --tenant-id  $env:PQL_TENANT_ID `
@@ -788,7 +792,7 @@ pql-test run-tests ./examples/SampleModel `
 Local XMLA connection: localhost:50001 / catalog:
 
 ========================== test session starts ===========================
-model: /examples/SampleModel
+model: /examples/SampleModel.SemanticModel
 
 ......
 
@@ -801,7 +805,7 @@ model: /examples/SampleModel
 XMLA connection: powerbi://api.powerbi.com/v1.0/myTenant/myWorkspace / catalog: 22222...
 
 ========================== test session starts ===========================
-model: /examples/SampleModel
+model: /examples/SampleModel.SemanticModel
 
 ..FF..
 
@@ -822,7 +826,7 @@ model: /examples/SampleModel
 Warning: No XMLA connection detected. Tests will be reported as skipped.
 
 ========================== test session starts ===========================
-model: /examples/SampleModel
+model: /examples/SampleModel.SemanticModel
 
 ssss
 
@@ -853,8 +857,8 @@ No connection flags are required in this case — simply open the model in
 Power BI Desktop before running:
 
 ```bash
-# Open ./examples/SampleModel in Power BI Desktop first, then:
-pql-test run-tests ./examples/SampleModel
+# Open ./examples/SampleModel.pbip in Power BI Desktop first, then:
+pql-test run-tests ./examples/SampleModel.SemanticModel
 ```
 
 > **Note:** Auto-detection only works on Windows where `%LOCALAPPDATA%` is
@@ -867,7 +871,7 @@ Provide all three connection flags (GUIDs) to connect to a published dataset.
 via the Power BI REST API — you do not need to look them up yourself.
 
 ```powershell
-pql-test run-tests ./examples/SampleModel `
+pql-test run-tests ./examples/SampleModel.SemanticModel `
   --tenant-id    <azure-ad-tenant-guid> `
   --workspace-id <power-bi-workspace-guid> `
   --dataset-id   <dataset-guid> `
@@ -921,7 +925,7 @@ Pass `--environment` (or set `PQL_ENVIRONMENT`) to target a non-commercial cloud
 | `USGovDoD` | US Government DoD |
 
 ```powershell
-pql-test run-tests ./examples/SampleModel `
+pql-test run-tests ./examples/SampleModel.SemanticModel `
   --environment USGovHigh `
   --tenant-id $env:PQL_TENANT_ID `
   --workspace-id $env:PQL_WORKSPACE_ID `
@@ -934,7 +938,7 @@ pql-test run-tests ./examples/SampleModel `
 
 ## Example Test Suites
 
-All examples below are based on the `SampleModel` in `examples/SampleModel/`.
+All examples below are based on the `SampleModel` in `examples/SampleModel.SemanticModel/`.
 
 ### Calculations
 
@@ -1155,13 +1159,20 @@ The `<modelPath>` argument must point to the PBIP model **root directory** (the
 folder that contains the `.pbip` file and the `*.SemanticModel/` directory),
 not to the `.SemanticModel` directory itself.
 
-```bash
-# Correct
-pql-test run-tests ./examples/SampleModel
+In this repo specifically, pass the `.SemanticModel` directory directly because the
+`examples/` directory holds three flat PBIP layouts side-by-side:
 
-# Incorrect — do not point at the SemanticModel subfolder
-pql-test run-tests ./examples/SampleModel/SampleModel.SemanticModel
+```bash
+# Correct — points directly at the SemanticModel directory
+pql-test run-tests ./examples/SampleModel.SemanticModel
+
+# Incorrect — examples/ contains three flat models; ./examples/SampleModel does not exist
+pql-test run-tests ./examples/SampleModel
 ```
+
+For a single-model layout where the PBIP root contains exactly one `.SemanticModel/`
+and one `.pbip` file, either form (the root directory or the `.SemanticModel`
+subfolder) works.
 
 ### `No tests found`
 

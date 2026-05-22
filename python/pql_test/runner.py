@@ -62,15 +62,33 @@ from typing import ClassVar, Optional
 HAS_PYADOMD = False
 _AdomdConnection = None  # set to AdomdConnection class after successful load
 
-_ADOMD_SEARCH_DIRS = [
-    # Power BI Desktop — always present on a developer machine
-    r"C:\Program Files\Microsoft Power BI Desktop\bin",
-    r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
-    # Standalone ADOMD.NET client (various versions)
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
-]
+def _discover_adomd_search_dirs() -> list[str]:
+    import glob
+    dirs = [
+        # Power BI Desktop installer version (.exe download from powerbi.microsoft.com)
+        r"C:\Program Files\Microsoft Power BI Desktop\bin",
+        r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
+        # Standalone ADOMD.NET client (various versions)
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
+    ]
+    # NuGet-installed AdomdClient — CI uses this; also the fallback when PBI Desktop
+    # is the MS Store version (which sandboxes its bin/ inside C:\Program Files\WindowsApps
+    # and is not readable from outside its AppContainer).
+    user_profile = os.environ.get("USERPROFILE", "")
+    if user_profile:
+        nuget_glob = os.path.join(
+            user_profile, ".nuget", "packages",
+            "microsoft.analysisservices.adomdclient.retail.amd64",
+            "*", "lib", "net45",
+        )
+        # Newest version first
+        dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
+    return dirs
+
+
+_ADOMD_SEARCH_DIRS = _discover_adomd_search_dirs()
 
 try:
     import clr  # type: ignore[import-untyped]  # pythonnet
@@ -79,11 +97,16 @@ try:
         if os.path.isdir(_d) and _d not in sys.path:
             sys.path.append(_d)
 
-    # The DLL shipped with PBI Desktop is named Microsoft.PowerBI.AdomdClient.dll
-    # and its embedded assembly name is also Microsoft.PowerBI.AdomdClient — that
-    # is what clr.AddReference must match.  The .NET *namespace* inside the DLL
-    # is still Microsoft.AnalysisServices.AdomdClient, so the from-import stays.
-    clr.AddReference("Microsoft.PowerBI.AdomdClient")
+    # PBI Desktop ships Microsoft.PowerBI.AdomdClient.dll; the NuGet package and
+    # standalone ADOMD.NET ship Microsoft.AnalysisServices.AdomdClient.dll. The
+    # embedded .NET namespace is Microsoft.AnalysisServices.AdomdClient in both,
+    # so the from-import stays the same — only the assembly name differs.
+    for _assembly_name in ("Microsoft.PowerBI.AdomdClient", "Microsoft.AnalysisServices.AdomdClient"):
+        try:
+            clr.AddReference(_assembly_name)
+            break
+        except Exception:
+            continue
     from Microsoft.AnalysisServices.AdomdClient import AdomdConnection as _AdomdConnection  # type: ignore[import]
     HAS_PYADOMD = True
 except Exception:
