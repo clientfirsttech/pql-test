@@ -1,4 +1,4 @@
-# AI Agent Guidelines
+# AI Agent Guideliness
 
 This project uses AI-assisted development with structured guidance in the `ai/` directory.
 
