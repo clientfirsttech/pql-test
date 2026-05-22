@@ -1109,23 +1109,28 @@ def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
       1. Bearer token (access_token) — preferred, acquired via MSAL.
       2. Service principal direct credentials (app:{clientId}@{tenantId}).
       3. Local / integrated auth — no extra parameters.
+
+    Impersonation (Roles= / EffectiveUserName=) is appended regardless of
+    auth method so RLS simulation works for service-principal connections
+    against the Power BI XMLA endpoint, not just local AS.
     """
     catalog_part = f";Initial Catalog={conn.catalog}" if conn.catalog else ""
-    base = f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"
+    parts = [f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"]
+
     if conn.access_token:
-        return base + f"Password={conn.access_token};"
-    if conn.client_id and conn.client_secret and conn.tenant_id:
-        return (
-            base
-            + f"User ID=app:{conn.client_id}@{conn.tenant_id};"
-            + f"Password={conn.client_secret};"
-            + "Integrated Security=ClaimsToken;"
+        parts.append(f"Password={conn.access_token};")
+    elif conn.client_id and conn.client_secret and conn.tenant_id:
+        parts.append(
+            f"User ID=app:{conn.client_id}@{conn.tenant_id};"
+            f"Password={conn.client_secret};"
+            "Integrated Security=ClaimsToken;"
         )
+
     if conn.roles:
-        return base + f"Roles={conn.roles};"
-    if conn.effective_user_name:
-        return base + f"EffectiveUserName={conn.effective_user_name};"
-    return base
+        parts.append(f"Roles={conn.roles};")
+    elif conn.effective_user_name:
+        parts.append(f"EffectiveUserName={conn.effective_user_name};")
+    return "".join(parts)
 
 
 def _get_col(row: dict[str, object], key: str) -> str:
