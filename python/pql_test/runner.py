@@ -364,8 +364,11 @@ class XmlaConnectionOptions:
     """
     Connection parameters for XMLA execution.
 
-    For remote Power BI Premium / Fabric connections all three of
-    tenant_id, workspace_id, and dataset_id are required.
+    For remote Power BI Premium / Fabric connections, tenant_id and
+    workspace_id are required, plus EITHER dataset_id OR dataset_name
+    (the dataset's display name as it appears in the workspace).  When
+    only dataset_name is supplied the resolver looks up the dataset via
+    REST so the caller doesn't need to store GUIDs anywhere.
 
     client_id + client_secret are used to acquire an OAuth2 bearer
     token via the MSAL service-principal (client-credentials) flow.
@@ -376,6 +379,7 @@ class XmlaConnectionOptions:
     tenant_id: Optional[str] = None
     workspace_id: Optional[str] = None
     dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     environment: Environment = Environment.PUBLIC
@@ -990,7 +994,13 @@ def resolve_xmla_connection(
     # the exception propagate or returning None silently.  Stale `.env`
     # files would otherwise mask "no connection" when a perfectly good
     # local Power BI Desktop session was sitting right there.
-    if opts.tenant_id and opts.workspace_id and opts.dataset_id:
+    #
+    # The dataset can be identified either by GUID (opts.dataset_id) or by
+    # display name (opts.dataset_name).  Name-based resolution lets callers
+    # avoid storing dataset GUIDs as secrets — the CLI derives the name
+    # from the `.SemanticModel` directory stem and the resolver verifies
+    # the dataset exists in the workspace via REST.
+    if opts.tenant_id and opts.workspace_id and (opts.dataset_id or opts.dataset_name):
         try:
             return _resolve_service_xmla_connection(opts)
         except Exception as exc:  # noqa: BLE001 — log + fall through to local
@@ -1020,6 +1030,14 @@ def _resolve_service_xmla_connection(
     Extracted from ``resolve_xmla_connection`` so the caller can wrap the
     whole service path in a single try/except and fall back to local
     detection when something goes wrong.
+
+    The dataset can be identified by either:
+      * ``opts.dataset_id`` — GUID.  Both workspace and dataset display
+        names are resolved via REST (the legacy ``Invoke-DQVTesting`` flow).
+      * ``opts.dataset_name`` — display name.  Only the workspace display
+        name is resolved via REST; the dataset name is used directly and
+        merely verified to exist in the workspace.  This lets callers stop
+        storing dataset GUIDs as secrets.
     """
     endpoints = get_api_endpoints(opts.environment)
     token = _acquire_service_principal_token(
@@ -1029,12 +1047,28 @@ def _resolve_service_xmla_connection(
         login_url=endpoints.login_url,
         resource_url=endpoints.resource_url,
     )
-    workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
-        workspace_id=opts.workspace_id,
-        dataset_id=opts.dataset_id,
-        access_token=token,
-        api_prefix=endpoints.api_prefix,
-    )
+
+    if opts.dataset_id:
+        workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
+            workspace_id=opts.workspace_id,
+            dataset_id=opts.dataset_id,
+            access_token=token,
+            api_prefix=endpoints.api_prefix,
+        )
+    else:
+        workspace_name = _resolve_pbi_workspace_name(
+            workspace_id=opts.workspace_id,
+            access_token=token,
+            api_prefix=endpoints.api_prefix,
+        )
+        dataset_name = opts.dataset_name
+        _verify_dataset_exists_in_workspace(
+            workspace_id=opts.workspace_id,
+            dataset_name=dataset_name,
+            access_token=token,
+            api_prefix=endpoints.api_prefix,
+        )
+
     # Derive the XMLA scheme prefix from the REST API prefix.
     # e.g. https://api.powerbi.com → powerbi://api.powerbi.com
     xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
@@ -1172,6 +1206,48 @@ def _resolve_pbi_workspace_and_dataset_names(
     dataset_name: str = dataset_data["name"]
 
     return workspace_name, dataset_name
+
+
+def _resolve_pbi_workspace_name(
+    workspace_id: str,
+    access_token: str,
+    *,
+    api_prefix: str = "https://api.powerbi.com",
+) -> str:
+    """Look up a Power BI workspace's display name from its GUID."""
+    req = urllib.request.Request(
+        f"{api_prefix}/v1.0/myorg/groups/{workspace_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode())["name"]
+
+
+def _verify_dataset_exists_in_workspace(
+    workspace_id: str,
+    dataset_name: str,
+    access_token: str,
+    *,
+    api_prefix: str = "https://api.powerbi.com",
+) -> None:
+    """
+    Raise a clear ``ValueError`` if *dataset_name* is not present in the
+    workspace's dataset list.  Lets the caller skip storing a GUID secret
+    and rely on the deployed dataset's display name (case-insensitive)
+    matching the local ``.SemanticModel`` directory stem.
+    """
+    req = urllib.request.Request(
+        f"{api_prefix}/v1.0/myorg/groups/{workspace_id}/datasets",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        datasets = json.loads(resp.read().decode()).get("value", [])
+    available = [d.get("name") for d in datasets]
+    if not any((n or "").lower() == dataset_name.lower() for n in available):
+        raise ValueError(
+            f"Dataset {dataset_name!r} not found in workspace {workspace_id}. "
+            f"Available datasets: {', '.join(repr(n) for n in available) or '<none>'}"
+        )
 
 
 # ---------------------------------------------------------------------------

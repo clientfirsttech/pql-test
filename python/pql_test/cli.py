@@ -552,6 +552,14 @@ def cmd_retrieve_tests(
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
 
+        # Derive dataset display name from the .SemanticModel directory so
+        # the service path can look it up by name when no --dataset-id is
+        # supplied (see cmd_run_tests for the rationale).
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+
         if local_mode:
             conn = resolve_local_xmla_connection(abs_path)
             if conn is None:
@@ -809,6 +817,17 @@ def cmd_run_tests(
         if not Path(abs_path).exists():
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
+
+        # Derive the dataset display name from the .SemanticModel directory
+        # stem so the resolver can look it up by name when no --dataset-id
+        # is provided.  Keeps callers from having to store dataset GUIDs as
+        # secrets when the deployed dataset's display name matches the
+        # local directory.  dataset_id (if supplied) still takes precedence
+        # inside the resolver.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
 
         if local_mode:
             if verbose:

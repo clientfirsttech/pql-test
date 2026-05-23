@@ -6,14 +6,18 @@
 #   Microsoft.AnalysisServices.AdomdClient NuGet package, which is a
 #   Windows/.NET component.  The job must run on a Windows runner.
 #
-# Required secrets (set in repo Settings → Secrets → Actions):
+# Required secrets (Settings → Secrets and variables → Actions → Secrets):
 #   PQL_TENANT_ID         – Azure AD tenant GUID
-#   PQL_WORKSPACE_ID      – Power BI workspace GUID
-#   PQL_DATASET_ID        – Dataset GUID for SampleModel.SemanticModel
-#   PQL_DATASET_ID_RLS    – Dataset GUID for RLS_Model.SemanticModel
-#   PQL_DATASET_ID_OLS    – Dataset GUID for OLS_Model.SemanticModel
 #   PQL_CLIENT_ID         – Service principal application (client) ID
 #   PQL_CLIENT_SECRET     – Service principal client secret
+#
+# Required repository variables (Settings → Secrets and variables → Actions → Variables):
+#   PQL_WORKSPACE_ID      – Power BI workspace GUID.  GUIDs aren't sensitive,
+#                            so this lives as a variable, not a secret.
+#
+# Dataset GUIDs are NOT stored anywhere.  The CLI derives the dataset's
+# display name from each matrix entry's `.SemanticModel` directory stem
+# and looks the dataset up in the workspace via REST at run time.
 #
 # Optional secrets:
 #   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, USGovHigh, DOD,
@@ -29,14 +33,6 @@ on:
   workflow_call:
     secrets:
       PQL_TENANT_ID:
-        required: true
-      PQL_WORKSPACE_ID:
-        required: true
-      PQL_DATASET_ID:
-        required: true
-      PQL_DATASET_ID_RLS:
-        required: true
-      PQL_DATASET_ID_OLS:
         required: true
       PQL_CLIENT_ID:
         required: true
@@ -200,41 +196,12 @@ jobs:
           echo "filename=dax-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # Resolve the dataset GUID that belongs to this matrix entry's model
-      # so PQL.Assert.RetrieveTestsV2() returns *this* model's own tests
-      # (and not another model's).
+      # Run pql-test.
       #
-      # `pql_test.ci_routing` returns the secret env-var name
-      # (PQL_DATASET_ID / PQL_DATASET_ID_RLS / PQL_DATASET_ID_OLS); bash then
-      # indirectly resolves that env-var to the actual GUID and emits it as
-      # the step output.  Doing the lookup in bash (rather than a multi-line
-      # GHA `${{ ... && ... || ... }}` expression) keeps the precedence
-      # behaviour predictable and makes the chosen GUID inspectable in logs
-      # (masked, but its catalog comes through in the pql-test connection
-      # banner).
-      # -----------------------------------------------------------------------
-      - name: Resolve per-model dataset GUID
-        id: dataset
-        shell: bash
-        env:
-          PQL_DATASET_ID:     ${{ secrets.PQL_DATASET_ID }}
-          PQL_DATASET_ID_RLS: ${{ secrets.PQL_DATASET_ID_RLS }}
-          PQL_DATASET_ID_OLS: ${{ secrets.PQL_DATASET_ID_OLS }}
-        run: |
-          set -euo pipefail
-          NAME=$(python -m pql_test.ci_routing "${{ matrix.model }}")
-          VALUE="${!NAME:-}"
-          if [ -z "$VALUE" ]; then
-            echo "::error::Resolved secret env-var '$NAME' is empty for model '${{ matrix.model }}'."
-            echo "::error::Set the corresponding repository secret before re-running."
-            exit 1
-          fi
-          echo "secret_name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "guid=${VALUE}" >> "$GITHUB_OUTPUT"
-          echo "Matrix model ${{ matrix.model }} -> dataset secret ${NAME} (value masked)"
-
-      # -----------------------------------------------------------------------
-      # Run pql-test
+      # The CLI derives the dataset's display name from the matrix entry's
+      # `.SemanticModel` directory stem (e.g. `examples/RLS_Model.SemanticModel`
+      # → "RLS_Model") and looks it up in the workspace via the Power BI
+      # REST API at run time.  No dataset GUIDs are stored as secrets.
       # -----------------------------------------------------------------------
       - name: Run DAX tests for ${{ matrix.model }}
         id: run-tests
@@ -258,9 +225,7 @@ jobs:
           pql-test run-tests "${ARGS[@]}"
         env:
           PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
-          PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
-          # Per-model dataset GUID — resolved by the dataset step above.
-          PQL_DATASET_ID:    ${{ steps.dataset.outputs.guid }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
           PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
           PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
           # Use the secret if set; fall back to the input (or default Public)
