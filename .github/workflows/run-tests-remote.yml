@@ -189,18 +189,38 @@ jobs:
           echo "filename=dax-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # Pick the dataset GUID that belongs to this matrix entry's model.
-      # `pql_test.ci_routing` maps the model directory name to the secret
-      # env-var name (PQL_DATASET_ID / PQL_DATASET_ID_RLS / PQL_DATASET_ID_OLS)
-      # so PQL.Assert.RetrieveTestsV2() returns this model's own tests.
+      # Resolve the dataset GUID that belongs to this matrix entry's model
+      # so PQL.Assert.RetrieveTestsV2() returns *this* model's own tests
+      # (and not another model's).
+      #
+      # `pql_test.ci_routing` returns the secret env-var name
+      # (PQL_DATASET_ID / PQL_DATASET_ID_RLS / PQL_DATASET_ID_OLS); bash then
+      # indirectly resolves that env-var to the actual GUID and emits it as
+      # the step output.  Doing the lookup in bash (rather than a multi-line
+      # GHA `${{ ... && ... || ... }}` expression) keeps the precedence
+      # behaviour predictable and makes the chosen GUID inspectable in logs
+      # (masked, but its catalog comes through in the pql-test connection
+      # banner).
       # -----------------------------------------------------------------------
-      - name: Resolve per-model dataset secret
-        id: dataset-secret
+      - name: Resolve per-model dataset GUID
+        id: dataset
         shell: bash
+        env:
+          PQL_DATASET_ID:     ${{ secrets.PQL_DATASET_ID }}
+          PQL_DATASET_ID_RLS: ${{ secrets.PQL_DATASET_ID_RLS }}
+          PQL_DATASET_ID_OLS: ${{ secrets.PQL_DATASET_ID_OLS }}
         run: |
+          set -euo pipefail
           NAME=$(python -m pql_test.ci_routing "${{ matrix.model }}")
+          VALUE="${!NAME:-}"
+          if [ -z "$VALUE" ]; then
+            echo "::error::Resolved secret env-var '$NAME' is empty for model '${{ matrix.model }}'."
+            echo "::error::Set the corresponding repository secret before re-running."
+            exit 1
+          fi
           echo "secret_name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "Matrix model ${{ matrix.model }} -> dataset secret ${NAME}"
+          echo "guid=${VALUE}" >> "$GITHUB_OUTPUT"
+          echo "Matrix model ${{ matrix.model }} -> dataset secret ${NAME} (value masked)"
 
       # -----------------------------------------------------------------------
       # Run pql-test
@@ -228,13 +248,8 @@ jobs:
         env:
           PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
           PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
-          # Per-model dataset GUID — chosen by the dataset-secret step above.
-          PQL_DATASET_ID: >-
-            ${{
-              steps.dataset-secret.outputs.secret_name == 'PQL_DATASET_ID_RLS' && secrets.PQL_DATASET_ID_RLS
-              || steps.dataset-secret.outputs.secret_name == 'PQL_DATASET_ID_OLS' && secrets.PQL_DATASET_ID_OLS
-              || secrets.PQL_DATASET_ID
-            }}
+          # Per-model dataset GUID — resolved by the dataset step above.
+          PQL_DATASET_ID:    ${{ steps.dataset.outputs.guid }}
           PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
           PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
           # Use the secret if set; fall back to the input (or default Public)
