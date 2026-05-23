@@ -1,0 +1,31 @@
+table _Measures
+	lineageTag: 4633a2f3-99e3-44d0-8262-2210da2ab81e
+
+	measure 'Current User' = USERPRINCIPALNAME()
+		lineageTag: ffb7f8df-f0dc-471b-b3d4-7619c54c998e
+
+	column Column1
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 5ac13579-c915-4985-a20c-8914821d252b
+		summarizeBy: sum
+		sourceColumn: Column1
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition _Measures = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlSKjQUA", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Column1 = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Column1", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

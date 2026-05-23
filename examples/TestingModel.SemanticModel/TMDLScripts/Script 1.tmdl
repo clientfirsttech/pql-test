@@ -1,0 +1,49 @@
+createOrReplace
+
+	/// Test Discovery Functions - PQL.Assert namespace
+	function 'PQL.Assert.RetrieveTests' =
+			() =>
+			    VAR _Functions =
+			        SELECTCOLUMNS(
+			            INFO.USERDEFINEDFUNCTIONS(),
+			            "ID",          [ID],
+			            "Name",        [Name],
+			            "Description", [Description]
+			        )
+			    VAR _PkgId =
+			        SELECTCOLUMNS(
+			            FILTER(INFO.ANNOTATIONS(), [Name] = "DAXLIB_PackageId"),
+			            "ID",        [ObjectID],
+			            "PackageId", [Value]
+			        )
+			    VAR _PkgVer =
+			        SELECTCOLUMNS(
+			            FILTER(INFO.ANNOTATIONS(), [Name] = "DAXLIB_PackageVersion"),
+			            "ID",             [ObjectID],
+			            "PackageVersion", [Value]
+			        )
+			    VAR _ImpersonatedUser =
+			        SELECTCOLUMNS(
+			            FILTER(INFO.ANNOTATIONS(), [Name] = "PQLAssert_UserImpersonationName"),
+			            "ID",               [ObjectID],
+			            "ImpersonatedUser", [Value]
+			        )
+			    VAR _AllFunctions =
+			        NATURALLEFTOUTERJOIN(
+			            NATURALLEFTOUTERJOIN(
+			                NATURALLEFTOUTERJOIN(_Functions, _PkgId),
+			                _PkgVer
+			            ),
+			            _ImpersonatedUser
+			        )
+			    RETURN
+			        FILTER(
+			            _AllFunctions,
+			            OR(RIGHT([Name], 5) = ".Test", RIGHT([Name], 6) = ".Tests")
+			        )
+		lineageTag: a313bca7-cc2c-4d8d-96bb-acc589bb9836
+
+		annotation DAXLIB_PackageId = PQL.Assert
+
+		annotation DAXLIB_PackageVersion = 0.2.0
+

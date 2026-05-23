@@ -1,0 +1,9 @@
+role Dynamic
+	modelPermission: read
+
+	tablePermission Users = Users[UPN] = [Current User]
+
+	tablePermission Groups
+
+	annotation PBI_Id = 86c886af07a14226a7fdbe734f20ef07
+

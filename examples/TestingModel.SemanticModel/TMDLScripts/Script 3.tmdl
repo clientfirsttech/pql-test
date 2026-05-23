@@ -1,0 +1,59 @@
+createOrReplace
+
+	/// Test Discovery Functions - PQL.Assert namespace
+	/// When callFromPowerAutomate is TRUE, uses INFO.FUNCTIONS only (compatible with Power Automate REST API).
+	/// When FALSE, enriches results with Description and RLS ImpersonatedUserName via INFO.USERDEFINEDFUNCTIONS and INFO.ANNOTATIONS.
+	function 'PQL.Assert.RetrieveTests' =
+			(callFromPowerAutomate: BOOLEAN) =>
+			    VAR _BaseFunctions =
+			        SELECTCOLUMNS(
+			            FILTER(
+			                INFO.FUNCTIONS("ORIGIN", "2"),
+			                OR(RIGHT([FUNCTION_NAME], 5) = ".Test", RIGHT([FUNCTION_NAME], 6) = ".Tests")
+			            ),
+			            "Name", [FUNCTION_NAME]
+			        )
+			    RETURN
+			        ADDCOLUMNS(
+			            _BaseFunctions,
+			            "Description",
+			            IF(
+			                callFromPowerAutomate,
+			                BLANK(),
+			                VAR _funcName = [Name]
+			                RETURN
+			                IFERROR(
+			                    MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [Description]),
+			                    BLANK()
+			                )
+			            ),
+			            "PQLAssert_ImpersonatedUserName",
+			            IF(
+			                callFromPowerAutomate,
+			                BLANK(),
+			                VAR _funcName = [Name]
+			                VAR _funcID =
+			                    IFERROR(
+			                        MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [ID]),
+			                        BLANK()
+			                    )
+			                RETURN
+			                IFERROR(
+			                    MAXX(
+			                        FILTER(
+			                            INFO.ANNOTATIONS(),
+			                            [Name] = "PQLAssert_ImpersonatedUserName"
+			                                && [ObjectID] = _funcID
+			                        ),
+			                        [Value]
+			                    ),
+			                    BLANK()
+			                )
+			            )
+			        )
+		lineageTag: b081aede-5bf0-4bd8-86a7-73201a7afa24
+
+		annotation DAXLIB_PackageId = PQL.Assert
+
+		annotation DAXLIB_PackageVersion = 0.2.0
+

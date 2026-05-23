@@ -1,0 +1,423 @@
+createOrReplace
+    /// DAX Assertion Library Functions
+    /// Publisher: PQL (Power Query Lint)
+    /// These functions provide a standardized way to write unit tests for DAX models
+    /// Basic Assertions - PQL.Assert namespace
+    function 'PQL.Assert.ShouldBeTrue' =
+            (testName : STRING, actualCondition : BOOLEAN) =>
+                VAR _Passed = actualCondition = TRUE
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "TRUE",
+                    "Actual", IF(actualCondition, "TRUE", "FALSE"),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldBeFalse' =
+            (testName : STRING, actualCondition : BOOLEAN) =>
+                VAR _Passed = actualCondition = FALSE
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "FALSE",
+                    "Actual", IF(actualCondition, "TRUE", "FALSE"),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is NULL (DAX BLANK()).
+    function 'PQL.Assert.ShouldBeNull' =
+            (testName : STRING, actualValue : VARIANT) =>
+                VAR _Passed = ISBLANK(actualValue)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NULL",
+                    "Actual", IF(ISBLANK(actualValue), "NULL", IF(EXACT(actualValue, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is not NULL (not DAX BLANK()). Accepts both simple values and expressions.
+    function 'PQL.Assert.ShouldNotBeNull' =
+            (testName : STRING, actualValue : SCALAR VARIANT EXPR) =>
+                VAR _ActualResult = actualValue
+                VAR _Passed = NOT ISBLANK(_ActualResult)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NOT NULL",
+                    "Actual", IF(ISBLANK(_ActualResult), "NULL", IF(EXACT(_ActualResult, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is BLANK (empty string "").
+    function 'PQL.Assert.ShouldBeBlank' =
+            (testName : STRING, actualValue : VARIANT) =>
+                VAR _Passed = NOT ISBLANK(actualValue) && EXACT(actualValue, "")
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "BLANK (empty string)",
+                    "Actual", IF(ISBLANK(actualValue), "NULL", IF(EXACT(actualValue, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is not BLANK (not empty string "").
+    function 'PQL.Assert.ShouldNotBeBlank' =
+            (testName : STRING, actualValue : SCALAR VARIANT EXPR) =>
+                VAR _ActualResult = actualValue
+                VAR _Passed = ISBLANK(_ActualResult) || NOT EXACT(_ActualResult, "")
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NOT BLANK (not empty string)",
+                    "Actual", IF(ISBLANK(_ActualResult), "NULL", IF(EXACT(_ActualResult, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is NULL or BLANK (BLANK() or empty string "").
+    function 'PQL.Assert.ShouldBeNullOrBlank' =
+            (testName : STRING, actualValue : VARIANT) =>
+                VAR _Passed = ISBLANK(actualValue) || EXACT(actualValue, "")
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NULL OR BLANK",
+                    "Actual", IF(ISBLANK(actualValue), "NULL", IF(EXACT(actualValue, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a value is not NULL and not BLANK (has actual content).
+    function 'PQL.Assert.ShouldNotBeNullOrBlank' =
+            (testName : STRING, actualValue : SCALAR VARIANT EXPR) =>
+                VAR _ActualResult = actualValue
+                VAR _Passed = NOT ISBLANK(_ActualResult) && NOT EXACT(_ActualResult, "")
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NOT NULL AND NOT BLANK",
+                    "Actual", IF(ISBLANK(_ActualResult), "NULL", IF(EXACT(_ActualResult, ""), "BLANK (empty string)", "HAS VALUE")),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldEqual' =
+            (testName : STRING, expected : VARIANT, actual : VARIANT) =>
+                VAR _ExpType = SWITCH(TRUE(), ISBLANK(expected), 0, ISLOGICAL(expected), 1, ISTEXT(expected), 2, ISNUMBER(expected), 3, 4)
+                VAR _ActType = SWITCH(TRUE(), ISBLANK(actual), 0, ISLOGICAL(actual), 1, ISTEXT(actual), 2, ISNUMBER(actual), 3, 4)
+                VAR _Passed = _ExpType = _ActType && FORMAT(expected, "") = FORMAT(actual, "")
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", FORMAT(expected, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldNotEqual' =
+            (testName : STRING, notExpected : VARIANT, actual : VARIANT) =>
+                VAR _ExpType = SWITCH(TRUE(), ISBLANK(notExpected), 0, ISLOGICAL(notExpected), 1, ISTEXT(notExpected), 2, ISNUMBER(notExpected), 3, 4)
+                VAR _ActType = SWITCH(TRUE(), ISBLANK(actual), 0, ISLOGICAL(actual), 1, ISTEXT(actual), 2, ISNUMBER(actual), 3, 4)
+                VAR _Passed = NOT(_ExpType = _ActType && FORMAT(notExpected, "") = FORMAT(actual, ""))
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "NOT " & FORMAT(notExpected, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that two strings are exactly equal (case-sensitive comparison).
+    function 'PQL.Assert.ShouldEqualExactly' =
+            (testName : STRING, expected : STRING, actual : STRING) =>
+                VAR _Passed = EXACT(expected, actual)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", expected,
+                    "Actual", actual,
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldBeGreaterThan' =
+            (testName : STRING, threshold : DOUBLE, actual : DOUBLE) =>
+                VAR _Passed = actual > threshold
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "> " & FORMAT(threshold, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldBeLessThan' =
+            (testName : STRING, threshold : DOUBLE, actual : DOUBLE) =>
+                VAR _Passed = actual < threshold
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "< " & FORMAT(threshold, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a number is greater than or equal to an expected value.
+    function 'PQL.Assert.ShouldBeGreaterOrEqual' =
+            (testName : STRING, threshold : DOUBLE, actual : DOUBLE) =>
+                VAR _Passed = actual >= threshold
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", ">= " & FORMAT(threshold, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a number is less than or equal to an expected value.
+    function 'PQL.Assert.ShouldBeLessOrEqual' =
+            (testName : STRING, threshold : DOUBLE, actual : DOUBLE) =>
+                VAR _Passed = actual <= threshold
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "<= " & FORMAT(threshold, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    function 'PQL.Assert.ShouldBeBetween' =
+            (testName : STRING, lowerBound : DOUBLE, upperBound : DOUBLE, actual : DOUBLE) =>
+                VAR _Passed = actual >= lowerBound && actual <= upperBound
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", FORMAT(lowerBound, "") & " <= value <= " & FORMAT(upperBound, ""),
+                    "Actual", FORMAT(actual, ""),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// String Assertions - PQL.Assert namespace
+    /// Asserts that a string starts with the specified prefix (case-insensitive).
+    function 'PQL.Assert.ShouldStartWith' =
+            (testName : STRING, prefix : STRING, actual : STRING) =>
+                VAR _Passed = LEFT(UPPER(actual), LEN(prefix)) = UPPER(prefix)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Starts with '" & prefix & "'",
+                    "Actual", actual,
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a string ends with the specified suffix (case-insensitive).
+    function 'PQL.Assert.ShouldEndWith' =
+            (testName : STRING, suffix : STRING, actual : STRING) =>
+                VAR _Passed = RIGHT(UPPER(actual), LEN(suffix)) = UPPER(suffix)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Ends with '" & suffix & "'",
+                    "Actual", actual,
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a string contains the specified substring (case-insensitive).
+    function 'PQL.Assert.ShouldContainString' =
+            (testName : STRING, substring : STRING, actual : STRING) =>
+                VAR _Passed = CONTAINSSTRING(actual, substring)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Contains '" & substring & "'",
+                    "Actual", actual,
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Asserts that a string matches a pattern (case-insensitive).
+    function 'PQL.Assert.ShouldMatch' =
+            (testName : STRING, pattern : STRING, actual : STRING) =>
+                VAR _Passed = CONTAINSSTRING(actual, pattern)
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Matches '" & pattern & "'",
+                    "Actual", actual,
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+
+    /// Relationship Assertions - PQL.Assert.Relationship namespace
+    function 'PQL.Assert.Relationship.ShouldExist' =
+            (testName : STRING, fromTable : STRING, fromColumn : STRING, toTable : STRING, toColumn : STRING) =>
+                VAR _Relationships = INFO.VIEW.RELATIONSHIPS()
+                VAR _Found = COUNTROWS(FILTER(_Relationships,
+                    [FromTable] = fromTable && [FromColumn] = fromColumn &&
+                    [ToTable] = toTable && [ToColumn] = toColumn)) > 0
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Relationship '" & fromTable & "[" & fromColumn & "] -> " & toTable & "[" & toColumn & "]' exists",
+                    "Actual", IF(_Found, "EXISTS", "NOT FOUND"),
+                    "Passed", _Found
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Test Discovery Functions - PQL.Assert namespace
+    /// Uses INFO.FUNCTIONS only - compatible with Power Automate REST API.
+    /// Returns function names of test functions (ending with .Test or .Tests).
+    /// For full metadata including Description and RLS ImpersonatedUserName, use RetrieveTestsV2.
+    function 'PQL.Assert.RetrieveTests' =
+            () =>
+                SELECTCOLUMNS(
+                    FILTER(
+                        INFO.FUNCTIONS("ORIGIN", "2"),
+                        OR(RIGHT([FUNCTION_NAME], 5) = ".Test", RIGHT([FUNCTION_NAME], 6) = ".Tests")
+                    ),
+                    "Name", [FUNCTION_NAME]
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Retrieves tests filtered by environment. Looks for .{ENV}. or .ANY. in function names.
+    /// If environment is blank, returns all tests.
+    /// Supports any custom environment naming convention (DEV, TEST, PROD, UAT, STAGING, etc.)
+    /// Uses INFO.FUNCTIONS only - compatible with Power Automate REST API.
+    /// For full metadata including Description and RLS ImpersonatedUserName, use RetrieveTestsByEnvironmentV2.
+    function 'PQL.Assert.RetrieveTestsByEnvironment' =
+            (environment: STRING) =>
+                VAR _EnvUpper = UPPER(environment)
+                RETURN
+                    SELECTCOLUMNS(
+                        FILTER(
+                            INFO.FUNCTIONS("ORIGIN", "2"),
+                            (RIGHT([FUNCTION_NAME], 5) = ".Test" || RIGHT([FUNCTION_NAME], 6) = ".Tests")
+                            && (
+                                ISBLANK(_EnvUpper) || _EnvUpper = ""
+                                || CONTAINSSTRING(UPPER([FUNCTION_NAME]), "." & _EnvUpper & ".")
+                                || CONTAINSSTRING(UPPER([FUNCTION_NAME]), ".ANY.")
+                            )
+                        ),
+                        "Name", [FUNCTION_NAME]
+                    )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Retrieves all test functions with full metadata (Description, RLS ImpersonatedUserName).
+    /// Uses INFO.USERDEFINEDFUNCTIONS and INFO.ANNOTATIONS - NOT compatible with Power Automate REST API.
+    /// Use RetrieveTests for Power Automate compatibility.
+    function 'PQL.Assert.RetrieveTestsV2' =
+            () =>
+                VAR _BaseFunctions =
+                    SELECTCOLUMNS(
+                        FILTER(
+                            INFO.FUNCTIONS("ORIGIN", "2"),
+                            OR(RIGHT([FUNCTION_NAME], 5) = ".Test", RIGHT([FUNCTION_NAME], 6) = ".Tests")
+                        ),
+                        "Name", [FUNCTION_NAME]
+                    )
+                RETURN
+                    ADDCOLUMNS(
+                        _BaseFunctions,
+                        "Description",
+                        VAR _funcName = [Name]
+                        RETURN
+                        IFERROR(
+                            MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [Description]),
+                            BLANK()
+                        ),
+                        "PQLAssert_ImpersonatedUserName",
+                        VAR _funcName = [Name]
+                        VAR _funcID =
+                            IFERROR(
+                                MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [ID]),
+                                BLANK()
+                            )
+                        RETURN
+                        IFERROR(
+                            MAXX(
+                                FILTER(
+                                    INFO.ANNOTATIONS(),
+                                    [Name] = "PQLAssert_ImpersonatedUserName"
+                                        && [ObjectID] = _funcID
+                                ),
+                                [Value]
+                            ),
+                            BLANK()
+                        )
+                    )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+
+    /// Retrieves tests filtered by environment with full metadata (Description, RLS ImpersonatedUserName).
+    /// Looks for .{ENV}. or .ANY. in function names. If environment is blank, returns all tests.
+    /// Uses INFO.USERDEFINEDFUNCTIONS and INFO.ANNOTATIONS - NOT compatible with Power Automate REST API.
+    /// Use RetrieveTestsByEnvironment for Power Automate compatibility.
+    function 'PQL.Assert.RetrieveTestsByEnvironmentV2' =
+            (environment: STRING) =>
+                VAR _EnvUpper = UPPER(environment)
+                VAR _BaseFunctions =
+                    SELECTCOLUMNS(
+                        FILTER(
+                            INFO.FUNCTIONS("ORIGIN", "2"),
+                            (RIGHT([FUNCTION_NAME], 5) = ".Test" || RIGHT([FUNCTION_NAME], 6) = ".Tests")
+                            && (
+                                ISBLANK(_EnvUpper) || _EnvUpper = ""
+                                || CONTAINSSTRING(UPPER([FUNCTION_NAME]), "." & _EnvUpper & ".")
+                                || CONTAINSSTRING(UPPER([FUNCTION_NAME]), ".ANY.")
+                            )
+                        ),
+                        "Name", [FUNCTION_NAME]
+                    )
+                RETURN
+                    ADDCOLUMNS(
+                        _BaseFunctions,
+                        "Description",
+                        VAR _funcName = [Name]
+                        RETURN
+                        IFERROR(
+                            MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [Description]),
+                            BLANK()
+                        ),
+                        "PQLAssert_ImpersonatedUserName",
+                        VAR _funcName = [Name]
+                        VAR _funcID =
+                            IFERROR(
+                                MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [ID]),
+                                BLANK()
+                            )
+                        RETURN
+                        IFERROR(
+                            MAXX(
+                                FILTER(
+                                    INFO.ANNOTATIONS(),
+                                    [Name] = "PQLAssert_ImpersonatedUserName"
+                                        && [ObjectID] = _funcID
+                                ),
+                                [Value]
+                            ),
+                            BLANK()
+                        )
+                    )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.2.0
+

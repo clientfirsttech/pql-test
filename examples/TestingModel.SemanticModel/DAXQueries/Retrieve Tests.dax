@@ -1,0 +1,2 @@
+
+EVALUATE PQL.Assert.RetrieveTestsByEnvironmentV2("ANY")

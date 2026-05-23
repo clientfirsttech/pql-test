@@ -1,0 +1,44 @@
+table Users_To_Group_Bridge
+	isHidden
+	lineageTag: bb469257-7f65-4e4c-bb83-6fd4a454fba5
+
+	column 'User ID'
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: d3fe56ba-9293-422a-9ff6-a168a0aef5eb
+		summarizeBy: count
+		sourceColumn: User ID
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	column Group
+		dataType: int64
+		isHidden
+		formatString: 0
+		lineageTag: 7119b136-668b-4af8-a7ee-9523afb01c38
+		summarizeBy: sum
+		sourceColumn: Group
+
+		changedProperty = IsHidden
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Users_To_Group_Bridge = m
+		mode: import
+		queryGroup: RLS
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSAeJYnWglIyDLCMwyhojFAgA=", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [#"User ID" = _t, Group = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"User ID", Int64.Type}, {"Group", Int64.Type}})
+				in
+				    #"Changed Type"
+
+	changedProperty = IsHidden
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

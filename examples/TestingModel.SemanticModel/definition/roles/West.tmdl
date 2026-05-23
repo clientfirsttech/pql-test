@@ -1,0 +1,7 @@
+role West
+	modelPermission: read
+
+	tablePermission Groups = [Group Name] == "West"
+
+	annotation PBI_Id = c1e47f39cea34fc1abb95e897e078c7e
+

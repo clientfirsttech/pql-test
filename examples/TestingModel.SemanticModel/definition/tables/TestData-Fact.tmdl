@@ -1,0 +1,136 @@
+table TestData-Fact
+	lineageTag: 9eca8f14-b5f4-4598-accb-95d0d61a4308
+
+	/// Test measure with UNQUALIFIED column reference (should fail BP rule)
+	measure 'Total Value Unqualified' = SUM([Value])
+		formatString: 0.0
+		lineageTag: aa1111aa-1111-1111-aaaa-111111111111
+
+	/// Test measure with FULLY QUALIFIED column reference (should pass BP rule)
+	measure 'Total Value Qualified' = SUM('TestData-Fact'[Value])
+		formatString: 0.0
+		lineageTag: bb2222bb-2222-2222-bbbb-222222222222
+
+	/// Test measure WITHOUT format string (should fail formatting BP rule)
+	measure 'Measure Without Format' = COUNTROWS('TestData-Fact')
+		lineageTag: cc3333cc-3333-3333-cccc-333333333333
+
+	/// Test measure using INTERSECT (should fail DAX expressions BP rule - should use TREATAS instead)
+	measure 'Test INTERSECT Usage' =
+			CALCULATE(
+			    SUM('TestData-Fact'[Value]),
+			    INTERSECT(
+			        VALUES('TestData-Fact'[Category]),
+			        {"A"}
+			    )
+			)
+		lineageTag: 2556e5d5-f543-4ed3-a559-bd88e0bb1bf6
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column ID
+		dataType: int64
+		formatString: 0
+		lineageTag: 70de7d88-c05f-4e64-ac83-fb6f873a4fb4
+		summarizeBy: none
+		sourceColumn: ID
+
+		annotation SummarizationSetBy = Automatic
+
+	column Name
+		dataType: string
+		lineageTag: 7e0e46ea-9c85-41a5-b711-813fc8a5dcd6
+		summarizeBy: none
+		sourceColumn: Name
+
+		annotation SummarizationSetBy = Automatic
+
+	column Value
+		dataType: double
+		lineageTag: 65668e87-a3d9-40da-b337-9c13ecb64295
+		summarizeBy: sum
+		sourceColumn: Value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column Category
+		dataType: string
+		lineageTag: 90523877-256a-4738-87db-9b5207a9758c
+		summarizeBy: none
+		sourceColumn: Category
+
+		annotation SummarizationSetBy = Automatic
+
+	column IsActive
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: 59366d6c-8eb1-4431-82a4-e6079edd1de6
+		summarizeBy: none
+		sourceColumn: IsActive
+
+		annotation SummarizationSetBy = Automatic
+
+	column CreatedDate
+		dataType: dateTime
+		formatString: Long Date
+		lineageTag: 630707dd-787e-49ac-9711-52b9d686aaaf
+		summarizeBy: none
+		sourceColumn: CreatedDate
+
+		variation Variation
+			isDefault
+			relationship: 555ba403-1d55-49e2-a968-3611498e67de
+			defaultHierarchy: LocalDateTable_a54a7c29-b72a-43ab-91d9-98883b3951c0.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column NullableField
+		dataType: string
+		lineageTag: a63bf5f2-eb00-4c73-8b8e-573cc3ecaf88
+		summarizeBy: none
+		sourceColumn: NullableField
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Blank Column' = BLANK()
+		formatString: 0
+		lineageTag: 1cacb884-a371-416c-b98a-245dd3135222
+		summarizeBy: sum
+
+		annotation SummarizationSetBy = Automatic
+
+	partition TestData-Fact = m
+		mode: import
+		source = ```
+				let
+				    Source = #table(
+				        {"ID", "Name", "Value", "Category", "IsActive", "CreatedDate", "NullableField"},
+				        {
+				            {1, "Alpha", 100.5, "A", true, #date(2024, 1, 15), "Has Value"},
+				            {2, "Beta", 200.75, "B", false, #date(2024, 2, 20), null},
+				            {3, "Gamma", 150.25, "A", true, #date(2024, 3, 10), "Another Value"},
+				            {4, "Delta", 300.0, "C", true, #date(2024, 4, 5), null},
+				            {5, "Epsilon", 50.0, "B", false, #date(2024, 5, 25), "Third Value"}
+				        }
+				    ),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{
+				        {"ID", Int64.Type}, 
+				        {"Name", type text}, 
+				        {"Value", type number}, 
+				        {"Category", type text}, 
+				        {"IsActive", type logical}, 
+				        {"CreatedDate", type date}, 
+				        {"NullableField", type text}
+				    })
+				in
+				    #"Changed Type"
+				```
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
