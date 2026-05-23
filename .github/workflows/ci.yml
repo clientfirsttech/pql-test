@@ -21,11 +21,13 @@
 #    Requires five repository secrets (see below).
 #
 # Required secrets for stage 3:
-#   PQL_TENANT_ID      – Azure AD tenant GUID
-#   PQL_WORKSPACE_ID   – Power BI workspace GUID
-#   PQL_DATASET_ID     – Dataset / semantic model GUID
-#   PQL_CLIENT_ID      – Service principal application (client) ID
-#   PQL_CLIENT_SECRET  – Service principal client secret
+#   PQL_TENANT_ID         – Azure AD tenant GUID
+#   PQL_WORKSPACE_ID      – Power BI workspace GUID
+#   PQL_DATASET_ID        – Dataset GUID for SampleModel.SemanticModel
+#   PQL_DATASET_ID_RLS    – Dataset GUID for RLS_Model.SemanticModel
+#   PQL_DATASET_ID_OLS    – Dataset GUID for OLS_Model.SemanticModel
+#   PQL_CLIENT_ID         – Service principal application (client) ID
+#   PQL_CLIENT_SECRET     – Service principal client secret
 #
 # Optional secrets for stage 3:
 #   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, …).  Default: Public.
@@ -85,9 +87,11 @@ jobs:
     permissions:
       contents: read
     secrets:
-      PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
-      PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
-      PQL_DATASET_ID:    ${{ secrets.PQL_DATASET_ID }}
-      PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
-      PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
-      PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT }}
+      PQL_TENANT_ID:        ${{ secrets.PQL_TENANT_ID }}
+      PQL_WORKSPACE_ID:     ${{ secrets.PQL_WORKSPACE_ID }}
+      PQL_DATASET_ID:       ${{ secrets.PQL_DATASET_ID }}
+      PQL_DATASET_ID_RLS:   ${{ secrets.PQL_DATASET_ID_RLS }}
+      PQL_DATASET_ID_OLS:   ${{ secrets.PQL_DATASET_ID_OLS }}
+      PQL_CLIENT_ID:        ${{ secrets.PQL_CLIENT_ID }}
+      PQL_CLIENT_SECRET:    ${{ secrets.PQL_CLIENT_SECRET }}
+      PQL_ENVIRONMENT:      ${{ secrets.PQL_ENVIRONMENT }}

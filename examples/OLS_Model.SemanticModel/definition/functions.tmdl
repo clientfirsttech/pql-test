@@ -2684,6 +2684,25 @@ function 'PQL.Assert.RetrieveTestsV2' =
 		                    [Value]
 		                ),
 		                BLANK()
+		            ),
+		            "PQLAssert_RoleName",
+		            VAR _funcName = [Name]
+		            VAR _funcID =
+		                IFERROR(
+		                    MAXX(FILTER(INFO.USERDEFINEDFUNCTIONS(), [Name] = _funcName), [ID]),
+		                    BLANK()
+		                )
+		            RETURN
+		            IFERROR(
+		                MAXX(
+		                    FILTER(
+		                        INFO.ANNOTATIONS(),
+		                        [Name] = "PQLAssert_RoleName"
+		                            && [ObjectID] = _funcID
+		                    ),
+		                    [Value]
+		                ),
+		                BLANK()
 		            )
 		        )
 	lineageTag: f5e29a3c-8b14-4d7e-a62f-1c9053d87b40
@@ -2831,6 +2850,8 @@ function 'OLS_West.ANY.Tests' =
 
 	annotation PQLAssert_ImpersonatedUserName = atlas.kerski@cftechnologiesllc.com
 
+	annotation PQLAssert_RoleName = West
+
 function 'OLS_Admin.ANY.Tests' =
 		() =>
 			UNION(
@@ -2840,4 +2861,6 @@ function 'OLS_Admin.ANY.Tests' =
 	lineageTag: 7e2f4480-b058-41c6-9f3a-a4300d97f97c
 
 	annotation PQLAssert_ImpersonatedUserName = jkerski@cftechnologiesllc.com
+
+	annotation PQLAssert_RoleName = Admin
 
