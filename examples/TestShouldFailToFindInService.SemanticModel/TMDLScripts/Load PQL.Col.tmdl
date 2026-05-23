@@ -1,0 +1,652 @@
+createOrReplace
+
+	/// Col Assertions - PQL.Assert.Col namespace
+	/// Column-level assertion functions for data quality validation
+	/// Publisher: PQL (Power Query Lint)
+
+	/// Asserts that all values in a column are NULL (DAX BLANK()).
+	function 'PQL.Assert.Col.ShouldBeNull' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _NonNullCount = DISTINCTCOUNTNOBLANK(columnRef)
+				VAR _Passed = _NonNullCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column is all NULL",
+					"Actual", IF(_Passed, "ALL NULL", "HAS NON-NULL VALUES (" & FORMAT(_NonNullCount, "0") & " distinct)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that a column contains at least one non-NULL value (not DAX BLANK()).
+	function 'PQL.Assert.Col.ShouldNotBeNull' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _NonNullCount = DISTINCTCOUNTNOBLANK(columnRef)
+				VAR _Passed = _NonNullCount > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column has non-NULL values",
+					"Actual", IF(_Passed, "HAS VALUES (" & FORMAT(_NonNullCount, "0") & " distinct)", "ALL NULL"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are BLANK (empty string "" or NULL BLANK()). Fails if any non-blank values exist.
+	function 'PQL.Assert.Col.ShouldBeBlank' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _NonBlankCount = COUNTAX(
+					VALUES(columnRef),
+					IF(NOT ISBLANK(columnRef) && FORMAT(columnRef, "") <> "", 1, BLANK())
+				)
+				VAR _TotalCount = COUNTROWS(VALUES(columnRef))
+				VAR _Passed = _NonBlankCount = 0 && _TotalCount > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column is all BLANK (empty string or NULL)",
+					"Actual", IF(_Passed, "ALL BLANK", "HAS NON-BLANK VALUES (" & FORMAT(_NonBlankCount, "0") & " non-blank)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are non-BLANK (not empty string "" and not NULL BLANK()). Fails if any blank values exist.
+	function 'PQL.Assert.Col.ShouldNotBeBlank' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _BlankCount = COUNTBLANK(columnRef)
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _Passed = _BlankCount = 0 && _TotalCount > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column has no BLANK values (all non-empty and non-NULL)",
+					"Actual", IF(_Passed, "NO BLANK VALUES", "HAS BLANK VALUES (" & FORMAT(_BlankCount, "0") & " blank)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are NULL or BLANK (BLANK() or empty string ""). Fails if any values with content exist.
+	function 'PQL.Assert.Col.ShouldBeNullOrBlank' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _NonEmptyCount = COUNTAX(
+					VALUES(columnRef),
+					IF(NOT ISBLANK(columnRef) && FORMAT(columnRef, "") <> "", 1, BLANK())
+				)
+				VAR _TotalCount = COUNTROWS(VALUES(columnRef))
+				VAR _Passed = _NonEmptyCount = 0 && _TotalCount > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column is all NULL or BLANK",
+					"Actual", IF(_Passed, "ALL NULL/BLANK", "HAS VALUES (" & FORMAT(_NonEmptyCount, "0") & " non-empty)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are not NULL and not BLANK. Fails if any NULL or empty values exist.
+	function 'PQL.Assert.Col.ShouldNotBeNullOrBlank' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _BlankCount = COUNTBLANK(columnRef)
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _Passed = _BlankCount = 0 && _TotalCount > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column has no NULL or BLANK values (all values have content)",
+					"Actual", IF(_Passed, "NO NULL/BLANK VALUES", "HAS NULL/BLANK VALUES (" & FORMAT(_BlankCount, "0") & " empty)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are unique (no duplicates).
+	function 'PQL.Assert.Col.ShouldBeDistinct' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _DistinctCount = DISTINCTCOUNT(columnRef)
+				VAR _TotalCount = COUNTA(columnRef)
+				VAR _Passed = _DistinctCount = _TotalCount
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values distinct",
+					"Actual", IF(_Passed, "ALL DISTINCT (" & FORMAT(_TotalCount, "0") & " rows)", "DUPLICATES FOUND (" & FORMAT(_DistinctCount, "0") & " distinct of " & FORMAT(_TotalCount, "0") & " rows)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that a column exists in a table.
+	function 'PQL.Assert.Col.ShouldExist' =
+			(testName : STRING, tableName : STRING, columnName : STRING) =>
+				VAR _Columns = INFO.VIEW.COLUMNS()
+				VAR _Found = COUNTROWS(FILTER(_Columns, [Table] = tableName && [Name] = columnName)) > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column '" & tableName & "[" & columnName & "]' exists",
+					"Actual", IF(_Found, "EXISTS", "NOT FOUND"),
+					"Passed", _Found
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Presence / Completeness Thresholds
+	/// Asserts that the null rate of a column is at most the specified percentage.
+	function 'PQL.Assert.Col.NullRateShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxNullPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _NullCount = COUNTBLANK(columnRef)
+				VAR _NullPct = IF(_TotalCount = 0, 0, DIVIDE(_NullCount, _TotalCount) * 100)
+				VAR _Passed = _NullPct <= maxNullPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Null rate <= " & FORMAT(maxNullPct, "0.##") & "%",
+					"Actual", FORMAT(_NullPct, "0.##") & "% (" & FORMAT(_NullCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the blank rate (empty string) of a column is at most the specified percentage.
+	function 'PQL.Assert.Col.BlankRateShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxBlankPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _BlankCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(FORMAT(columnRef, "") = "" && NOT ISBLANK(columnRef), 1, BLANK()))
+				VAR _BlankPct = IF(_TotalCount = 0, 0, DIVIDE(_BlankCount, _TotalCount) * 100)
+				VAR _Passed = _BlankPct <= maxBlankPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Blank rate <= " & FORMAT(maxBlankPct, "0.##") & "%",
+					"Actual", FORMAT(_BlankPct, "0.##") & "% (" & FORMAT(_BlankCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the null or blank rate of a column is at most the specified percentage.
+	function 'PQL.Assert.Col.NullOrBlankRateShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _EmptyCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(ISBLANK(columnRef) || FORMAT(columnRef, "") = "", 1, BLANK()))
+				VAR _EmptyPct = IF(_TotalCount = 0, 0, DIVIDE(_EmptyCount, _TotalCount) * 100)
+				VAR _Passed = _EmptyPct <= maxPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Null or blank rate <= " & FORMAT(maxPct, "0.##") & "%",
+					"Actual", FORMAT(_EmptyPct, "0.##") & "% (" & FORMAT(_EmptyCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the populated (non-null, non-blank) rate of a column is at least the specified percentage.
+	function 'PQL.Assert.Col.PopulatedRateShouldBeAtLeast' =
+			(testName : STRING, columnRef : ANYREF EXPR, minPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _PopulatedCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && FORMAT(columnRef, "") <> "", 1, BLANK()))
+				VAR _PopulatedPct = IF(_TotalCount = 0, 0, DIVIDE(_PopulatedCount, _TotalCount) * 100)
+				VAR _Passed = _PopulatedPct >= minPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Populated rate >= " & FORMAT(minPct, "0.##") & "%",
+					"Actual", FORMAT(_PopulatedPct, "0.##") & "% (" & FORMAT(_PopulatedCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Uniqueness & Key-Like Behavior
+	/// Asserts that column values are unique within partitions defined by another column.
+	function 'PQL.Assert.Col.ShouldBeUniqueWithin' =
+			(testName : STRING, columnRef : ANYREF EXPR, partitionByCol : ANYREF EXPR) =>
+				VAR _Base = FILTER(ALL(partitionByCol, columnRef), NOT ISBLANK(columnRef))
+				VAR _TotalCombinations = COUNTROWS(DISTINCT(_Base))
+				VAR _TotalRows = COUNTA(columnRef)
+				VAR _Passed = _TotalCombinations = _TotalRows
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values unique within partition",
+					"Actual", IF(_Passed, "ALL UNIQUE WITHIN PARTITION (" & FORMAT(_TotalRows, "0") & " rows)", "DUPLICATES WITHIN PARTITION (" & FORMAT(_TotalCombinations, "0") & " unique of " & FORMAT(_TotalRows, "0") & " rows)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the combination of two columns forms a distinct composite key.
+	function 'PQL.Assert.Col.ComboShouldBeDistinct' =
+			(testName : STRING, columnRef1 : ANYREF EXPR, columnRef2 : ANYREF EXPR) =>
+				VAR _Base = FILTER(ALL(columnRef1, columnRef2), NOT ISBLANK(columnRef1))
+				VAR _DistinctCombos = COUNTROWS(DISTINCT(_Base))
+				VAR _TotalRows = COUNTA(columnRef1)
+				VAR _Passed = _DistinctCombos = _TotalRows
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All combinations distinct (composite key)",
+					"Actual", IF(_Passed, "ALL COMBOS DISTINCT (" & FORMAT(_TotalRows, "0") & " rows)", "DUPLICATE COMBOS (" & FORMAT(_DistinctCombos, "0") & " distinct of " & FORMAT(_TotalRows, "0") & " rows)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that a column contains no duplicate values. Alias for ShouldBeDistinct.
+	function 'PQL.Assert.Col.ShouldNotContainDuplicates' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _DistinctCount = DISTINCTCOUNT(columnRef)
+				VAR _TotalCount = COUNTROWS(VALUES(columnRef))
+				VAR _Passed = _DistinctCount = _TotalCount
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "No duplicate values",
+					"Actual", IF(_Passed, "NO DUPLICATES (" & FORMAT(_TotalCount, "0") & " rows)", "DUPLICATES FOUND (" & FORMAT(_DistinctCount, "0") & " distinct of " & FORMAT(_TotalCount, "0") & " rows)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Range & Distribution Checks (Numeric)
+	/// Asserts that all values in a numeric column fall within the specified inclusive range.
+	function 'PQL.Assert.Col.ShouldBeInRange' =
+			(testName : STRING, columnRef : ANYREF EXPR, minIncl : DOUBLE, maxIncl : DOUBLE) =>
+				VAR _MinVal = MINX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _MaxVal = MAXX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _Passed = _MinVal >= minIncl && _MaxVal <= maxIncl
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", FORMAT(minIncl, "") & " <= value <= " & FORMAT(maxIncl, ""),
+					"Actual", "Min=" & FORMAT(_MinVal, "") & ", Max=" & FORMAT(_MaxVal, ""),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the minimum value in a column is at least the specified value.
+	function 'PQL.Assert.Col.MinShouldBeAtLeast' =
+			(testName : STRING, columnRef : ANYREF EXPR, minIncl : DOUBLE) =>
+				VAR _MinVal = MINX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _Passed = _MinVal >= minIncl
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Min >= " & FORMAT(minIncl, ""),
+					"Actual", "Min=" & FORMAT(_MinVal, ""),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the maximum value in a column is at most the specified value.
+	function 'PQL.Assert.Col.MaxShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxIncl : DOUBLE) =>
+				VAR _MaxVal = MAXX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _Passed = _MaxVal <= maxIncl
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Max <= " & FORMAT(maxIncl, ""),
+					"Actual", "Max=" & FORMAT(_MaxVal, ""),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the specified percentile of a column falls within the given range.
+	function 'PQL.Assert.Col.PctileShouldBeInRange' =
+			(testName : STRING, columnRef : ANYREF EXPR, pct : DOUBLE, minIncl : DOUBLE, maxIncl : DOUBLE) =>
+				VAR _PctileVal = PERCENTILEX.INC(ALLNOBLANKROW(columnRef), columnRef, pct)
+				VAR _Passed = _PctileVal >= minIncl && _PctileVal <= maxIncl
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "P" & FORMAT(pct * 100, "0") & " in [" & FORMAT(minIncl, "") & ", " & FORMAT(maxIncl, "") & "]",
+					"Actual", "P" & FORMAT(pct * 100, "0") & "=" & FORMAT(_PctileVal, ""),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the mean of a column falls within the specified range.
+	function 'PQL.Assert.Col.MeanShouldBeInRange' =
+			(testName : STRING, columnRef : ANYREF EXPR, minIncl : DOUBLE, maxIncl : DOUBLE) =>
+				VAR _MeanVal = AVERAGEX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _Passed = _MeanVal >= minIncl && _MeanVal <= maxIncl
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Mean in [" & FORMAT(minIncl, "") & ", " & FORMAT(maxIncl, "") & "]",
+					"Actual", "Mean=" & FORMAT(_MeanVal, ""),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the standard deviation of a column is at most the specified value.
+	function 'PQL.Assert.Col.StdDevShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxStdDev : DOUBLE) =>
+				VAR _TblRef = ALLNOBLANKROW(columnRef)
+				VAR _Mean = AVERAGEX(_TblRef, columnRef)
+				VAR _N = COUNTROWS(_TblRef)
+				VAR _SumSqDiff = SUMX(_TblRef, (columnRef - _Mean) ^ 2)
+				VAR _StdDev = IF(_N > 1, SQRT(DIVIDE(_SumSqDiff, _N - 1)), 0)
+				VAR _Passed = _StdDev <= maxStdDev
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "StdDev <= " & FORMAT(maxStdDev, ""),
+					"Actual", "StdDev=" & FORMAT(_StdDev, "0.##"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the share of zero values in a column is at most the specified percentage.
+	function 'PQL.Assert.Col.ShareOfZerosAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _ZeroCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(columnRef = 0, 1, BLANK()))
+				VAR _ZeroPct = IF(_TotalCount = 0, 0, DIVIDE(_ZeroCount, _TotalCount) * 100)
+				VAR _Passed = _ZeroPct <= maxPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Zero share <= " & FORMAT(maxPct, "0.##") & "%",
+					"Actual", FORMAT(_ZeroPct, "0.##") & "% (" & FORMAT(_ZeroCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the share of even values in a column is at least the specified percentage.
+	function 'PQL.Assert.Col.ShareOfEvensAtLeast' =
+			(testName : STRING, columnRef : ANYREF EXPR, minPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _EvenCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(MOD(columnRef, 2) = 0, 1, BLANK()))
+				VAR _EvenPct = IF(_TotalCount = 0, 0, DIVIDE(_EvenCount, _TotalCount) * 100)
+				VAR _Passed = _EvenPct >= minPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Even share >= " & FORMAT(minPct, "0.##") & "%",
+					"Actual", FORMAT(_EvenPct, "0.##") & "% (" & FORMAT(_EvenCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the share of odd values in a column is at least the specified percentage.
+	function 'PQL.Assert.Col.ShareOfOddsAtLeast' =
+			(testName : STRING, columnRef : ANYREF EXPR, minPct : DOUBLE) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _OddCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(MOD(columnRef, 2) <> 0, 1, BLANK()))
+				VAR _OddPct = IF(_TotalCount = 0, 0, DIVIDE(_OddCount, _TotalCount) * 100)
+				VAR _Passed = _OddPct >= minPct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Odd share >= " & FORMAT(minPct, "0.##") & "%",
+					"Actual", FORMAT(_OddPct, "0.##") & "% (" & FORMAT(_OddCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")",
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Sign & Monotonicity
+	/// Asserts that all values in a column are non-negative (>= 0).
+	function 'PQL.Assert.Col.ShouldBeNonNegative' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _MinVal = MINX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _NegativeCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(columnRef < 0, 1, BLANK()))
+				VAR _Passed = _NegativeCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values >= 0",
+					"Actual", IF(_Passed, "ALL NON-NEGATIVE (Min=" & FORMAT(_MinVal, "") & ")", "NEGATIVE VALUES FOUND (" & FORMAT(_NegativeCount, "0") & ", Min=" & FORMAT(_MinVal, "") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all values in a column are strictly positive (> 0).
+	function 'PQL.Assert.Col.ShouldBePositive' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _MinVal = MINX(ALLNOBLANKROW(columnRef), columnRef)
+				VAR _NonPositiveCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(columnRef <= 0, 1, BLANK()))
+				VAR _Passed = _NonPositiveCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values > 0",
+					"Actual", IF(_Passed, "ALL POSITIVE (Min=" & FORMAT(_MinVal, "") & ")", "NON-POSITIVE VALUES FOUND (" & FORMAT(_NonPositiveCount, "0") & ", Min=" & FORMAT(_MinVal, "") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that no values in a column are zero.
+	function 'PQL.Assert.Col.ShouldBeNonZero' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _ZeroCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(columnRef = 0, 1, BLANK()))
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _Passed = _ZeroCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "No zero values",
+					"Actual", IF(_Passed, "NO ZEROS (" & FORMAT(_TotalCount, "0") & " rows)", "ZEROS FOUND (" & FORMAT(_ZeroCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that values in a column are monotonically strictly increasing when ordered by another column.
+	function 'PQL.Assert.Col.ShouldBeMonotonicIncreasing' =
+			(testName : STRING, columnRef : ANYREF EXPR, orderedByCol : ANYREF EXPR) =>
+				VAR _Tbl = ADDCOLUMNS(
+					ALLNOBLANKROW(columnRef),
+					"@OrderVal", orderedByCol
+				)
+				VAR _Sorted = ADDCOLUMNS(
+					_Tbl,
+					"@RowNum", RANKX(_Tbl, [@OrderVal], , ASC, DENSE)
+				)
+				VAR _WithPrev = ADDCOLUMNS(
+					_Sorted,
+					"@PrevVal", VAR _CurRank = [@RowNum] RETURN MAXX(FILTER(_Sorted, [@RowNum] = _CurRank - 1), columnRef)
+				)
+				VAR _Violations = COUNTAX(_WithPrev, IF(NOT ISBLANK([@PrevVal]) && columnRef <= [@PrevVal], 1, BLANK()))
+				VAR _Passed = _Violations = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Values monotonically increasing",
+					"Actual", IF(_Passed, "MONOTONIC INCREASING", "NOT MONOTONIC (" & FORMAT(_Violations, "0") & " violations)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that values in a column are monotonically non-decreasing when ordered by another column.
+	function 'PQL.Assert.Col.ShouldBeMonotonicNonDecreasing' =
+			(testName : STRING, columnRef : ANYREF EXPR, orderedByCol : ANYREF EXPR) =>
+				VAR _Tbl = ADDCOLUMNS(
+					ALLNOBLANKROW(columnRef),
+					"@OrderVal", orderedByCol
+				)
+				VAR _Sorted = ADDCOLUMNS(
+					_Tbl,
+					"@RowNum", RANKX(_Tbl, [@OrderVal], , ASC, DENSE)
+				)
+				VAR _WithPrev = ADDCOLUMNS(
+					_Sorted,
+					"@PrevVal", VAR _CurRank = [@RowNum] RETURN MAXX(FILTER(_Sorted, [@RowNum] = _CurRank - 1), columnRef)
+				)
+				VAR _Violations = COUNTAX(_WithPrev, IF(NOT ISBLANK([@PrevVal]) && columnRef < [@PrevVal], 1, BLANK()))
+				VAR _Passed = _Violations = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Values monotonically non-decreasing",
+					"Actual", IF(_Passed, "MONOTONIC NON-DECREASING", "NOT MONOTONIC (" & FORMAT(_Violations, "0") & " violations)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that values in a column are monotonically strictly decreasing when ordered by another column.
+	function 'PQL.Assert.Col.ShouldBeMonotonicDecreasing' =
+			(testName : STRING, columnRef : ANYREF EXPR, orderedByCol : ANYREF EXPR) =>
+				VAR _Tbl = ADDCOLUMNS(
+					ALLNOBLANKROW(columnRef),
+					"@OrderVal", orderedByCol
+				)
+				VAR _Sorted = ADDCOLUMNS(
+					_Tbl,
+					"@RowNum", RANKX(_Tbl, [@OrderVal], , ASC, DENSE)
+				)
+				VAR _WithPrev = ADDCOLUMNS(
+					_Sorted,
+					"@PrevVal", VAR _CurRank = [@RowNum] RETURN MAXX(FILTER(_Sorted, [@RowNum] = _CurRank - 1), columnRef)
+				)
+				VAR _Violations = COUNTAX(_WithPrev, IF(NOT ISBLANK([@PrevVal]) && columnRef >= [@PrevVal], 1, BLANK()))
+				VAR _Passed = _Violations = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Values monotonically decreasing",
+					"Actual", IF(_Passed, "MONOTONIC DECREASING", "NOT MONOTONIC (" & FORMAT(_Violations, "0") & " violations)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Categorical / Membership / Format
+	/// Asserts that all values in a column are in the specified allowed set (table).
+	function 'PQL.Assert.Col.ValuesShouldBeInSet' =
+			(testName : STRING, columnRef : ANYREF EXPR, allowedValuesTable : TABLE EXPR, allowedValuesColumn : ANYREF EXPR) =>
+				VAR _TargetValues = SELECTCOLUMNS(
+					DISTINCT(columnRef),
+					"@Value", CONVERT(columnRef, STRING)
+				)
+				VAR _AllowedValues = SELECTCOLUMNS(
+					allowedValuesTable,
+					"@Value", CONVERT(allowedValuesColumn, STRING)
+				)
+				VAR _InvalidCount = COUNTROWS(EXCEPT(_TargetValues, _AllowedValues))
+				VAR _Passed = _InvalidCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values in allowed set",
+					"Actual", IF(_Passed, "ALL VALUES IN SET", "VALUES OUTSIDE SET (" & FORMAT(_InvalidCount, "0") & " invalid)"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that no values in a column are in the specified banned set (table).
+	function 'PQL.Assert.Col.ValuesShouldNotBeInSet' =
+			(testName : STRING, columnRef : ANYREF EXPR, bannedValuesTable : TABLE EXPR, bannedValuesColumn : ANYREF EXPR) =>
+				VAR _TargetValues = SELECTCOLUMNS(
+					DISTINCT(columnRef),
+					"@Value", CONVERT(columnRef, STRING)
+				)
+				VAR _BannedValues = SELECTCOLUMNS(
+					bannedValuesTable,
+					"@Value", CONVERT(bannedValuesColumn, STRING)
+				)
+				VAR _BannedFound = COUNTROWS(INTERSECT(_TargetValues, _BannedValues))
+				VAR _Passed = _BannedFound = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "No values in banned set",
+					"Actual", IF(_Passed, "NO BANNED VALUES FOUND", "BANNED VALUES FOUND (" & FORMAT(_BannedFound, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the distinct count of values in a column is at most the specified number.
+	function 'PQL.Assert.Col.DistinctCountShouldBeAtMost' =
+			(testName : STRING, columnRef : ANYREF EXPR, maxDistinct : INT64) =>
+				VAR _DistinctCount = DISTINCTCOUNT(columnRef)
+				VAR _Passed = _DistinctCount <= maxDistinct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Distinct count <= " & FORMAT(maxDistinct, "0"),
+					"Actual", "Distinct count = " & FORMAT(_DistinctCount, "0"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that the distinct count of values in a column is at least the specified number.
+	function 'PQL.Assert.Col.DistinctCountShouldBeAtLeast' =
+			(testName : STRING, columnRef : ANYREF EXPR, minDistinct : INT64) =>
+				VAR _DistinctCount = DISTINCTCOUNT(columnRef)
+				VAR _Passed = _DistinctCount >= minDistinct
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Distinct count >= " & FORMAT(minDistinct, "0"),
+					"Actual", "Distinct count = " & FORMAT(_DistinctCount, "0"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that no text values in a column have leading or trailing spaces.
+	function 'PQL.Assert.Col.TextShouldHaveNoLeadingOrTrailingSpaces' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _UntrimmedCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && FORMAT(columnRef, "") <> TRIM(FORMAT(columnRef, "")), 1, BLANK()))
+				VAR _Passed = _UntrimmedCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "No leading or trailing spaces",
+					"Actual", IF(_Passed, "ALL TRIMMED (" & FORMAT(_TotalCount, "0") & " rows)", "UNTRIMMED VALUES (" & FORMAT(_UntrimmedCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all text values in a column are trimmed. Alias for TextShouldHaveNoLeadingOrTrailingSpaces.
+	function 'PQL.Assert.Col.TextShouldBeTrimmed' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _UntrimmedCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && FORMAT(columnRef, "") <> TRIM(FORMAT(columnRef, "")), 1, BLANK()))
+				VAR _Passed = _UntrimmedCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values trimmed",
+					"Actual", IF(_Passed, "ALL TRIMMED (" & FORMAT(_TotalCount, "0") & " rows)", "UNTRIMMED VALUES (" & FORMAT(_UntrimmedCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all text values in a column are uppercase.
+	function 'PQL.Assert.Col.TextCaseShouldBeUpper' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _NonUpperCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && NOT EXACT(FORMAT(columnRef, ""), UPPER(FORMAT(columnRef, ""))), 1, BLANK()))
+				VAR _Passed = _NonUpperCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values uppercase",
+					"Actual", IF(_Passed, "ALL UPPERCASE (" & FORMAT(_TotalCount, "0") & " rows)", "NON-UPPERCASE VALUES (" & FORMAT(_NonUpperCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that all text values in a column are lowercase.
+	function 'PQL.Assert.Col.TextCaseShouldBeLower' =
+			(testName : STRING, columnRef : ANYREF EXPR) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _NonLowerCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && NOT EXACT(FORMAT(columnRef, ""), LOWER(FORMAT(columnRef, ""))), 1, BLANK()))
+				VAR _Passed = _NonLowerCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "All values lowercase",
+					"Actual", IF(_Passed, "ALL LOWERCASE (" & FORMAT(_TotalCount, "0") & " rows)", "NON-LOWERCASE VALUES (" & FORMAT(_NonLowerCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+
+	/// Asserts that text lengths in a column fall within the specified range.
+	function 'PQL.Assert.Col.TextLengthShouldBeInRange' =
+			(testName : STRING, columnRef : ANYREF EXPR, minLen : INT64, maxLen : INT64) =>
+				VAR _TotalCount = COUNTROWS(ALLNOBLANKROW(columnRef))
+				VAR _OutOfRangeCount = COUNTAX(ALLNOBLANKROW(columnRef), IF(NOT ISBLANK(columnRef) && (LEN(FORMAT(columnRef, "")) < minLen || LEN(FORMAT(columnRef, "")) > maxLen), 1, BLANK()))
+				VAR _Passed = _OutOfRangeCount = 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Text length in [" & FORMAT(minLen, "0") & ", " & FORMAT(maxLen, "0") & "]",
+					"Actual", IF(_Passed, "ALL IN RANGE (" & FORMAT(_TotalCount, "0") & " rows)", "OUT OF RANGE (" & FORMAT(_OutOfRangeCount, "0") & " of " & FORMAT(_TotalCount, "0") & ")"),
+					"Passed", _Passed
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.2.0
+

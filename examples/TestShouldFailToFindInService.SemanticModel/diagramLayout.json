@@ -1,0 +1,187 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 682,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 334,
+            "y": -50
+          },
+          "nodeIndex": "TestData",
+          "nodeLineageTag": "f0000001-test-data-0001-000000000001",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 1
+        },
+        {
+          "location": {
+            "x": 50,
+            "y": -50
+          },
+          "nodeIndex": "TestData-Fact",
+          "nodeLineageTag": "9eca8f14-b5f4-4598-accb-95d0d61a4308",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 2
+        },
+        {
+          "location": {
+            "x": 577,
+            "y": 280
+          },
+          "nodeIndex": "Calendar",
+          "nodeLineageTag": "a1f424bc-1c2c-4348-a0f9-f91c7cb0acf8",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 3
+        },
+        {
+          "location": {
+            "x": 802,
+            "y": 48
+          },
+          "nodeIndex": "Mock-Fact",
+          "nodeLineageTag": "720117e7-cd86-45ba-a1c0-e54f596d7e86",
+          "size": {
+            "height": 152,
+            "width": 234
+          },
+          "zIndex": 4
+        },
+        {
+          "location": {
+            "x": 1161,
+            "y": 125
+          },
+          "nodeIndex": "LargeTableOneMillionOne",
+          "nodeLineageTag": "5120d078-d716-40c3-9b79-6f94b2cd4e02",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 5
+        },
+        {
+          "location": {
+            "x": 874,
+            "y": 298
+          },
+          "nodeIndex": "LargeTableOneMillion",
+          "nodeLineageTag": "8738d1e3-88c6-4d37-be1d-cf3e80a1a281",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 6
+        },
+        {
+          "location": {
+            "x": 1213,
+            "y": 419
+          },
+          "nodeIndex": "LargeTable-Dimension",
+          "nodeLineageTag": "ecc17b31-eec9-4896-81ce-4290285ecf0a",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 7
+        },
+        {
+          "location": {
+            "x": 858,
+            "y": 558.5
+          },
+          "nodeIndex": "LargeTableOneMillionOne-2",
+          "nodeLineageTag": "3a0772f8-2390-4b45-a549-d78757aea119",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 8
+        },
+        {
+          "location": {
+            "x": 1787,
+            "y": 262.25
+          },
+          "nodeIndex": "Groups",
+          "nodeLineageTag": "824d3192-8cb7-40d5-a462-a308b9d5b19a",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 9
+        },
+        {
+          "location": {
+            "x": 1998,
+            "y": 57.25
+          },
+          "nodeIndex": "Users",
+          "nodeLineageTag": "9b171526-72e2-4e55-bd59-dc5d7609aaaa",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 12
+        },
+        {
+          "location": {
+            "x": 1497,
+            "y": 290.25
+          },
+          "nodeIndex": "Users_To_Group_Bridge",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 10
+        },
+        {
+          "location": {
+            "x": 2255,
+            "y": 352.25
+          },
+          "nodeIndex": "_Measures",
+          "nodeLineageTag": "4633a2f3-99e3-44d0-8262-2210da2ab81e",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 11
+        },
+        {
+          "location": {},
+          "nodeIndex": "Group Fact",
+          "nodeLineageTag": "a5f2b3c1-5c87-42c9-876e-a1531143c25a",
+          "size": {
+            "height": 128,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}

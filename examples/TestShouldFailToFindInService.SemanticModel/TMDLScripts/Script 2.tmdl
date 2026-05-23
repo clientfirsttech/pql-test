@@ -1,0 +1,7 @@
+createOrReplace
+
+	function 'RLS.ANY.Tests' =
+			() =>
+					PQL.Assert.ShouldEqualExactly("West Security Group Should Not See Other Groups",0,COUNTROWS(FILTER('Groups',Groups[Group Name]<>"West"))+0)
+		lineageTag: de968091-8b67-454c-bfa9-61fa543cbdad
+		annotation PQLAssert_ImpersonatedUserName = lbarker@cftechnologiesllc.com

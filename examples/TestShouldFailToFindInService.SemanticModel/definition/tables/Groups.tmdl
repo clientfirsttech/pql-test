@@ -1,0 +1,34 @@
+table Groups
+	lineageTag: 824d3192-8cb7-40d5-a462-a308b9d5b19a
+
+	column Group
+		dataType: int64
+		formatString: 0
+		lineageTag: 2c8c534a-2bf8-4c7b-bd5e-17eac4d76028
+		summarizeBy: none
+		sourceColumn: Group
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Group Name'
+		dataType: string
+		lineageTag: 707f19f4-f974-4306-8bdd-b86687180d95
+		summarizeBy: none
+		sourceColumn: Group Name
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Groups = m
+		mode: import
+		queryGroup: RLS
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSUXJNLC5RitWJVjICcsJTQZxYAA==", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [Group = _t, #"Group Name" = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Group", Int64.Type}, {"Group Name", type text}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+

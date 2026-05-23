@@ -1,0 +1,94 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.7.0/schema.json",
+  "name": "655142438fd0281d8bfa",
+  "position": {
+    "x": 12.924533263213252,
+    "y": 127.80927338066439,
+    "z": 0,
+    "height": 494.00438250503987,
+    "width": 1056.9396090805506,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Groups"
+                    }
+                  },
+                  "Property": "Group Name"
+                }
+              },
+              "queryRef": "Groups.Group Name",
+              "nativeQueryRef": "Group Name"
+            },
+            {
+              "field": {
+                "Aggregation": {
+                  "Expression": {
+                    "Column": {
+                      "Expression": {
+                        "SourceRef": {
+                          "Entity": "Group Fact"
+                        }
+                      },
+                      "Property": "Total"
+                    }
+                  },
+                  "Function": 0
+                }
+              },
+              "queryRef": "Sum(Group Fact.Total)",
+              "nativeQueryRef": "Sum of Total"
+            }
+          ]
+        }
+      }
+    },
+    "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "dbcb8d47f726a882bb73",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Groups"
+              }
+            },
+            "Property": "Group Name"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ab75d2081278c0b95b13",
+        "field": {
+          "Aggregation": {
+            "Expression": {
+              "Column": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "Group Fact"
+                  }
+                },
+                "Property": "Total"
+              }
+            },
+            "Function": 0
+          }
+        },
+        "type": "Advanced"
+      }
+    ]
+  }
+}

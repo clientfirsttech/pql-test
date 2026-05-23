@@ -1,0 +1,22 @@
+table LargeTableOneMillion
+	lineageTag: 8738d1e3-88c6-4d37-be1d-cf3e80a1a281
+
+	column ID
+		formatString: 0
+		lineageTag: 4a4b9c8f-cc57-4832-9269-8d4f95c999ff
+		summarizeBy: none
+		isNameInferred
+		sourceColumn: [ID]
+
+		annotation SummarizationSetBy = Automatic
+
+	partition LargeTableOneMillion = calculated
+		mode: import
+		source =
+				SELECTCOLUMNS(
+				    GENERATESERIES(1, 1000000, 1),
+				    "ID", [Value]
+				)
+
+	annotation PBI_Id = 210eec9560a9468bb61ac49b2c0185e9
+
