@@ -1,0 +1,6 @@
+DEFINE
+    FUNCTION RLS.ANY.Tests = () =>
+		PQL.Assert.ShouldEqualExactly("West Security Group Should Not See Other Groups",0,COUNTROWS(FILTER('Groups',Groups[Group Name]<>"West"))+0)
+
+EVALUATE RLS.ANY.Tests()
+    

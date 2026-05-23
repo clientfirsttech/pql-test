@@ -448,13 +448,24 @@ def _find_pbip_file(model_path: str) -> Optional[str]:
 
     Accepts:
     - The PBIP root directory (scanned directly)
-    - The .SemanticModel directory (parent is scanned)
+    - The .SemanticModel directory (parent is scanned, but the .pbip
+      whose stem matches the .SemanticModel directory's stem is preferred
+      so flat layouts with multiple models in one folder still resolve
+      to the correct .pbip)
     """
     p = Path(model_path)
     if not p.exists():
         return None
-    # If given the .SemanticModel dir, look in the parent for the .pbip
+    # If given the .SemanticModel dir, prefer the .pbip whose stem matches
+    # the directory's stem.  This makes ``examples/`` (which holds
+    # SampleModel.pbip, RLS_Model.pbip, OLS_Model.pbip side-by-side)
+    # resolve correctly instead of picking whichever .pbip iterdir() yields
+    # first.
     if p.is_dir() and p.name.endswith(".SemanticModel"):
+        stem = p.name[: -len(".SemanticModel")]
+        sibling = p.parent / f"{stem}.pbip"
+        if sibling.is_file():
+            return str(sibling)
         p = p.parent
     for entry in p.iterdir():
         if entry.name.endswith(".pbip") and entry.is_file():
@@ -973,37 +984,22 @@ def resolve_xmla_connection(
     # Try to resolve credentials from stored config if not provided
     opts = _resolve_authentication_with_stored_credentials(opts)
 
-    # Option 1 — remote workspace (service principal)
+    # Option 1 — remote workspace (service principal).
+    # If the service path raises (bad creds, dead workspace, unreachable
+    # endpoint, etc.) we fall through to local detection instead of letting
+    # the exception propagate or returning None silently.  Stale `.env`
+    # files would otherwise mask "no connection" when a perfectly good
+    # local Power BI Desktop session was sitting right there.
     if opts.tenant_id and opts.workspace_id and opts.dataset_id:
-        # The XMLA endpoint requires the workspace display name and dataset
-        # display name — not GUIDs.  Resolve both via the Power BI REST API
-        # using the service-principal token we're about to acquire anyway.
-        endpoints = get_api_endpoints(opts.environment)
-        token = _acquire_service_principal_token(
-            opts.tenant_id,
-            opts.client_id,
-            opts.client_secret,
-            login_url=endpoints.login_url,
-            resource_url=endpoints.resource_url,
-        )
-        workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
-            workspace_id=opts.workspace_id,
-            dataset_id=opts.dataset_id,
-            access_token=token,
-            api_prefix=endpoints.api_prefix,
-        )
-        # Derive the XMLA scheme prefix from the REST API prefix.
-        # e.g. https://api.powerbi.com → powerbi://api.powerbi.com
-        xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
-        server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
-        return ResolvedXmlaConnection(
-            server=server,
-            catalog=dataset_name,
-            tenant_id=opts.tenant_id,
-            client_id=opts.client_id,
-            client_secret=opts.client_secret,
-            access_token=token,
-        )
+        try:
+            return _resolve_service_xmla_connection(opts)
+        except Exception as exc:  # noqa: BLE001 — log + fall through to local
+            print(
+                f"Warning: remote XMLA connection failed ({type(exc).__name__}: "
+                f"{exc}). Falling back to local Power BI Desktop detection.",
+                file=sys.stderr,
+            )
+            # Fall through to local detection below.
 
     # Option 2 — local/<model_name> identifier
     # When model_path uses the local/<model_name> format, use name-based
@@ -1013,9 +1009,44 @@ def resolve_xmla_connection(
         return resolve_local_xmla_connection_by_name(ident.model_name)
 
     # Option 3 — local Power BI Desktop (filesystem path)
-    # Use process-based detection first (mirrors Get-PowerBIFilesOpened), which
-    # also resolves the correct catalog GUID via $SYSTEM.DBSCHEMA_CATALOGS.
     return resolve_local_xmla_connection(model_path)
+
+
+def _resolve_service_xmla_connection(
+    opts: XmlaConnectionOptions,
+) -> ResolvedXmlaConnection:
+    """Build a service-XMLA connection from *opts*; raises on any failure.
+
+    Extracted from ``resolve_xmla_connection`` so the caller can wrap the
+    whole service path in a single try/except and fall back to local
+    detection when something goes wrong.
+    """
+    endpoints = get_api_endpoints(opts.environment)
+    token = _acquire_service_principal_token(
+        opts.tenant_id,
+        opts.client_id,
+        opts.client_secret,
+        login_url=endpoints.login_url,
+        resource_url=endpoints.resource_url,
+    )
+    workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
+        workspace_id=opts.workspace_id,
+        dataset_id=opts.dataset_id,
+        access_token=token,
+        api_prefix=endpoints.api_prefix,
+    )
+    # Derive the XMLA scheme prefix from the REST API prefix.
+    # e.g. https://api.powerbi.com → powerbi://api.powerbi.com
+    xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
+    server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
+    return ResolvedXmlaConnection(
+        server=server,
+        catalog=dataset_name,
+        tenant_id=opts.tenant_id,
+        client_id=opts.client_id,
+        client_secret=opts.client_secret,
+        access_token=token,
+    )
 
 
 def resolve_service_xmla_connection_by_name(

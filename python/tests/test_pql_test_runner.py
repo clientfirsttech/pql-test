@@ -242,6 +242,27 @@ class TestFindPbipFile:
         result = _find_pbip_file(str(semantic_dir))
         assert result == str(pbip)
 
+    def test_matches_pbip_stem_when_multiple_pbips_share_parent(self, tmp_path):
+        """Flat layout with multiple PBIP models in one folder must pick the matching one.
+
+        Reproduces a real-world bug: ``examples/`` contains three .pbip files
+        side-by-side (SampleModel.pbip, RLS_Model.pbip, OLS_Model.pbip).  When
+        the caller passes ``examples/SampleModel.SemanticModel`` the function
+        previously returned ``examples/OLS_Model.pbip`` (first .pbip
+        alphabetically) and downstream code derived the wrong model_name for
+        Power BI Desktop matching.
+        """
+        for name in ("OLS_Model.pbip", "RLS_Model.pbip", "SampleModel.pbip"):
+            (tmp_path / name).write_text("{}")
+        for name in ("OLS_Model.SemanticModel", "RLS_Model.SemanticModel", "SampleModel.SemanticModel"):
+            (tmp_path / name).mkdir()
+
+        for stem in ("SampleModel", "RLS_Model", "OLS_Model"):
+            result = _find_pbip_file(str(tmp_path / f"{stem}.SemanticModel"))
+            assert result == str(tmp_path / f"{stem}.pbip"), (
+                f"For {stem}.SemanticModel expected {stem}.pbip, got {result}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # retrieve_tests
@@ -2291,3 +2312,75 @@ class TestResolveXmlaConnectionLocalRouting:
         assert all(r.skipped for r in suite.results), (
             "Expected all results to be skipped when the named model is not open"
         )
+
+class TestResolveXmlaConnectionServiceToLocalFallback:
+    """When the service path fails (bad creds, dead workspace, etc.) the
+    resolver must fall back to local Power BI Desktop detection instead of
+    silently returning None.  The silent-None used to make it look like the
+    CLI had "no connection" when actually a stale .env was poisoning the
+    service path.
+    """
+
+    def _service_opts(self) -> XmlaConnectionOptions:
+        return XmlaConnectionOptions(
+            tenant_id="t", workspace_id="w", dataset_id="d",
+            client_id="c", client_secret="s",
+            environment=Environment.PUBLIC,
+        )
+
+    def test_falls_back_to_local_when_service_auth_fails(self):
+        """Service path raising → local path is tried with the supplied model_path."""
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="SampleModel-GUID",
+        )
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                side_effect=RuntimeError("Failed to acquire access token: AADSTS7000215"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]),
+            patch("pql_test.runner._find_pbip_file", return_value=None),
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is not None, "expected local fallback connection"
+        assert conn.server == inst.server
+
+    def test_returns_none_when_both_service_and_local_fail(self):
+        """Service raises AND local has no PBI Desktop instance → None."""
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                side_effect=RuntimeError("Failed to acquire access token"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is None
+
+    def test_local_fallback_not_invoked_when_service_succeeds(self):
+        """Successful service path should NOT touch the local detection helpers."""
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                return_value="bearer-tok",
+            ),
+            patch(
+                "pql_test.runner._resolve_pbi_workspace_and_dataset_names",
+                return_value=("WS", "DS"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened") as get_pbi,
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is not None
+        assert conn.catalog == "DS"
+        assert conn.access_token == "bearer-tok"
+        get_pbi.assert_not_called()

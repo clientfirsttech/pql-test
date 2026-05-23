@@ -1,0 +1,49 @@
+{
+  "model_path": "C:\\Users\\giorg\\Downloads\\pql-test\\pql-test\\examples\\OLS_Model.SemanticModel",
+  "passed": 4,
+  "failed": 0,
+  "skipped": 0,
+  "total": 4,
+  "results": [
+    {
+      "test_name": "West: Admin Table should be hidden",
+      "expected": "Table 'Admin Table' should be HIDDEN from metadata",
+      "actual": "HIDDEN (OLS working)",
+      "passed": true,
+      "suite_name": "OLS_West.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 32.00000000651926
+    },
+    {
+      "test_name": "West: Hidden Column should be hidden",
+      "expected": "Column 'Hidden Column Table[Hidden Column]' should be HIDDEN from metadata",
+      "actual": "HIDDEN (OLS working)",
+      "passed": true,
+      "suite_name": "OLS_West.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 32.00000000651926
+    },
+    {
+      "test_name": "Admin: Table should be visible",
+      "expected": "Table 'Admin Table' should be VISIBLE in metadata",
+      "actual": "VISIBLE (correct)",
+      "passed": true,
+      "suite_name": "OLS_Admin.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 0.0
+    },
+    {
+      "test_name": "Admin: Hidden Column should be visible ",
+      "expected": "Column 'Hidden Column Table[Hidden Column]' should be VISIBLE in metadata",
+      "actual": "VISIBLE (correct)",
+      "passed": true,
+      "suite_name": "OLS_Admin.ANY.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 0.0
+    }
+  ]
+}

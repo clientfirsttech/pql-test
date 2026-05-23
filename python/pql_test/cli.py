@@ -827,7 +827,7 @@ def cmd_run_tests(
             if conn:
                 click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
             else:
-                from pql_test_runner import _find_pbip_file as _fpf
+                from pql_test.runner import _find_pbip_file as _fpf
                 from pathlib import Path as _Path
                 _pbip = _fpf(abs_path)
                 _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
