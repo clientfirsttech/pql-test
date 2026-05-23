@@ -681,10 +681,17 @@ class TestRunTestWithMockedXmla:
         assert captured[0].roles == "West"
         assert captured[0].effective_user_name is None
 
-    def test_impersonated_user_applied_as_effective_user_name_for_service_connection(self):
+    def test_role_name_preferred_over_effective_user_name_on_service_connection(self):
         """
-        Service connection + PqlTest.impersonated_user_name → EffectiveUserName=
-        in the connection string (AAD UPN works against XMLA endpoints).
+        Service connection + both annotations → Roles= wins.
+
+        Service principals categorically cannot use EffectiveUserName= against
+        the Power BI XMLA endpoint (Microsoft surfaces this as a misleading
+        "not a workspace administrator" error even when the SPN is an admin).
+        Roles= works because the SPN can be granted role membership in the
+        dataset.  When both PQLAssert_RoleName and PQLAssert_ImpersonatedUserName
+        annotations are present, the runner must pick the one that actually
+        works in CI.
         """
         test = PqlTest(
             name="RLS.ANY.Tests",
@@ -709,6 +716,37 @@ class TestRunTestWithMockedXmla:
             result = run_test(test, service_conn)
 
         assert result[0].passed is True
+        assert captured[0].roles == "West"
+        assert captured[0].effective_user_name is None
+
+    def test_effective_user_name_used_on_service_connection_when_role_name_absent(self):
+        """
+        Service connection + only impersonated_user_name (no role_name) →
+        EffectiveUserName= still used.  This preserves the workspace-admin
+        impersonation flow for tests that don't carry a role annotation.
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name=None,
+        )
+        rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
+        service_conn = ResolvedXmlaConnection(
+            server="powerbi://api.powerbi.com/v1.0/myorg/MyWorkspace",
+            catalog="RLS_Model",
+        )
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
+            run_test(test, service_conn)
+
         assert captured[0].effective_user_name == "west@contoso.com"
         assert captured[0].roles is None
 

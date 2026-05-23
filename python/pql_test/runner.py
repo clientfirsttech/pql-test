@@ -1446,15 +1446,25 @@ def run_test(
             )
         ]
 
-    # When the test declares RLS metadata (from RetrieveTestsV2), create a
-    # per-test connection that applies the correct impersonation:
-    #   • Local connections (localhost:…): use Roles=<role_name> — local AS
-    #     does not accept AAD UPNs for EffectiveUserName.
-    #   • Service connections (XMLA endpoint): use EffectiveUserName=<UPN>.
+    # When the test declares RLS/OLS metadata (from RetrieveTestsV2), create
+    # a per-test connection that applies the correct impersonation.
+    #
+    # Roles= is preferred over EffectiveUserName= whenever a role_name is
+    # available, regardless of whether the connection is local or service:
+    #   • Local AS doesn't accept AAD UPNs for EffectiveUserName.
+    #   • Service principals can NEVER use EffectiveUserName= against the
+    #     Power BI XMLA endpoint (Microsoft enforces this even for workspace
+    #     admins — the resulting error message misleadingly says "not a
+    #     workspace administrator").  Roles= works because the SPN can be
+    #     granted role membership in the dataset.
+    # EffectiveUserName= is still used as a fallback for service connections
+    # that only carry an impersonated_user_name annotation — that path
+    # requires the calling identity to be a real user that's a workspace
+    # admin (i.e. not a service principal).
     effective_connection = connection
     if connection:
         _is_local = connection.server.lower().startswith("localhost:")
-        if _is_local and test.role_name:
+        if test.role_name:
             effective_connection = _dc_replace(connection, roles=test.role_name)
         elif not _is_local and test.impersonated_user_name:
             effective_connection = _dc_replace(
