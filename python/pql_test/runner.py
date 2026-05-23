@@ -86,15 +86,25 @@ def _discover_adomd_search_dirs() -> list[str]:
     # NuGet-installed AdomdClient — CI uses this; also the fallback when PBI Desktop
     # is the MS Store version (which sandboxes its bin/ inside C:\Program Files\WindowsApps
     # and is not readable from outside its AppContainer).
+    #
+    # Two package ids are supported:
+    #   • Microsoft.AnalysisServices.AdomdClient (modern, actively maintained,
+    #     lib/net472 — required for Power BI XMLA with Roles= on RLS-filter
+    #     roles; older versions of the legacy package have a known bug there)
+    #   • Microsoft.AnalysisServices.AdomdClient.retail.amd64 (legacy,
+    #     lib/net45 — kept for backward compatibility with older installs)
     user_profile = os.environ.get("USERPROFILE", "")
     if user_profile:
-        nuget_glob = os.path.join(
-            user_profile, ".nuget", "packages",
-            "microsoft.analysisservices.adomdclient.retail.amd64",
-            "*", "lib", "net45",
-        )
-        # Newest version first
-        dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
+        for pkg_id, lib_dir in (
+            ("microsoft.analysisservices.adomdclient", "net472"),
+            ("microsoft.analysisservices.adomdclient.retail.amd64", "net45"),
+        ):
+            nuget_glob = os.path.join(
+                user_profile, ".nuget", "packages",
+                pkg_id, "*", "lib", lib_dir,
+            )
+            # Newest version first
+            dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
     return dirs
 
 
