@@ -156,8 +156,16 @@ jobs:
           pip install ./python
 
       # -----------------------------------------------------------------------
-      # Optional: install Microsoft.AnalysisServices.AdomdClient via NuGet
-      # so that pyadomd can find the native ADOMD.NET assemblies on the runner
+      # Install Microsoft.AnalysisServices.AdomdClient via NuGet so pyadomd
+      # can find the native ADOMD.NET assemblies on the runner.
+      #
+      # Version is pinned: older 19.84.x releases mishandle the combination
+      # of (bearer-token auth + `Roles=` + a role containing a row-filter
+      # expression), which caused the RLS_Model CI job to fail with
+      # "Either the database '<name>' does not exist..." even though the
+      # SPN had Admin on the workspace and the role's filter was valid.
+      # The fix is in 19.94+; we pin to a known-good version so the bug
+      # doesn't reappear when NuGet's "latest" pointer drifts.
       # -----------------------------------------------------------------------
       - name: Install ADOMD.NET client libraries
         shell: pwsh
@@ -167,6 +175,7 @@ jobs:
           # the NuGet provider on newer runner images.
           $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
           nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 `
+            -Version 19.94.1 `
             -OutputDirectory $outputDir `
             -NonInteractive
           if ($LASTEXITCODE -eq 0) {
