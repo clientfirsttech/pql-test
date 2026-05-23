@@ -1153,27 +1153,43 @@ def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
     """
     Build an ADOMD.NET connection string for the given resolved connection.
 
-    Auth priority:
+    The auth segment and the impersonation segment compose: e.g. a
+    service-principal bearer token MUST coexist with ``Roles=`` /
+    ``EffectiveUserName=`` so OLS/RLS rules are evaluated against the
+    impersonated identity in CI.  Earlier the function returned at the
+    first auth branch and silently dropped impersonation, which caused
+    ``PQL.Assert.OLS.*`` tests to report ``Actual: VISIBLE (OLS not working)``
+    against deployed datasets even when the test functions carried
+    ``PQLAssert_RoleName`` / ``PQLAssert_ImpersonatedUserName`` annotations.
+
+    Auth priority (highest to lowest):
       1. Bearer token (access_token) — preferred, acquired via MSAL.
       2. Service principal direct credentials (app:{clientId}@{tenantId}).
       3. Local / integrated auth — no extra parameters.
+
+    Impersonation priority when both are set:
+      1. Roles= (named role).  AS applies that role's rules directly.
+      2. EffectiveUserName= (AAD UPN).  AS applies whatever roles the
+         user is a member of.
     """
     catalog_part = f";Initial Catalog={conn.catalog}" if conn.catalog else ""
-    base = f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"
+    parts: list[str] = [f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"]
+
     if conn.access_token:
-        return base + f"Password={conn.access_token};"
-    if conn.client_id and conn.client_secret and conn.tenant_id:
-        return (
-            base
-            + f"User ID=app:{conn.client_id}@{conn.tenant_id};"
-            + f"Password={conn.client_secret};"
-            + "Integrated Security=ClaimsToken;"
+        parts.append(f"Password={conn.access_token};")
+    elif conn.client_id and conn.client_secret and conn.tenant_id:
+        parts.append(
+            f"User ID=app:{conn.client_id}@{conn.tenant_id};"
+            f"Password={conn.client_secret};"
+            "Integrated Security=ClaimsToken;"
         )
+
     if conn.roles:
-        return base + f"Roles={conn.roles};"
-    if conn.effective_user_name:
-        return base + f"EffectiveUserName={conn.effective_user_name};"
-    return base
+        parts.append(f"Roles={conn.roles};")
+    elif conn.effective_user_name:
+        parts.append(f"EffectiveUserName={conn.effective_user_name};")
+
+    return "".join(parts)
 
 
 def _get_col(row: dict[str, object], key: str) -> str:

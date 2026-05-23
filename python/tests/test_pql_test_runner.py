@@ -805,8 +805,8 @@ class TestBuildConnectionStringEffectiveUserName:
         cs = _build_connection_string(conn)
         assert "EffectiveUserName" not in cs
 
-    def test_effective_user_name_not_added_when_token_auth(self):
-        """Bearer token auth takes priority; EffectiveUserName is not added."""
+    def test_effective_user_name_composes_with_token_auth(self):
+        """Bearer token auth and EffectiveUserName must coexist so AS impersonates the user."""
         from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="powerbi://api.powerbi.com/v1.0/myorg/WS",
@@ -815,7 +815,7 @@ class TestBuildConnectionStringEffectiveUserName:
             effective_user_name="west@contoso.com",
         )
         cs = _build_connection_string(conn)
-        assert "EffectiveUserName" not in cs
+        assert "EffectiveUserName=west@contoso.com;" in cs
         assert "Password=tok123;" in cs
 
     def test_roles_appended_to_connection_string(self):
@@ -843,8 +843,8 @@ class TestBuildConnectionStringEffectiveUserName:
         assert "Roles=West;" in cs
         assert "EffectiveUserName" not in cs
 
-    def test_roles_not_added_when_token_auth(self):
-        """Bearer token auth takes priority; Roles= is not added."""
+    def test_roles_composes_with_token_auth(self):
+        """Bearer token auth and Roles= must coexist so AS applies the role's rules."""
         from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
@@ -853,7 +853,7 @@ class TestBuildConnectionStringEffectiveUserName:
             roles="West",
         )
         cs = _build_connection_string(conn)
-        assert "Roles" not in cs
+        assert "Roles=West;" in cs
         assert "Password=tok123;" in cs
 
 
