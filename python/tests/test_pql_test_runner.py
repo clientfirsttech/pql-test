@@ -1914,8 +1914,10 @@ class TestRetrieveTestsViaDax:
                 "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
             }
         ]
+        # Local file stem must match the live name so the model-ownership
+        # filter keeps it (see _discover_local_test_names).
         model_dir = tmp_model(
-            [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
+            [{"suite_name": "Calcs.DEV", "source": make_dax_source("Calcs.DEV.Tests")}]
         )
         conn = MagicMock()
         with patch("pql_test.runner._execute_dax_query", return_value=rows):

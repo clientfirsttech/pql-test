@@ -442,6 +442,44 @@ def _parse_dax_test_file(file_path: str) -> PqlTest:
     return PqlTest(name=name, file_path=file_path, source=source, description=description)
 
 
+_LOCAL_TEST_FUNCTION_RE = re.compile(
+    r"function\s+'([^']+\.(?:Test|Tests))'\s*=", re.IGNORECASE | re.MULTILINE
+)
+
+
+def _discover_local_test_names(model_path: str) -> set[str]:
+    """Return the set of test names declared locally in *model_path*.
+
+    A name is "local" if it appears either as a
+    ``function '<Name>.Test(s)' = ...`` declaration in
+    ``definition/functions.tmdl`` or as the stem of a
+    ``DAXQueries/<Name>.Tests.dax`` file.
+
+    Returns an empty set when the path is not a recognisable PBIP model
+    directory (``local/<name>`` or Fabric ``workspace.semantic_model``).
+    Callers MUST treat an empty set as "no local ownership information"
+    — i.e. do not filter live discovery in that case.
+    """
+    names: set[str] = set()
+    semantic_model_dir = _find_semantic_model_dir(model_path)
+    if not semantic_model_dir:
+        return names
+
+    for f in _collect_dax_test_files(semantic_model_dir):
+        names.add(Path(f).stem)
+
+    functions_tmdl = Path(semantic_model_dir) / "definition" / "functions.tmdl"
+    if functions_tmdl.is_file():
+        try:
+            text = functions_tmdl.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        for match in _LOCAL_TEST_FUNCTION_RE.finditer(text):
+            names.add(match.group(1))
+
+    return names
+
+
 # ---------------------------------------------------------------------------
 # Local Power BI Desktop detection — process-based (mirrors Invoke-DQVTesting)
 # ---------------------------------------------------------------------------
@@ -1300,6 +1338,34 @@ def retrieve_tests(
     if connection is not None:
         live = _retrieve_tests_via_dax(connection)
         if live is not None:  # None means both queries failed
+            local_names = _discover_local_test_names(model_path)
+            if local_names:
+                # Local repo is the source of truth for "this model owns these
+                # tests".  Anything RetrieveTestsV2() returns that isn't declared
+                # locally (in definition/functions.tmdl or DAXQueries/) is
+                # cross-model contamination on the deployed dataset and is
+                # filtered out.  Drift is warned in both directions but is not
+                # fatal — the user can reconcile later.
+                live_names = {t.name for t in live}
+                extras_on_server = sorted(live_names - local_names)
+                missing_on_server = sorted(local_names - live_names)
+                if extras_on_server:
+                    print(
+                        "Warning: deployed dataset contains "
+                        f"{len(extras_on_server)} test function(s) not declared "
+                        f"locally — skipping: {', '.join(extras_on_server)}",
+                        file=sys.stderr,
+                    )
+                if missing_on_server:
+                    print(
+                        "Warning: "
+                        f"{len(missing_on_server)} local test function(s) "
+                        "are not registered in the deployed dataset — "
+                        f"deployment may be out of date: "
+                        f"{', '.join(missing_on_server)}",
+                        file=sys.stderr,
+                    )
+                return [t for t in live if t.name in local_names]
             return live
 
     # Offline fallback: scan DAXQueries/ folder for *.Tests.dax files
