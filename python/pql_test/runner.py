@@ -74,25 +74,23 @@ _AdomdConnection = None  # set to AdomdConnection class after successful load
 
 def _discover_adomd_search_dirs() -> list[str]:
     import glob
-    dirs = [
-        # Power BI Desktop installer version (.exe download from powerbi.microsoft.com)
-        r"C:\Program Files\Microsoft Power BI Desktop\bin",
-        r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
-        # Standalone ADOMD.NET client (various versions)
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
-    ]
-    # NuGet-installed AdomdClient — CI uses this; also the fallback when PBI Desktop
-    # is the MS Store version (which sandboxes its bin/ inside C:\Program Files\WindowsApps
-    # and is not readable from outside its AppContainer).
-    #
-    # Two package ids are supported:
-    #   • Microsoft.AnalysisServices.AdomdClient (modern, actively maintained,
-    #     lib/net472 — required for Power BI XMLA with Roles= on RLS-filter
-    #     roles; older versions of the legacy package have a known bug there)
+
+    # ORDER MATTERS: pythonnet's clr.AddReference resolves by name against
+    # whatever's first on sys.path.  We put NuGet ahead of system-wide
+    # Microsoft.NET\ADOMD.NET paths because GitHub windows-latest runners
+    # ship with an old AS client under C:\Program Files\Microsoft.NET\
+    # ADOMD.NET\160 that mishandles bearer-token + Roles= + RLS-filter
+    # roles (causes "Either the database '<name>' does not exist..." even
+    # when the SPN is a workspace admin).  The actively-maintained NuGet
+    # package fixes the bug.
+    dirs: list[str] = []
+
+    # 1. NuGet-installed AdomdClient — preferred.  Two package ids supported:
+    #   • Microsoft.AnalysisServices.AdomdClient (modern, actively
+    #     maintained, lib/net472 — required for the bearer + Roles= +
+    #     RLS-filter combination)
     #   • Microsoft.AnalysisServices.AdomdClient.retail.amd64 (legacy,
-    #     lib/net45 — kept for backward compatibility with older installs)
+    #     lib/net45 — capped at 19.84.1, contains the RLS bug)
     user_profile = os.environ.get("USERPROFILE", "")
     if user_profile:
         for pkg_id, lib_dir in (
@@ -105,6 +103,22 @@ def _discover_adomd_search_dirs() -> list[str]:
             )
             # Newest version first
             dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
+
+    # 2. Power BI Desktop installer version (.exe download).  Its bundled
+    #    DLL is typically newer than the standalone ADOMD.NET releases.
+    dirs.extend([
+        r"C:\Program Files\Microsoft Power BI Desktop\bin",
+        r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
+    ])
+
+    # 3. Last resort: standalone Microsoft.NET ADOMD client paths.  Older
+    #    builds here are the source of the CI RLS bug — keep them at the
+    #    end so they're only used when nothing better is on the box.
+    dirs.extend([
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
+        r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
+    ])
     return dirs
 
 
@@ -129,6 +143,21 @@ try:
             continue
     from Microsoft.AnalysisServices.AdomdClient import AdomdConnection as _AdomdConnection  # type: ignore[import]
     HAS_PYADOMD = True
+
+    # One-line diagnostic so CI logs (and any local debugging) show exactly
+    # which ADOMD.NET assembly pythonnet resolved — this caught a CI bug
+    # where the older AS-shipped client on the runner shadowed our NuGet
+    # install and triggered the bearer + Roles + RLS-filter failure.
+    try:
+        from System.Reflection import Assembly as _Assembly  # type: ignore[import]
+        _asm = _Assembly.GetAssembly(_AdomdConnection)
+        if _asm is not None:
+            print(
+                f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
+                file=sys.stderr,
+            )
+    except Exception:
+        pass
 except Exception:
     pass
 
