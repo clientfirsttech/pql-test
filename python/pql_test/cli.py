@@ -910,7 +910,16 @@ def cmd_run_tests(
         out_path.write_text(json.dumps(_suite_to_dict(suite), indent=2), encoding="utf-8")
         click.echo(f"\nJSON results written to: {output}")
 
-    sys.exit(1 if suite.failed > 0 else 0)
+    # Exit non-zero on hard test failures OR when tests were discovered but
+    # none actually ran (every result was skipped because no XMLA connection
+    # could be established).  The latter catches CI misconfigurations like a
+    # matrix entry whose `.SemanticModel` directory has no matching deployed
+    # dataset — without this guard the workflow silently reports the job as
+    # passing.  Empty models (zero tests discovered) are still exit 0; that
+    # is a legitimate "nothing to do" outcome, not a failure.
+    has_failures = suite.failed > 0
+    all_skipped = suite.total > 0 and suite.skipped == suite.total
+    sys.exit(1 if has_failures or all_skipped else 0)
 
 
 # ---------------------------------------------------------------------------
