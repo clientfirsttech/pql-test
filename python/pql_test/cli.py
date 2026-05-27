@@ -1082,16 +1082,14 @@ def cmd_auth_login(
             click.echo()
             click.echo("  1. Interactive with a web browser (recommended)")
             click.echo("  2. Service principal with secret")
-            click.echo("  3. Service principal with certificate")
-            click.echo("  4. Managed identity")
             click.echo()
-            
+
             choice = click.prompt(
                 "Select authentication method",
-                type=click.IntRange(1, 4),
+                type=click.IntRange(1, 2),
                 default=1,
             )
-            
+
             if choice == 1:
                 # Interactive browser - no tenant ID needed.  client_id is
                 # left at None so the factory uses the bundled pql-test
@@ -1103,13 +1101,13 @@ def cmd_auth_login(
                     account_name="Interactive User",
                 )
                 click.echo("\nLaunching browser for interactive authentication...")
-            
-            elif choice == 2:
+
+            else:  # choice == 2
                 # Service principal with secret
                 tenant_id = click.prompt("Azure AD tenant ID", type=str)
                 client_id = click.prompt("Client ID", type=str)
                 client_secret = click.prompt("Client secret", hide_input=True)
-                
+
                 config = CredentialConfig(
                     method=AuthMethod.SERVICE_PRINCIPAL_SECRET,
                     client_id=client_id,
@@ -1119,54 +1117,6 @@ def cmd_auth_login(
                     account_name=f"SP {client_id}",
                 )
                 click.echo("\nAuthenticating with service principal...")
-            
-            elif choice == 3:
-                # Service principal with certificate
-                tenant_id = click.prompt("Azure AD tenant ID", type=str)
-                client_id = click.prompt("Client ID", type=str)
-                cert_path = click.prompt("Certificate path", type=str)
-                cert_password = click.prompt(
-                    "Certificate password (optional, press Enter to skip)",
-                    default="",
-                    hide_input=True,
-                    show_default=False,
-                )
-                
-                config = CredentialConfig(
-                    method=AuthMethod.SERVICE_PRINCIPAL_CERT,
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    certificate_path=cert_path,
-                    certificate_password=cert_password if cert_password else None,
-                    environment=environment,
-                    account_name=f"SP {client_id}",
-                )
-                click.echo("\nAuthenticating with certificate...")
-            
-            else:  # choice == 4
-                # Managed identity
-                use_user_assigned = click.confirm(
-                    "Use user-assigned managed identity? (no = system-assigned)",
-                    default=False,
-                )
-                
-                if use_user_assigned:
-                    client_id = click.prompt("Client ID for user-assigned MI", type=str)
-                    config = CredentialConfig(
-                        method=AuthMethod.MANAGED_IDENTITY,
-                        client_id=client_id,
-                        use_system_assigned_identity=False,
-                        environment=environment,
-                        account_name="Managed Identity (User-Assigned)",
-                    )
-                else:
-                    config = CredentialConfig(
-                        method=AuthMethod.MANAGED_IDENTITY,
-                        use_system_assigned_identity=True,
-                        environment=environment,
-                        account_name="Managed Identity (System-Assigned)",
-                    )
-                click.echo("\nAuthenticating with managed identity...")
         else:
             # Partial flags provided but not enough for SPN-secret — interactive.
             # Interactive browser login — no tenant ID needed (Azure Identity

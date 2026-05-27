@@ -25,5 +25,30 @@ venv/
 .pql-test/
 **/cache.abf
 **/localSettings.json
-**/.env
 examples/OLS_Model.SemanticModel/definition/functions.tmdl
+
+# Credentials / dotenv variants
+# The canonical .env pattern (any directory) plus common rename variants
+# people use to "hide" a .env from this rule (renamedenv, env.local,
+# .env.local, .env.production, etc.).  Templates with a .example suffix
+# are explicitly preserved below.
+**/.env
+**/.env.*
+**/env
+**/env.*
+**/*env.local
+**/*env.production
+**/*env.staging
+renamedenv
+# Allow public-safe templates back in
+!**/.env.example
+!**/env.example
+!**/*.env.template
+
+# Private keys / cert material
+*.pem
+*.p12
+*.pfx
+*.key
+**/id_rsa
+**/id_ed25519
