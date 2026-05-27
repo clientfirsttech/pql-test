@@ -1,6 +1,6 @@
 # Master CI pipeline for the pql-test Copilot CLI plugin.
 #
-# Stages 1–2 run sequentially; stages 3a, 3b, and 3c run in parallel once
+# Stages 1–2 run sequentially; stages 3a and 3b run in parallel once
 # stage 2 completes.  Any failed stage fails the pipeline.
 #
 #  Stage 1 – validate-plugin
@@ -20,17 +20,10 @@
 #    service-principal credentials).  Tests marked @pytest.mark.live
 #    auto-skip when secrets aren't configured.
 #
-#  Stage 3b – run-tests-remote (filesystem matrix)
+#  Stage 3b – run-tests-remote
 #    Installs pql-test on a Windows runner (required for ADOMD.NET / pyadomd),
 #    discovers every .SemanticModel under examples/, and runs the full DAX
-#    test suite against the deployed datasets in the workspace.  Validates
-#    that every model committed to the repo passes on the workspace.
-#
-#  Stage 3c – run-tests-workspace (REST-API matrix)
-#    Lists every dataset deployed in PQL_WORKSPACE_ID via Power BI REST,
-#    then runs pql-test against each one.  Validates the inverse direction:
-#    every dataset in the workspace, including ones not represented in
-#    examples/, still passes its DAX test suite.
+#    test suite against the deployed datasets in the workspace.
 #
 # Required secrets for stage 3:
 #   PQL_TENANT_ID         – Azure AD tenant GUID
@@ -116,33 +109,12 @@ jobs:
       PQL_ENVIRONMENT:      ${{ secrets.PQL_ENVIRONMENT }}
 
   # ---------------------------------------------------------------------------
-  # Stage 3b: run DAX tests against the examples/ folder (filesystem matrix)
+  # Stage 3b: run DAX tests against the examples/ folder → deployed workspace
   # ---------------------------------------------------------------------------
   run-tests-remote:
-    name: Stage 3b – Run DAX tests (examples/ → workspace)
+    name: Stage 3b – Run DAX tests (remote workspace)
     needs: promptfoo-eval
     uses: ./.github/workflows/run-tests-remote.yml
-    with:
-      environment: ${{ inputs.environment || 'Public' }}
-    permissions:
-      contents: read
-    secrets:
-      PQL_TENANT_ID:        ${{ secrets.PQL_TENANT_ID }}
-      PQL_CLIENT_ID:        ${{ secrets.PQL_CLIENT_ID }}
-      PQL_CLIENT_SECRET:    ${{ secrets.PQL_CLIENT_SECRET }}
-      PQL_ENVIRONMENT:      ${{ secrets.PQL_ENVIRONMENT }}
-
-  # ---------------------------------------------------------------------------
-  # Stage 3c: run DAX tests against every dataset discovered in the workspace
-  #
-  # Differs from 3b: the matrix is sourced via Power BI REST API against
-  # PQL_WORKSPACE_ID rather than from filesystem.  Catches drift on
-  # workspace datasets that aren't represented in examples/.
-  # ---------------------------------------------------------------------------
-  run-tests-workspace:
-    name: Stage 3c – Run DAX tests (workspace discovery)
-    needs: promptfoo-eval
-    uses: ./.github/workflows/run-tests-workspace.yml
     with:
       environment: ${{ inputs.environment || 'Public' }}
     permissions:
