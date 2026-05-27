@@ -10,19 +10,22 @@ Invoke-DQVTesting pattern.  Service principal authentication is supported via
 MSAL, enabling row-level security calls from build agents.
 
 Model path formats:
+  - <workspace>.Workspace/<model>.SemanticModel
+                                Canonical Fabric service path — connect to
+                                a remote workspace by display names.
   - <filesystem_path>           Traditional PBIP root directory.
   - local/<model_name>          Connect to a locally-open Power BI
                                 Desktop instance by model name.
-  - <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                a remote workspace by display names.
+  - <workspace>.<model>         Legacy dot notation (deprecated — still
+                                accepted, emits a one-line warning).
 
 Connection resolution:
   - When --tenant-id, --workspace-id, and --dataset-id are all provided (or
     set via PQL_* environment variables) the CLI connects to the remote
     Power BI Premium / Fabric XMLA endpoint using a service-principal
     bearer token acquired from Azure AD via MSAL.
-  - When using workspace.model Fabric CLI dot notation, the CLI connects
-    directly using workspace and model display names without GUIDs.
+  - When using the Fabric-style service path, the CLI connects directly
+    using workspace and model display names without GUIDs.
   - Otherwise the CLI auto-detects a locally-open Power BI Desktop instance
     using the local Analysis Services port file.
 
@@ -68,7 +71,6 @@ from pql_test.runner import (
     XmlaConnectionOptions,
     get_pbi_files_opened,
     parse_model_identifier,
-    resolve_local_xmla_connection,
     resolve_local_xmla_connection_by_name,
     resolve_service_xmla_connection_by_name,
     resolve_xmla_connection,
@@ -129,7 +131,7 @@ def _check_prereqs() -> list[dict]:
             "detail": (
                 "psutil available"
                 if HAS_PSUTIL
-                else "Not installed — pip install psutil  (optional, required for --local)"
+                else "Not installed — pip install psutil  (optional, required for local/<name> discovery)"
             ),
         }
     )
@@ -465,22 +467,12 @@ def cmd_check_prereqs() -> None:
 )
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="With --human: show file paths and connection info.")
-@click.option(
-    "--local",
-    "local_mode",
-    is_flag=True,
-    help=(
-        "Detect and connect to a locally open Power BI Desktop instance "
-        "to query PQL.Assert.RetrieveTestsV2 / RetrieveTests for live discovery."
-    ),
-)
 @conn_options
 def cmd_retrieve_tests(
     model_path: str,
     test_name: str | None,
     human: bool,
     verbose: bool,
-    local_mode: bool,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
@@ -493,27 +485,30 @@ def cmd_retrieve_tests(
     Outputs a JSON array by default. Use --human for formatted text.
 
     By default, test suites are discovered by scanning the SemanticModel's
-    DAXQueries/ folder for *.Tests.dax files.  When --local (or XMLA options)
-    are supplied the live model is queried instead via
-    PQL.Assert.RetrieveTestsV2() (falling back to PQL.Assert.RetrieveTests()),
-    which returns ALL test functions registered in the model including those
-    defined directly in functions.tmdl.
+    DAXQueries/ folder for *.Tests.dax files.  When XMLA options or the
+    local/<model_name> identifier are supplied the live model is queried
+    instead via PQL.Assert.RetrieveTestsV2() (falling back to
+    PQL.Assert.RetrieveTests()), which returns ALL test functions registered
+    in the model including those defined directly in functions.tmdl.
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+      <workspace>.<model>         Legacy dot notation (deprecated — still
+                                  accepted, emits a one-line warning).
 
     \b
     Examples:
       pql-test retrieve-tests ../examples
       pql-test retrieve-tests local/SampleModel
-      pql-test retrieve-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
-      pql-test retrieve-tests ../examples/SampleModel.SemanticModel --local
+      pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
+      pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
@@ -533,7 +528,8 @@ def cmd_retrieve_tests(
         abs_path = f"local/{ident.model_name}"
 
     elif ident.kind == "service":
-        # workspace.semanticmodel — Fabric CLI dot notation
+        # Fabric service path (canonical .Workspace/.SemanticModel form
+        # or legacy <workspace>.<model> dot notation)
         conn = resolve_service_xmla_connection_by_name(
             ident.workspace_name, ident.model_name, opts,
         )
@@ -560,16 +556,12 @@ def cmd_retrieve_tests(
             if _sem_name.endswith(".SemanticModel"):
                 opts.dataset_name = _sem_name[: -len(".SemanticModel")]
 
-        if local_mode:
-            conn = resolve_local_xmla_connection(abs_path)
-            if conn is None:
-                click.echo(
-                    "Warning: --local specified but no matching Power BI Desktop instance found. "
-                    "Falling back to file-based discovery.",
-                    err=True,
-                )
-        elif any([tenant_id, workspace_id, dataset_id]):
-            conn = resolve_xmla_connection(abs_path, opts)
+        # Always attempt connection resolution so local Power BI Desktop is
+        # auto-detected even when no flags are supplied — matches cmd_run_tests
+        # behavior and the README's "Local Power BI Desktop (auto-detected)"
+        # section.  Returns None when nothing is available, in which case the
+        # caller falls back to the offline DAXQueries/ file scan.
+        conn = resolve_xmla_connection(abs_path, opts)
 
     if test_name:
         test = retrieve_test_by_name(abs_path, test_name, connection=conn)
@@ -623,14 +615,17 @@ def cmd_retrieve_test(
 
     Outputs a JSON object by default. Use --human for formatted text.
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+      <workspace>.<model>         Legacy dot notation (deprecated — still
+                                  accepted, emits a one-line warning).
     """
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
@@ -709,16 +704,6 @@ def cmd_retrieve_test(
         "github: ::group::/::error::/::notice:: commands."
     ),
 )
-@click.option(
-    "--local",
-    "local_mode",
-    is_flag=True,
-    help=(
-        "Detect and connect to a locally open Power BI Desktop instance, "
-        "mirroring Invoke-DQVTesting -Local. "
-        "Model must be open in Power BI Desktop before running."
-    ),
-)
 @conn_options
 def cmd_run_tests(
     model_path: str,
@@ -726,7 +711,6 @@ def cmd_run_tests(
     verbose: bool,
     output: str | None,
     log_format: str | None,
-    local_mode: bool,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
@@ -741,22 +725,26 @@ def cmd_run_tests(
     Use --log-format to emit CI-native annotations for Azure DevOps or
     GitHub Actions pipelines.
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+      <workspace>.<model>         Legacy dot notation (deprecated — still
+                                  accepted, emits a one-line warning).
 
     \b
     Examples:
       pql-test run-tests ../examples
       pql-test run-tests local/SampleModel
-      pql-test run-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
-      pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
+      pql-test run-tests local/SampleModel --log-format github
     """
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
@@ -797,7 +785,8 @@ def cmd_run_tests(
             )
 
     elif ident.kind == "service":
-        # workspace.semanticmodel — Fabric CLI dot notation
+        # Fabric service path (canonical .Workspace/.SemanticModel form
+        # or legacy <workspace>.<model> dot notation)
         conn = resolve_service_xmla_connection_by_name(
             ident.workspace_name, ident.model_name, opts,
         )
@@ -829,72 +818,36 @@ def cmd_run_tests(
             if _sem_name.endswith(".SemanticModel"):
                 opts.dataset_name = _sem_name[: -len(".SemanticModel")]
 
-        if local_mode:
-            if verbose:
-                try:
-                    instances = get_pbi_files_opened()
-                    if instances:
-                        click.echo("\nDetected Power BI Desktop instances:")
-                        for inst in instances:
-                            click.echo(f"  \u2022 {inst.model_name}  \u2192  {inst.server} / {inst.catalog}")
-                    else:
-                        click.echo("\nNo Power BI Desktop instances detected.")
-                except ImportError:
-                    click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
-
-            conn = resolve_local_xmla_connection(abs_path)
-            if conn:
-                click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
-            else:
-                from pql_test.runner import _find_pbip_file as _fpf
-                from pathlib import Path as _Path
-                _pbip = _fpf(abs_path)
-                _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
-                pre_warnings.append(
-                    "--local specified but no matching Power BI Desktop instance found. "
-                    "Make sure the model is open in Power BI Desktop."
-                )
-                click.echo(
-                    f"\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
-                    f"Looking for model: '{_searched_name}'\n"
-                    f"Make sure '{_searched_name}' is open in Power BI Desktop.\n"
-                    f"Tip: run with --verbose to see all detected instances.",
-                    err=True,
-                )
+        conn = resolve_xmla_connection(abs_path, opts)
+        if conn:
+            click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            conn = resolve_xmla_connection(abs_path, opts)
-            if conn:
-                click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
-            else:
-                pre_warnings.append(
-                    "No XMLA connection detected. Tests will be reported as skipped. "
-                    "Open the model in Power BI Desktop (--local) or supply "
-                    "--tenant-id, --workspace-id, --dataset-id."
-                )
-                click.echo(
-                    "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
-                    "Options:\n"
-                    "  \u2022 Open the model in Power BI Desktop and use --local\n"
-                    "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
-                    "    (and --client-id, --client-secret for service-principal auth)\n",
-                    err=True,
-                )
-
-    skip_message = (
-        f"No matching Power BI Desktop instance found for model '{ident.model_name or ''}'. "
-        "Make sure the model is open in Power BI Desktop."
-        if ident.kind == "local" and not conn
-        else (
-            "No matching Power BI Desktop instance found. "
-            "Make sure the model is open in Power BI Desktop."
-            if local_mode and not conn
-            else (
-                "No XMLA connection available. "
-                "Open the model in Power BI Desktop or supply "
-                "--tenant-id, --workspace-id, and --dataset-id."
+            pre_warnings.append(
+                "No XMLA connection detected. Tests will be reported as skipped. "
+                "Pass local/<model_name> to target an open Power BI Desktop instance, "
+                "or supply --tenant-id, --workspace-id, --dataset-id."
             )
+            click.echo(
+                "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
+                "Options:\n"
+                "  \u2022 Pass local/<model_name> with the model open in Power BI Desktop\n"
+                "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
+                "    (and --client-id, --client-secret for service-principal auth)\n",
+                err=True,
+            )
+
+    if ident.kind == "local" and not conn:
+        skip_message = (
+            f"No matching Power BI Desktop instance found for model "
+            f"'{ident.model_name or ''}'. "
+            "Make sure the model is open in Power BI Desktop."
         )
-    )
+    else:
+        skip_message = (
+            "No XMLA connection available. "
+            "Pass local/<model_name> with the model open in Power BI Desktop, "
+            "or supply --tenant-id, --workspace-id, and --dataset-id."
+        )
 
     suite = run_tests_from_model(abs_path, test_name, opts, connection=conn, skip_message=skip_message)
 
@@ -1091,7 +1044,9 @@ def cmd_auth_login(
             )
             
             if choice == 1:
-                # Interactive browser - no tenant ID needed
+                # Interactive browser - no tenant ID needed.  client_id is
+                # left at None so the factory uses the bundled pql-test
+                # multi-tenant app id (see auth/factory.py).
                 config = CredentialConfig(
                     method=AuthMethod.INTERACTIVE,
                     tenant_id=None,  # Let Azure Identity discover from login
@@ -1164,11 +1119,15 @@ def cmd_auth_login(
                     )
                 click.echo("\nAuthenticating with managed identity...")
         else:
-            # Partial flags provided but not enough - default to interactive
-            # Interactive browser login - no tenant ID needed
+            # Partial flags provided but not enough for SPN-secret — interactive.
+            # Preserve any --tenant-id and --client-id the user passed so they
+            # can sign in with a specific tenant / custom AAD app (their own
+            # registered pql-test equivalent).  When --client-id is omitted the
+            # factory falls back to the bundled multi-tenant default.
             config = CredentialConfig(
                 method=AuthMethod.INTERACTIVE,
-                tenant_id=None,  # Let Azure Identity discover from login
+                tenant_id=tenant_id,
+                client_id=user_or_client,
                 environment=environment,
                 account_name="Interactive User",
             )

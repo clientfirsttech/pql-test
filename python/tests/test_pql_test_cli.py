@@ -341,84 +341,82 @@ class TestRunTests:
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
     # ------------------------------------------------------------------
-    # --local flag tests (mirrors Pester '-Tag "Local"' tests)
+    # local/<name> model-path syntax replaces the removed --local flag
+    # (see tasks/remove-local-cli-flag-epic.md).
     # ------------------------------------------------------------------
 
-    def test_local_flag_is_accepted_by_parser(self, tmp_path):
-        """
-        Mirrors Pester 'Should run tests locally': --local is a valid flag.
-        Ensures no 'Error: No such option' parse error.
-        """
+    def test_local_flag_is_rejected(self, tmp_path):
+        """Given --local is passed, the CLI should reject it as unknown."""
         dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
         dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        stdout, stderr, code = run_cli(["run-tests", str(tmp_path), "--local"])
+        combined = stdout + stderr
+        assert "No such option" in combined
+        assert code != 0
+
+    def test_retrieve_tests_local_flag_is_rejected(self, tmp_path):
+        """Given --local is passed to retrieve-tests, also reject."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, code = run_cli(["retrieve-tests", str(tmp_path), "--local"])
+        combined = stdout + stderr
+        assert "No such option" in combined
+        assert code != 0
+
+    def test_local_identifier_is_accepted_by_parser(self):
+        """`local/<name>` is a valid MODEL_PATH (no parse error)."""
+        stdout, stderr, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "No such option" not in stderr
         assert "No such option" not in stdout
 
-    def test_local_flag_does_not_require_remote_connection_flags(self, tmp_path):
-        """
-        Mirrors Pester 'Should throw error is missing tenant id when not local':
-        with --local, no --tenant-id / --workspace-id are needed.
-        The CLI must not reject the invocation for missing connection options.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        _, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+    def test_local_identifier_does_not_require_remote_connection_flags(self):
+        """`local/<name>` works without --tenant-id / --workspace-id."""
+        _, stderr, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "Missing option" not in stderr
 
-    def test_local_flag_shows_warning_when_no_pbi_desktop_open(self, tmp_path):
-        """
-        Mirrors Pester 'Should warn about no test because path does not have tests
-        for currently opened file': when --local is used but no model is open,
-        a warning is printed (warnings.Length > 0 equivalent).
-        """
-        (tmp_path / "SampleModel.pbip").write_text("{}")
-        dax_dir = tmp_path / "SampleModel.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
-        combined = stdout + stderr
-        # Either "no matching" or "not found" or "no power bi desktop" or similar
+    def test_local_identifier_shows_warning_when_no_pbi_desktop_open(self):
+        """When local/<name> is used but no matching PBI Desktop is open,
+        a warning is printed.  Skipped on dev machines where any PBI Desktop
+        instance is running, because resolve_local_xmla_connection_by_name
+        has a permissive single-unnamed-instance fallback that would connect
+        anyway and produce no warning."""
+        try:
+            from pql_test.runner import get_pbi_files_opened  # type: ignore
+            if get_pbi_files_opened():
+                pytest.skip("PBI Desktop instance(s) detected; test only meaningful in CI")
+        except ImportError:
+            pass  # psutil not installed → no detection → warning path will fire
+        stdout, stderr, _ = run_cli(["run-tests", "local/DefinitelyNotOpen"])
+        combined = (stdout + stderr).lower()
         assert any(
-            phrase in combined.lower()
+            phrase in combined
             for phrase in ("no matching", "not found", "no power bi", "warning")
         )
 
-    def test_local_flag_shows_summary_line(self, tmp_path):
-        """
-        Mirrors Pester 'Should run tests locally' output format check:
-        even with --local, a summary line with passed/failed/total is printed.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+    def test_local_identifier_shows_summary_line(self):
+        """`local/<name>` still prints a passed/failed/total summary."""
+        stdout, _, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
-    def test_local_flag_with_verbose_does_not_crash(self, tmp_path):
-        """
-        Mirrors Pester 'Should run tests for a subset based on folder path':
-        --local --verbose is a valid combination and should not error.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local", "--verbose"])
+    def test_local_identifier_with_verbose_does_not_crash(self):
+        """`local/<name> --verbose` is a valid combination and should not error."""
+        stdout, stderr, _ = run_cli(["run-tests", "local/SomeModel", "--verbose"])
         assert "Error:" not in stderr or "not found" not in stderr
 
-    def test_local_flag_exits_0_for_empty_model(self, tmp_path):
-        """
-        Mirrors Pester: when no *.Tests.dax files exist the runner exits 0
-        (no failures — equivalent to $warnings check passing because there
-        are no test results to evaluate).
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        _, _, code = run_cli(["run-tests", str(tmp_path), "--local"])
-        assert code == 0
-
-    def test_run_tests_help_mentions_local_flag(self):
-        """Mirrors 'Module should exist': --local is documented in help text."""
+    def test_run_tests_help_does_not_mention_local_flag(self):
+        """Help text must no longer advertise --local."""
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
-        assert "--local" in stdout
+        assert "--local" not in stdout
+        # but local/<model_name> should still be documented as a path format
+        assert "local/<model_name>" in stdout
+
+    def test_retrieve_tests_help_does_not_mention_local_flag(self):
+        """retrieve-tests help text must no longer advertise --local."""
+        stdout, _, code = run_cli(["retrieve-tests", "--help"])
+        assert code == 0
+        assert "--local" not in stdout
+        assert "local/<model_name>" in stdout
 
 
 # ---------------------------------------------------------------------------
@@ -633,6 +631,47 @@ class TestModelIdentifierFormats:
         """local/<model_name> always shows a summary even without a connection."""
         stdout, _, _ = run_cli(["run-tests", "local/AnyModel"])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+    def test_retrieve_tests_resolves_xmla_for_filesystem_path(self, tmp_path, monkeypatch):
+        """retrieve-tests <path> must call resolve_xmla_connection so local PBI
+        Desktop auto-detection works the same way it does for run-tests.
+
+        Captures the parity requirement from
+        tasks/readme-drift-cleanup-epic.md.
+        """
+        from unittest.mock import MagicMock
+        from click.testing import CliRunner
+
+        # Import cli_module FIRST so its top-level dotenv.load_dotenv() runs
+        # (which would otherwise re-populate the env vars we're about to
+        # strip).  Only after the module is fully loaded do we delete the
+        # PQL_* vars from the process env, ensuring click sees an empty
+        # connection context.
+        from pql_test import cli as cli_module
+
+        for key in list(os.environ):
+            if key.startswith("PQL_"):
+                monkeypatch.delenv(key, raising=False)
+
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Sample.Tests.dax").write_text(
+            make_dax_source("Sample"), encoding="utf-8"
+        )
+
+        mock_resolve = MagicMock(return_value=None)
+        monkeypatch.setattr(cli_module, "resolve_xmla_connection", mock_resolve)
+
+        runner = CliRunner()
+        result = runner.invoke(cli_module.cli, ["retrieve-tests", str(tmp_path)])
+
+        assert mock_resolve.called, (
+            f"retrieve-tests with a filesystem path must call "
+            f"resolve_xmla_connection so local PBI Desktop is auto-detected, "
+            f"matching run-tests behavior. See "
+            f"tasks/readme-drift-cleanup-epic.md.\n"
+            f"exit_code={result.exit_code} output={result.output[:200]!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

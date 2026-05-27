@@ -275,19 +275,51 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
 
     1. Starts with ``local/`` **and** the path does not exist on the local
        filesystem → ``kind='local'``, *model_name* is the remainder.
-    2. Does **not** start with ``./``, ``/``, or ``\\``; contains at least
-       one ``.``; the value does not exist on the filesystem → ``kind='service'``,
-       split on the **last** dot into *workspace_name* and *model_name*.
-    3. Otherwise → ``kind='path'`` (traditional filesystem path).
+    2. Matches the canonical Fabric-style service path
+       ``<workspace>.Workspace/<model>.SemanticModel`` (forward- or
+       back-slash separator) and does not exist on the filesystem →
+       ``kind='service'``, suffixes are stripped from each part.
+    3. Contains at least one ``.``, does not look like a path, and does not
+       exist on the filesystem → legacy dot notation ``<workspace>.<model>``
+       → ``kind='service'``.  Emits a one-line deprecation warning on stderr.
+    4. Otherwise → ``kind='path'`` (traditional filesystem path).
     """
     # 1. local/<model_name>
     if model_path.startswith("local/") and not Path(model_path).exists():
         name = model_path[len("local/"):]
         return ModelIdentifier(kind="local", model_name=name, raw=model_path)
 
-    # 2. workspace.semanticmodel (Fabric CLI dot notation)
+    # 2. Canonical Fabric-style: <workspace>.Workspace/<model>.SemanticModel
+    # (or backslash form). Anchored on the suffixes so workspaces with dots
+    # in their names parse unambiguously.
+    if not Path(model_path).exists():
+        # Try both '/' and '\\' as separators — Fabric exports use '/', but
+        # users on Windows may type the path with '\\'.
+        for sep in ("/", "\\"):
+            if sep in model_path:
+                ws_part, _, model_part = model_path.partition(sep)
+                if (
+                    ws_part.endswith(".Workspace")
+                    and model_part.endswith(".SemanticModel")
+                ):
+                    ws = ws_part[: -len(".Workspace")]
+                    sm = model_part[: -len(".SemanticModel")]
+                    if ws and sm:
+                        return ModelIdentifier(
+                            kind="service",
+                            workspace_name=ws,
+                            model_name=sm,
+                            raw=model_path,
+                        )
+
+    # 3. Legacy <workspace>.<model> dot notation — deprecated but still
+    # supported.  Reject any path containing a separator: those are either
+    # filesystem paths (handled in step 4) or malformed Fabric-style paths
+    # that we don't want to silently coerce into a dot split.
     if (
         not model_path.startswith(("./", "/", "\\"))
+        and "/" not in model_path
+        and "\\" not in model_path
         and "." in model_path
         and not Path(model_path).exists()
     ):
@@ -295,6 +327,12 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
         ws = model_path[:dot_idx]
         sm = model_path[dot_idx + 1:]
         if ws and sm:
+            print(
+                f"Note: '<workspace>.<model>' dot notation is deprecated. "
+                f"Use the canonical Fabric form instead: "
+                f"'{ws}.Workspace/{sm}.SemanticModel'.",
+                file=sys.stderr,
+            )
             return ModelIdentifier(
                 kind="service",
                 workspace_name=ws,
@@ -302,7 +340,7 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
                 raw=model_path,
             )
 
-    # 3. Filesystem path (default)
+    # 4. Filesystem path (default)
     return ModelIdentifier(kind="path", raw=model_path)
 
 
@@ -374,6 +412,12 @@ class XmlaConnectionOptions:
     token via the MSAL service-principal (client-credentials) flow.
     This is the same authentication pattern used by Invoke-DQVTesting
     when running in CI/CD pipelines against cloud-hosted models.
+
+    access_token is an optional pre-acquired bearer token.  When set, the
+    downstream resolver skips MSAL and uses this token directly.  Populated
+    by ``_resolve_authentication_with_stored_credentials`` when a non-secret
+    stored credential (interactive, certificate, federated, managed identity)
+    is found — see tasks/unified-auth-runtime-epic.md.
     """
 
     tenant_id: Optional[str] = None
@@ -383,6 +427,7 @@ class XmlaConnectionOptions:
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     environment: Environment = Environment.PUBLIC
+    access_token: Optional[str] = None
 
 
 @dataclass
@@ -904,13 +949,22 @@ def _resolve_authentication_with_stored_credentials(
     Priority:
       1. CLI flags (opts.tenant_id, opts.client_id, opts.client_secret)
       2. Environment variables (PQL_TENANT_ID, PQL_CLIENT_ID, PQL_CLIENT_SECRET)
-      3. Stored credentials (from pql-test auth login)
+      3. Stored credentials (from ``pql-test auth login``)
 
-    Returns:
-        Updated XmlaConnectionOptions with credentials from stored config if needed
-        
-    Note: Only applies stored credentials when NO credentials are provided at all.
-          Partial credentials are left as-is to preserve validation behavior.
+    For stored credentials the behavior depends on the chosen auth method:
+
+    * ``SERVICE_PRINCIPAL_SECRET`` — the secret is forwarded as
+      ``client_secret`` so the downstream resolver runs MSAL's
+      client-credentials flow (legacy code path, preserved bit-for-bit).
+    * ``INTERACTIVE`` / ``SERVICE_PRINCIPAL_CERT`` /
+      ``SERVICE_PRINCIPAL_FEDERATED`` / ``MANAGED_IDENTITY`` — a bearer token
+      is acquired via ``AuthenticationManager.get_access_token`` (which uses
+      the appropriate ``azure-identity`` credential class under the hood) and
+      attached to ``opts.access_token``. The downstream resolver then hands
+      that bearer to ADOMD via the existing MSOLAP ``Password=<bearer>;``
+      connection-string segment.
+
+    See tasks/unified-auth-runtime-epic.md.
     """
     # If any credentials are already provided (even partial), return as-is
     # This preserves the existing validation behavior where partial credentials fail
@@ -944,26 +998,68 @@ def _resolve_authentication_with_stored_credentials(
         if not status.authenticated:
             return opts  # No stored credentials
 
-        # For service principal with secret, extract the credentials
         config = manager._store.load()
-        if config and config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
+        if config is None:
+            return opts
+
+        # SPN-with-secret: forward the secret so MSAL acquires the token
+        # downstream.  Keeps the legacy code path intact for the SPN happy
+        # path (env-based CI workflows).
+        if config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
             return XmlaConnectionOptions(
                 tenant_id=config.tenant_id or opts.tenant_id,
                 workspace_id=opts.workspace_id,
                 dataset_id=opts.dataset_id,
                 client_id=config.client_id or opts.client_id,
                 client_secret=config.client_secret or opts.client_secret,
-                environment=config.environment,
+                environment=opts.environment,
             )
 
-        # For other auth methods, we can't extract credentials
-        return opts
+        # INTERACTIVE: refuse to launch the browser in non-interactive
+        # environments (CI runners) where no one is there to complete the
+        # OAuth dance.  We warn + return opts unchanged so the caller can
+        # still fall back to local detection — and so generic runner-level
+        # callers don't crash just because the user happens to have stored
+        # interactive creds on their dev box.  CLI commands that NEED a
+        # service connection (e.g. ``run-tests workspace.model``) surface a
+        # dedicated error to the user; see cli.py.
+        if config.method == AuthMethod.INTERACTIVE:
+            import sys
+            in_ci = bool(os.getenv("CI"))
+            no_tty = not (hasattr(sys.stdin, "isatty") and sys.stdin.isatty())
+            if in_ci or no_tty:
+                print(
+                    "Warning: stored interactive credentials cannot be used in "
+                    "a non-interactive environment (no TTY or CI=true). "
+                    "Falling back to local detection. For CI, log in with "
+                    "`pql-test auth login` using a service principal or "
+                    "managed identity, or supply --tenant-id / --client-id / "
+                    "--client-secret flags.",
+                    file=sys.stderr,
+                )
+                return opts
+
+        # All other azure-identity-backed methods (interactive in a TTY,
+        # cert, federated, managed identity) — acquire a bearer via the
+        # manager and surface it on opts.access_token.
+        token = manager.get_access_token()
+        if not token:
+            return opts
+        return XmlaConnectionOptions(
+            tenant_id=config.tenant_id or opts.tenant_id,
+            workspace_id=opts.workspace_id,
+            dataset_id=opts.dataset_id,
+            client_id=config.client_id or opts.client_id,
+            client_secret=opts.client_secret,
+            environment=opts.environment,
+            access_token=token,
+        )
 
     except ImportError:
         # auth module not available
         return opts
     except Exception:
-        # Any error in loading stored credentials - return original opts
+        # Any other error in loading stored credentials - return original opts
         return opts
 
 
@@ -1040,13 +1136,20 @@ def _resolve_service_xmla_connection(
         storing dataset GUIDs as secrets.
     """
     endpoints = get_api_endpoints(opts.environment)
-    token = _acquire_service_principal_token(
-        opts.tenant_id,
-        opts.client_id,
-        opts.client_secret,
-        login_url=endpoints.login_url,
-        resource_url=endpoints.resource_url,
-    )
+
+    # If a bearer has already been acquired by the auth subsystem (interactive
+    # / cert / federated / managed identity flows), use it directly.  Only
+    # call MSAL when we genuinely have an SPN-secret triple.
+    if opts.access_token:
+        token = opts.access_token
+    else:
+        token = _acquire_service_principal_token(
+            opts.tenant_id,
+            opts.client_id,
+            opts.client_secret,
+            login_url=endpoints.login_url,
+            resource_url=endpoints.resource_url,
+        )
 
     if opts.dataset_id:
         workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
@@ -1095,23 +1198,36 @@ def resolve_service_xmla_connection_by_name(
     This mirrors the Fabric CLI ``fab run <workspace>.<semantic_model>`` flow
     where display names are supplied by the caller instead of GUIDs.
 
-    *tenant_id*, *client_id*, and *client_secret* must still be provided
-    inside *opts* for service-principal authentication.
+    Authentication is resolved from (in priority order): explicit *opts*
+    fields, ``PQL_*`` environment variables, or a stored credential from
+    ``pql-test auth login`` (any method — interactive, SPN-secret,
+    SPN-cert, federated, or managed identity).  When the stored method is
+    non-secret-based, the bearer token is acquired via ``azure-identity``
+    and surfaced on ``opts.access_token``; this function passes it through
+    to ADOMD via the existing MSOLAP ``Password=<bearer>;`` segment.
     """
-    # Try to resolve credentials from stored config if not provided
+    # Resolve credentials from CLI flags / env vars / stored config.
     opts = _resolve_authentication_with_stored_credentials(opts)
 
-    if not opts.tenant_id or not opts.client_id or not opts.client_secret:
+    endpoints = get_api_endpoints(opts.environment)
+
+    if opts.access_token:
+        # Pre-acquired bearer from a non-secret auth flow (interactive /
+        # cert / federated / managed identity).
+        token = opts.access_token
+    elif opts.tenant_id and opts.client_id and opts.client_secret:
+        # Legacy SPN-secret path — acquire via MSAL client-credentials.
+        token = _acquire_service_principal_token(
+            opts.tenant_id,
+            opts.client_id,
+            opts.client_secret,
+            login_url=endpoints.login_url,
+            resource_url=endpoints.resource_url,
+        )
+    else:
+        # No usable credentials.
         return None
 
-    endpoints = get_api_endpoints(opts.environment)
-    token = _acquire_service_principal_token(
-        opts.tenant_id,
-        opts.client_id,
-        opts.client_secret,
-        login_url=endpoints.login_url,
-        resource_url=endpoints.resource_url,
-    )
     xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
     server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
     return ResolvedXmlaConnection(
@@ -1711,8 +1827,8 @@ def run_tests_from_model(
     if conn_opts is None:
         conn_opts = XmlaConnectionOptions()
 
-    # Use a pre-resolved connection when supplied (e.g. from --local detection),
-    # otherwise resolve from conn_opts as normal.
+    # Use a pre-resolved connection when supplied (e.g. from local/<name>
+    # detection), otherwise resolve from conn_opts as normal.
     if connection is None:
         connection = resolve_xmla_connection(model_path, conn_opts)
 

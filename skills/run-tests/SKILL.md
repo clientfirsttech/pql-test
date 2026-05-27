@@ -18,7 +18,6 @@ Options:
 - `--output FILE` — Write full JSON results to FILE in addition to the human-readable output.
 - `--log-format github` — Emit GitHub Actions native log annotations (`::group::` / `::error::` / `::notice::`).
 - `--log-format azuredevops` — Emit Azure Pipelines logging commands (`##[group]` / `##[error]` / `##vso[task.complete]`).
-- `--local` — Detect and connect to a locally open Power BI Desktop instance (requires psutil).
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
@@ -34,7 +33,6 @@ Usage:
 pql-test run-tests ../examples/SampleModel
 pql-test run-tests local/SampleModel
 pql-test run-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
-pql-test run-tests ../examples/SampleModel.SemanticModel --local
 pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
 pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
 pql-test run-tests ../examples/SampleModel.SemanticModel --log-format azuredevops

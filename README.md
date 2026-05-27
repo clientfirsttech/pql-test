@@ -82,7 +82,7 @@ Microsoft Fabric workspace endpoint.
 | pythonnet | 3.x | `pip install pythonnet` — needed to load the ADOMD.NET assembly |
 | Power BI Desktop | any | Provides `Microsoft.PowerBI.AdomdClient.dll` used for local XMLA connections |
 | msal | 1.24+ | `pip install msal` — required for service-principal auth against remote workspaces |
-| psutil | any | `pip install psutil` — required for `--local` mode; optional otherwise |
+| psutil | any | `pip install psutil` — required for `local/<model_name>` discovery; optional otherwise |
 
 Run the built-in check to verify your environment:
 
@@ -214,20 +214,22 @@ python -m build           # produce new dist/pql_test-0.2.0-py3-none-any.whl
 ## Model Path Formats
 
 The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
-`run-tests` supports three formats:
+`run-tests` supports these formats:
 
 | Format | Mode | Description |
 |---|---|---|
-| `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
+| `<workspace>.Workspace/<model>.SemanticModel` | Service | **Canonical Fabric service path** — connect to a remote workspace by display names. Matches Fabric's own filesystem layout. |
 | `local/<model_name>` | Local | Connect to a locally-open Power BI Desktop instance by model name |
-| `<workspace>.<semantic_model>` | Service | Fabric CLI dot notation — connect to a remote workspace by display names |
+| `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
+| `<workspace>.<model>` | Service (deprecated) | Legacy dot notation — still works, but prints a one-line deprecation warning on stderr |
 
 ### Filesystem path (default)
 
 Pass the PBIP root directory, the `.SemanticModel` sub-folder, or the `.pbip`
 file directly. Tests are discovered by scanning `DAXQueries/` for `*.Tests.dax`
-files. When a live connection is available (`--local` or `--tenant-id`), tests
-are also queried from the model via `PQL.Assert.RetrieveTestsV2()`.
+files. When a live connection is available (`local/<model_name>` or
+`--tenant-id`), tests are also queried from the model via
+`PQL.Assert.RetrieveTestsV2()`.
 
 ```bash
 pql-test run-tests ./examples/SampleModel.SemanticModel
@@ -252,12 +254,20 @@ pql-test retrieve-tests local/SampleModel
 pql-test run-tests local/SampleModel
 ```
 
-### Fabric CLI dot notation (`workspace.semanticmodel`)
+### Fabric service path (`<workspace>.Workspace/<model>.SemanticModel`)
 
-Use `<workspace>.<semantic_model>` to connect to a remote Power BI Premium /
-Microsoft Fabric workspace using display names, following the Fabric CLI
-convention (similar to `fab run`). This bypasses the GUID-based REST API
-resolution and builds the XMLA connection directly from the names provided.
+The canonical service-path syntax mirrors Fabric's own filesystem layout —
+workspaces appear on disk as `.Workspace/` directories and semantic models as
+`.SemanticModel/` directories, so the model identifier you'd type into a
+shell matches the path you'd see if you exported the workspace.
+
+```
+MyWorkspace.Workspace/MyModel.SemanticModel
+└─ workspace name ─┘ └── model name ──┘
+```
+
+This connects directly via XMLA using the workspace and model **display
+names**, bypassing the GUID-based REST API lookup.
 
 **With persistent authentication** (recommended):
 
@@ -266,27 +276,35 @@ resolution and builds the XMLA connection directly from the names provided.
 pql-test auth login
 
 # Then run commands without credential flags
-pql-test retrieve-tests "MyWorkspace.MySemanticModel"
-pql-test run-tests "MyWorkspace.MySemanticModel"
+pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
+pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
 ```
 
-**Legacy approach** (credentials via flags - still supported for CI/CD):
+**Service principal** (credentials via flags or `PQL_*` env vars — for CI/CD):
 
 ```bash
-pql-test retrieve-tests "MyWorkspace.MySemanticModel" \
-  --tenant-id  $PQL_TENANT_ID \
-  --client-id  $PQL_CLIENT_ID \
-  --client-secret $PQL_CLIENT_SECRET
-
-pql-test run-tests "MyWorkspace.MySemanticModel" \
+pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
   --tenant-id  $PQL_TENANT_ID \
   --client-id  $PQL_CLIENT_ID \
   --client-secret $PQL_CLIENT_SECRET
 ```
 
-> **Note:** When `MODEL_PATH` contains a `.` and does not exist on the local
-> filesystem, it is interpreted as Fabric CLI dot notation. If a local
-> directory with dots in its name exists, it is treated as a filesystem path.
+> **Note:** When `MODEL_PATH` matches the `<workspace>.Workspace/<model>.SemanticModel`
+> shape and does not exist as a real directory on the local filesystem, it
+> is interpreted as a Fabric service path. A real on-disk directory at the
+> same string takes precedence and is treated as a filesystem path.
+
+### Legacy dot notation (deprecated)
+
+The older `<workspace>.<model>` shorthand still works for backward
+compatibility, but emits a one-line deprecation warning to stderr each
+invocation pointing you at the canonical form. Migrate to the
+`.Workspace/.SemanticModel` form when you can.
+
+```bash
+# Still works — prints a "deprecated" warning on stderr:
+pql-test run-tests "MyWorkspace.MySemanticModel"
+```
 
 ---
 
@@ -309,7 +327,7 @@ Contains test suites for:
 **Usage:**
 ```bash
 pql-test run-tests ./examples/SampleModel.SemanticModel
-pql-test run-tests ./examples/SampleModel.SemanticModel --local
+pql-test run-tests local/SampleModel
 ```
 
 ### RLS_Model (Row-Level Security)
@@ -694,9 +712,12 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
 | `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
 | `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
-| `--tenant-id <id>` | ❌ | Azure AD tenant ID (required for remote XMLA) |
-| `--workspace-id <id>` | ❌ | Power BI workspace GUID (required for remote XMLA) |
-| `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (required for remote XMLA) |
+| `--tenant-id <id>` | ❌ | Azure AD tenant ID (required for remote XMLA; or set `PQL_TENANT_ID`) |
+| `--workspace-id <id>` | ❌ | Power BI workspace GUID (required for remote XMLA; or set `PQL_WORKSPACE_ID`) |
+| `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (or set `PQL_DATASET_ID`) |
+| `--client-id <id>` | ❌ | Service-principal client ID (or set `PQL_CLIENT_ID`) |
+| `--client-secret <secret>` | ❌ | Service-principal client secret (or set `PQL_CLIENT_SECRET`) |
+| `--environment <env>` | ❌ | Cloud environment: `Public` (default), `Germany`, `China`, `USGov`, `USGovHigh`, `USGovDoD` (or set `PQL_ENVIRONMENT`) |
 
 **Run all suites against a locally-open Power BI Desktop model:**
 
@@ -844,25 +865,39 @@ ssss
 
 ### Local Power BI Desktop (auto-detected)
 
-When a `.pbip` file exists in `<modelPath>` **and** a Power BI Desktop instance
-is open with that model, `pql-test` automatically discovers the local Analysis
-Services port from:
+When a Power BI Desktop instance is open with the requested model,
+`pql-test` automatically discovers its local Analysis Services port — both
+`run-tests` and `retrieve-tests` follow this same resolution path. Detection
+uses two mechanisms, in order:
 
-```
-%LOCALAPPDATA%\Microsoft\Power BI Desktop\AnalysisServicesWorkspaces\
-    AnalysisServicesWorkspace<port>\Data\msmdsrv.port.txt
-```
+1. **Primary — process inspection via `psutil`.** The runner enumerates
+   running `PBIDesktop.exe` windows (or, when window enumeration is blocked
+   by UAC / the Microsoft Store packaging, scans process command lines for
+   `.pbip` / `.pbix` arguments) and matches each one against its child
+   `msmdsrv.exe` worker process to read the AS listen port. This is how a
+   `local/<model_name>` identifier is resolved, and how a filesystem
+   `<modelPath>` is resolved when the `.pbip` filename stem matches an open
+   instance.
+2. **Fallback — Power BI's workspace port file** at
+   `%LOCALAPPDATA%\Microsoft\Power BI Desktop\AnalysisServicesWorkspaces\AnalysisServicesWorkspace<port>\Data\msmdsrv.port.txt`
+   (and the equivalent Microsoft Store package path under
+   `%LOCALAPPDATA%\Packages\Microsoft.MicrosoftPowerBIDesktop*\LocalState`).
+   Used when `psutil` is not installed or process enumeration fails.
 
-No connection flags are required in this case — simply open the model in
+No connection flags are required in either case — simply open the model in
 Power BI Desktop before running:
 
 ```bash
 # Open ./examples/SampleModel.pbip in Power BI Desktop first, then:
 pql-test run-tests ./examples/SampleModel.SemanticModel
+
+# Equivalent — no filesystem path required:
+pql-test run-tests local/SampleModel
 ```
 
-> **Note:** Auto-detection only works on Windows where `%LOCALAPPDATA%` is
-> set. On Linux/macOS CI agents, use the explicit remote connection flags.
+> **Note:** Local auto-detection only works on Windows where Power BI
+> Desktop runs natively. On Linux/macOS CI agents, use the explicit remote
+> connection flags.
 
 ### Remote Power BI Premium / Fabric Workspace
 
@@ -892,8 +927,15 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 | `--client-secret` | `PQL_CLIENT_SECRET` | Service principal client secret |
 | `--environment` | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) |
 
-Place these in a `python/tests/.env` file (git-ignored) for local development
-— copy `python/tests/.env.example` to get started.
+Place these in a `.env` file (git-ignored) at the directory where you invoke
+the CLI — typically the repo root or `python/`. The CLI loads `.env`
+automatically via `python-dotenv` by walking up from the current working
+directory. Copy `python/.env.example` to get started.
+
+> `python/tests/.env` is a separate file — it is **only** consumed by the
+> live integration suite (`python/tests/test_live_service.py`), not by the
+> CLI itself. Copy `python/tests/.env.example` to populate it when you want
+> to run the `@pytest.mark.live` tests against your tenant.
 
 > **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
 
@@ -1115,8 +1157,13 @@ EVALUATE BestPractices.ANY.Tests()
 
 | Code | Meaning |
 |---|---|
-| `0` | All tests passed (or no tests were found) |
-| `1` | One or more tests failed, a prerequisite is missing, or an error occurred |
+| `0` | All discovered tests passed, or no tests were discovered (an empty model is not a failure) |
+| `1` | One or more tests failed, a prerequisite is missing, an error occurred, **or** tests were discovered but every result was skipped (no XMLA connection could be established — CI misconfiguration guard) |
+
+The "all skipped → exit 1" rule catches CI matrix entries whose
+`.SemanticModel` directory does not match any deployed dataset: without it,
+the workflow would silently report green even though no tests actually ran
+against the model.
 
 CI pipelines can rely on these codes directly:
 

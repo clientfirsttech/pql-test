@@ -9,7 +9,7 @@ The command checks for:
 - Python >= 3.9
 - pyadomd (ADOMD.NET XMLA client, required for running DAX queries)
 - msal (Azure AD / service-principal authentication)
-- psutil (local Power BI Desktop detection, optional but required for `--local`)
+- psutil (local Power BI Desktop detection, optional but required for `local/<model_name>` discovery)
 
 If any prerequisite is missing, the command exits with code 1 and prints instructions for installing the missing package.
 

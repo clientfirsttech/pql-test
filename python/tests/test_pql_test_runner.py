@@ -2080,6 +2080,85 @@ class TestParseModelIdentifier:
         ident = parse_model_identifier("\\\\server\\share\\model.sm")
         assert ident.kind == "path"
 
+    # ------------------------------------------------------------------
+    # Fabric-style canonical service path:
+    #     <workspace>.Workspace/<model>.SemanticModel
+    # See tasks/fabric-style-model-path-epic.md.
+    # ------------------------------------------------------------------
+
+    def test_fabric_style_path_returns_service_kind(self):
+        """'MyWorkspace.Workspace/MyModel.SemanticModel' parses as service
+        with workspace='MyWorkspace' and model='MyModel'."""
+        ident = parse_model_identifier(
+            "MyWorkspace.Workspace/MyModel.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+        assert ident.raw == "MyWorkspace.Workspace/MyModel.SemanticModel"
+
+    def test_fabric_style_path_accepts_backslash_separator(self):
+        """Windows backslash form must work equivalently."""
+        ident = parse_model_identifier(
+            "MyWorkspace.Workspace\\MyModel.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+
+    def test_fabric_style_path_workspace_name_can_contain_dots(self):
+        """A workspace name with dots (e.g. 'My.Demo.Tenant') is unambiguous
+        in the new format because the suffix anchors the split."""
+        ident = parse_model_identifier(
+            "My.Demo.Tenant.Workspace/Some.Dotted.Model.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My.Demo.Tenant"
+        assert ident.model_name == "Some.Dotted.Model"
+
+    def test_fabric_style_path_falls_back_to_path_kind_when_existing(self, tmp_path):
+        """If the Fabric-style string exists as an on-disk directory, treat
+        it as a filesystem path — preserves the current 'real path wins'
+        invariant."""
+        ws_dir = tmp_path / "MyWorkspace.Workspace" / "MyModel.SemanticModel"
+        ws_dir.mkdir(parents=True)
+        ident = parse_model_identifier(str(ws_dir))
+        assert ident.kind == "path"
+
+    def test_fabric_style_path_does_not_match_partial_suffix(self):
+        """'.Workspace' on the workspace side AND '.SemanticModel' on the
+        model side must BOTH be present.  Just one of them isn't enough."""
+        # Only .Workspace, no .SemanticModel
+        ident = parse_model_identifier("MyWs.Workspace/MyModel")
+        assert ident.kind != "service" or ident.workspace_name != "MyWs"
+        # Only .SemanticModel, no .Workspace
+        ident2 = parse_model_identifier("MyWs/MyModel.SemanticModel")
+        assert ident2.kind == "path"  # falls through to path
+
+    # ------------------------------------------------------------------
+    # Legacy <workspace>.<model> form: still accepted, but warns once.
+    # ------------------------------------------------------------------
+
+    def test_legacy_dotted_name_emits_deprecation_warning(self, capsys):
+        """The old dot notation must keep working but emit a stderr warning."""
+        ident = parse_model_identifier("MyWorkspace.MyModel")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+
+        captured = capsys.readouterr()
+        assert "deprecated" in captured.err.lower()
+        assert ".workspace/" in captured.err.lower() or ".Workspace/" in captured.err
+        # The warning must NOT touch stdout (JSON-output scripts parse stdout).
+        assert "deprecated" not in captured.out.lower()
+
+    def test_fabric_style_path_emits_no_deprecation_warning(self, capsys):
+        """The canonical form must be warning-free."""
+        parse_model_identifier("MyWorkspace.Workspace/MyModel.SemanticModel")
+        captured = capsys.readouterr()
+        assert "deprecated" not in captured.err.lower()
+        assert "deprecated" not in captured.out.lower()
+
 
 # ---------------------------------------------------------------------------
 # resolve_service_xmla_connection_by_name
