@@ -117,16 +117,15 @@ If `pyadomd` shows ❌, the ADOMD.NET install above did not complete.
 The `live` marker is **deselected by default** via `pyproject.toml`, so a plain
 `pytest` invocation runs only the mocked suite.
 
-### Known failing tests
+### Environment-sensitive tests
 
-Two tests currently fail and are unrelated to environment setup:
-
-- `test_pql_test_cli.py::TestRunTests::test_exits_0_and_shows_summary_for_empty_model`
-- `test_pql_test_cli.py::TestRunTests::test_local_flag_exits_0_for_empty_model`
-
-Both expect `run-tests` against an empty `DAXQueries/` to exit 0; the CLI
-currently exits 1. Either the CLI's empty-model behavior changed or the test
-expectation is stale — see the next contributor pass for resolution.
+A handful of CLI tests (under `TestRetrieveTests`, `TestModelIdentifierFormats`,
+`TestRlsModel`) call `retrieve-tests` against a temp directory without mocking
+out `resolve_xmla_connection`. If Power BI Desktop is running on your machine
+with PQL.Assert installed, the auto-detector latches onto it and live discovery
+returns a different model's tests — causing those tests to fail. Close Power BI
+Desktop before running the suite, or skip them with
+`-k "not TestRetrieveTests and not TestModelIdentifierFormats and not TestRlsModel"`.
 
 ---
 

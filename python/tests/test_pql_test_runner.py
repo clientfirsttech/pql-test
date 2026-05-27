@@ -513,6 +513,30 @@ class TestResolveXmlaConnection:
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is None
 
+    def test_local_identifier_does_not_fall_through_to_service(self):
+        # A `local/<name>` request must never silently redirect to the
+        # deployed dataset, even when full service-principal credentials
+        # are available in the environment.  When the named PBI Desktop
+        # instance isn't open, resolution must return None so the caller
+        # can surface a clear error.
+        opts = XmlaConnectionOptions(
+            tenant_id="t",
+            workspace_id="w",
+            dataset_id="d",
+            client_id="c",
+            client_secret="s",
+        )
+        with (
+            patch("pql_test.runner.resolve_local_xmla_connection_by_name", return_value=None) as by_name,
+            patch("pql_test.runner._acquire_service_principal_token") as token_call,
+            patch("pql_test.runner._resolve_service_xmla_connection") as service_call,
+        ):
+            conn = resolve_xmla_connection("local/MissingModel", opts)
+        assert conn is None
+        by_name.assert_called_once_with("MissingModel")
+        token_call.assert_not_called()
+        service_call.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # run_test — no connection

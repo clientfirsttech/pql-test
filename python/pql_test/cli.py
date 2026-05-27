@@ -426,6 +426,47 @@ def conn_options(func):
     return func
 
 
+def _format_local_miss_diagnostic(model_name: str) -> str:
+    """Build a multi-line diagnostic when local/<model_name> doesn't resolve.
+
+    Shows every Power BI Desktop instance the CLI could detect (with
+    ``<unnamed>`` for instances whose window title couldn't be read — that
+    happens with the Microsoft Store build whose process tree is ACL-locked).
+    Also lists the common reasons a name lookup misses so the user can
+    self-diagnose without having to re-run with --verbose.
+    """
+    lines: list[str] = [
+        f"No matching Power BI Desktop instance found for model '{model_name}'.",
+        "",
+    ]
+    try:
+        instances = get_pbi_files_opened()
+    except ImportError:
+        lines.append(
+            "  (psutil not installed — local detection limited to port-file fallback.)"
+        )
+        instances = []
+    if instances:
+        lines.append("Detected Power BI Desktop instances:")
+        for inst in instances:
+            name = inst.model_name or "<unnamed>"
+            lines.append(f"  • '{name}'  →  {inst.server} / {inst.catalog}")
+    else:
+        lines.append("No Power BI Desktop instances detected on this machine.")
+    lines.extend(
+        [
+            "",
+            "Common causes:",
+            f"  • The model isn't open yet — open '{model_name}' in Power BI Desktop and retry.",
+            "  • Typo or case mismatch in the model name (matching is case-insensitive but exact otherwise).",
+            "  • Microsoft Store build of Power BI Desktop — its process tree runs under an",
+            "    AppContainer ACL that blocks window-title detection, so the instance shows as",
+            "    <unnamed>. Use the installer build, or switch to a filesystem path argument.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _make_conn_opts(
     tenant_id: str | None,
     workspace_id: str | None,
@@ -536,8 +577,7 @@ def cmd_retrieve_tests(
         conn = resolve_local_xmla_connection_by_name(ident.model_name)
         if conn is None:
             click.echo(
-                f"Warning: No matching Power BI Desktop instance found for model '{ident.model_name}'. "
-                "Make sure the model is open in Power BI Desktop.",
+                "Warning: " + _format_local_miss_diagnostic(ident.model_name),
                 err=True,
             )
         abs_path = f"local/{ident.model_name}"
@@ -778,7 +818,8 @@ def cmd_run_tests(
                 if instances:
                     click.echo("\nDetected Power BI Desktop instances:")
                     for inst in instances:
-                        click.echo(f"  \u2022 '{inst.model_name}'  \u2192  {inst.server} / {inst.catalog}")
+                        name = inst.model_name or "<unnamed>"
+                        click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
                 else:
                     click.echo("\nNo Power BI Desktop instances detected.")
             except ImportError:
@@ -788,16 +829,9 @@ def cmd_run_tests(
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            pre_warnings.append(
-                f"No matching Power BI Desktop instance found for model '{ident.model_name}'. "
-                "Make sure the model is open in Power BI Desktop."
-            )
-            click.echo(
-                f"\nWarning: No matching Power BI Desktop instance found for model '{ident.model_name}'.\n"
-                f"Make sure '{ident.model_name}' is open in Power BI Desktop.\n"
-                f"Tip: run with --verbose to see all detected instances.",
-                err=True,
-            )
+            diagnostic = _format_local_miss_diagnostic(ident.model_name)
+            pre_warnings.append(diagnostic)
+            click.echo("\nWarning: " + diagnostic, err=True)
 
     elif ident.kind == "service":
         # Fabric service path (canonical .Workspace/.SemanticModel form
@@ -1135,14 +1169,11 @@ def cmd_auth_login(
                 click.echo("\nAuthenticating with managed identity...")
         else:
             # Partial flags provided but not enough for SPN-secret — interactive.
-            # Preserve any --tenant-id and --client-id the user passed so they
-            # can sign in with a specific tenant / custom AAD app (their own
-            # registered pql-test equivalent).  When --client-id is omitted the
-            # factory falls back to the bundled multi-tenant default.
+            # Interactive browser login — no tenant ID needed (Azure Identity
+            # discovers it from the sign-in).
             config = CredentialConfig(
                 method=AuthMethod.INTERACTIVE,
-                tenant_id=tenant_id,
-                client_id=user_or_client,
+                tenant_id=None,
                 environment=environment,
                 account_name="Interactive User",
             )

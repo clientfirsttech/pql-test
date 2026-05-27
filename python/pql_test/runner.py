@@ -72,6 +72,7 @@ for _stream in (sys.stdout, sys.stderr):
 HAS_PYADOMD = False
 _AdomdConnection = None  # set to AdomdConnection class after successful load
 
+
 def _discover_adomd_search_dirs() -> list[str]:
     import glob
 
@@ -98,27 +99,36 @@ def _discover_adomd_search_dirs() -> list[str]:
             ("microsoft.analysisservices.adomdclient.retail.amd64", "net45"),
         ):
             nuget_glob = os.path.join(
-                user_profile, ".nuget", "packages",
-                pkg_id, "*", "lib", lib_dir,
+                user_profile,
+                ".nuget",
+                "packages",
+                pkg_id,
+                "*",
+                "lib",
+                lib_dir,
             )
             # Newest version first
             dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
 
     # 2. Power BI Desktop installer version (.exe download).  Its bundled
     #    DLL is typically newer than the standalone ADOMD.NET releases.
-    dirs.extend([
-        r"C:\Program Files\Microsoft Power BI Desktop\bin",
-        r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
-    ])
+    dirs.extend(
+        [
+            r"C:\Program Files\Microsoft Power BI Desktop\bin",
+            r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
+        ]
+    )
 
     # 3. Last resort: standalone Microsoft.NET ADOMD client paths.  Older
     #    builds here are the source of the CI RLS bug — keep them at the
     #    end so they're only used when nothing better is on the box.
-    dirs.extend([
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-        r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
-    ])
+    dirs.extend(
+        [
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
+        ]
+    )
     return dirs
 
 
@@ -135,13 +145,19 @@ try:
     # standalone ADOMD.NET ship Microsoft.AnalysisServices.AdomdClient.dll. The
     # embedded .NET namespace is Microsoft.AnalysisServices.AdomdClient in both,
     # so the from-import stays the same — only the assembly name differs.
-    for _assembly_name in ("Microsoft.PowerBI.AdomdClient", "Microsoft.AnalysisServices.AdomdClient"):
+    for _assembly_name in (
+        "Microsoft.PowerBI.AdomdClient",
+        "Microsoft.AnalysisServices.AdomdClient",
+    ):
         try:
             clr.AddReference(_assembly_name)
             break
         except Exception:
             continue
-    from Microsoft.AnalysisServices.AdomdClient import AdomdConnection as _AdomdConnection  # type: ignore[import]
+    from Microsoft.AnalysisServices.AdomdClient import (
+        AdomdConnection as _AdomdConnection,
+    )  # type: ignore[import]
+
     HAS_PYADOMD = True
 
     # One-line diagnostic so CI logs (and any local debugging) show exactly
@@ -150,6 +166,7 @@ try:
     # install and triggered the bearer + Roles + RLS-filter failure.
     try:
         from System.Reflection import Assembly as _Assembly  # type: ignore[import]
+
         _asm = _Assembly.GetAssembly(_AdomdConnection)
         if _asm is not None:
             print(
@@ -163,12 +180,14 @@ except Exception:
 
 try:
     import msal  # type: ignore[import-untyped]
+
     HAS_MSAL = True
 except ImportError:
     HAS_MSAL = False
 
 try:
     import psutil as _psutil  # type: ignore[import-untyped]
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -177,6 +196,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Cloud environment support
 # ---------------------------------------------------------------------------
+
 
 class Environment(str, Enum):
     """Supported Power BI cloud environments."""
@@ -242,6 +262,7 @@ def get_api_endpoints(environment: Environment = Environment.PUBLIC) -> Endpoint
 # Model identifier parsing
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ModelIdentifier:
     """Parsed model identifier from the CLI model_path argument.
@@ -286,7 +307,7 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
     """
     # 1. local/<model_name>
     if model_path.startswith("local/") and not Path(model_path).exists():
-        name = model_path[len("local/"):]
+        name = model_path[len("local/") :]
         return ModelIdentifier(kind="local", model_name=name, raw=model_path)
 
     # 2. Canonical Fabric-style: <workspace>.Workspace/<model>.SemanticModel
@@ -298,9 +319,8 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
         for sep in ("/", "\\"):
             if sep in model_path:
                 ws_part, _, model_part = model_path.partition(sep)
-                if (
-                    ws_part.endswith(".Workspace")
-                    and model_part.endswith(".SemanticModel")
+                if ws_part.endswith(".Workspace") and model_part.endswith(
+                    ".SemanticModel"
                 ):
                     ws = ws_part[: -len(".Workspace")]
                     sm = model_part[: -len(".SemanticModel")]
@@ -325,7 +345,7 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
     ):
         dot_idx = model_path.rfind(".")
         ws = model_path[:dot_idx]
-        sm = model_path[dot_idx + 1:]
+        sm = model_path[dot_idx + 1 :]
         if ws and sm:
             print(
                 f"Note: '<workspace>.<model>' dot notation is deprecated. "
@@ -347,6 +367,7 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
 # ---------------------------------------------------------------------------
 # Public data types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PqlTest:
@@ -467,13 +488,16 @@ class LocalPbiInstance:
 # Model discovery helpers
 # ---------------------------------------------------------------------------
 
+
 def _find_semantic_model_dir(model_path: str) -> Optional[str]:
     """Return the .SemanticModel directory for a PBIP model.
 
     Accepts any of:
     - The PBIP root directory (parent of the .SemanticModel folder)  <- canonical
     - The .SemanticModel directory itself
-    - A .pbip file (parent directory is used)
+    - A .pbip file (the .SemanticModel whose stem matches the .pbip's stem
+      is preferred so flat layouts with multiple models in one folder
+      resolve to the correct model)
     """
     p = Path(model_path)
     if not p.exists():
@@ -481,9 +505,18 @@ def _find_semantic_model_dir(model_path: str) -> Optional[str]:
     # Passed the .SemanticModel directory directly
     if p.is_dir() and p.name.endswith(".SemanticModel"):
         return str(p)
-    # Passed a .pbip file — use its parent
+    # Passed a .pbip file — prefer the .SemanticModel whose stem matches the
+    # .pbip's stem.  This mirrors the logic in _find_pbip_file and keeps
+    # flat layouts (e.g. examples/ with three side-by-side .pbip files)
+    # resolving to the correct model instead of whichever .SemanticModel
+    # iterdir() happens to yield first.
     if p.is_file() and p.suffix == ".pbip":
-        p = p.parent
+        pbip_stem = p.stem
+        parent = p.parent
+        sibling = parent / f"{pbip_stem}.SemanticModel"
+        if sibling.is_dir():
+            return str(sibling)
+        p = parent
     # Standard: scan the directory for a .SemanticModel subdirectory
     if p.is_dir():
         for entry in p.iterdir():
@@ -527,9 +560,7 @@ def _collect_dax_test_files(semantic_model_dir: str) -> list[str]:
     dax_dir = Path(semantic_model_dir) / "DAXQueries"
     if not dax_dir.exists():
         return []
-    return sorted(
-        str(f) for f in dax_dir.iterdir() if f.name.endswith(".Tests.dax")
-    )
+    return sorted(str(f) for f in dax_dir.iterdir() if f.name.endswith(".Tests.dax"))
 
 
 def _parse_dax_test_file(file_path: str) -> PqlTest:
@@ -538,7 +569,9 @@ def _parse_dax_test_file(file_path: str) -> PqlTest:
     name = Path(file_path).stem  # basename without .dax extension
     func_match = re.search(r"FUNCTION\s+([\w.]+)\s*=", source, re.IGNORECASE)
     description = f"DAX function: {func_match.group(1)}" if func_match else None
-    return PqlTest(name=name, file_path=file_path, source=source, description=description)
+    return PqlTest(
+        name=name, file_path=file_path, source=source, description=description
+    )
 
 
 _LOCAL_TEST_FUNCTION_RE = re.compile(
@@ -555,9 +588,9 @@ def _discover_local_test_names(model_path: str) -> set[str]:
     ``DAXQueries/<Name>.Tests.dax`` file.
 
     Returns an empty set when the path is not a recognisable PBIP model
-    directory (``local/<name>`` or Fabric ``workspace.semantic_model``).
-    Callers MUST treat an empty set as "no local ownership information"
-    — i.e. do not filter live discovery in that case.
+    directory (``local/<name>`` or Fabric ``workspace.semantic_model``)
+    or when the model lacks any ownership-declaring artifact.  Use
+    :func:`_has_local_ownership_sources` to disambiguate these cases.
     """
     names: set[str] = set()
     semantic_model_dir = _find_semantic_model_dir(model_path)
@@ -579,17 +612,47 @@ def _discover_local_test_names(model_path: str) -> set[str]:
     return names
 
 
+def _has_local_ownership_sources(model_path: str) -> bool:
+    """Return True when *model_path* declares ownership-tracking artifacts.
+
+    A filesystem PBIP "owns" the tests it declares when its SemanticModel
+    has a ``DAXQueries/`` directory (the canonical location for
+    ``*.Tests.dax`` files) or a ``definition/functions.tmdl`` file.
+    Returning True means an empty local test set is meaningful ("this
+    model genuinely has no tests") and live discovery should be filtered
+    strictly against it.  Returning False means the path either isn't a
+    filesystem PBIP (``local/<name>``, Fabric ``workspace.model``) or is
+    a bare PBIP skeleton with no declaration locations — in either case,
+    live discovery is passed through unfiltered.
+    """
+    semantic_model_dir = _find_semantic_model_dir(model_path)
+    if not semantic_model_dir:
+        return False
+    base = Path(semantic_model_dir)
+    return (base / "DAXQueries").is_dir() or (base / "definition" / "functions.tmdl").is_file()
+
+
 # ---------------------------------------------------------------------------
 # Local Power BI Desktop detection — process-based (mirrors Invoke-DQVTesting)
 # ---------------------------------------------------------------------------
 
-def _get_pbi_process_window_titles() -> dict[int, str]:
+
+def _get_pbi_process_window_titles(
+    known_pbi_pids: Optional[set] = None,
+) -> dict[int, str]:
     """
     Return {pid: window_title} for all visible Power BI Desktop windows.
 
     Mirrors the ``GetWindowText`` + ``EnumWindows`` approach used in
     Invoke-DQVTesting's Get-PowerBIFilesOpened to identify which
     PBIDesktop.exe processes are open and their model names.
+
+    A window is included when EITHER its title contains the legacy
+    ``" - Power BI Desktop"`` substring OR its PID belongs to
+    *known_pbi_pids* (typically the set of running PBIDesktop.exe PIDs
+    discovered via psutil).  The second path catches newer / Store
+    builds whose window title is just the model name (e.g. ``OLS_Model``)
+    with no app-name suffix.
 
     Windows only; returns an empty dict on other platforms.
     """
@@ -601,6 +664,7 @@ def _get_pbi_process_window_titles() -> dict[int, str]:
 
     user32 = ctypes.windll.user32
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    known_pids = known_pbi_pids or set()
 
     def _callback(hwnd: int, _: int) -> bool:
         if not user32.IsWindowVisible(hwnd):
@@ -611,11 +675,12 @@ def _get_pbi_process_window_titles() -> dict[int, str]:
         buf = ctypes.create_unicode_buffer(length)
         user32.GetWindowTextW(hwnd, buf, length)
         title: str = buf.value
-        if "Power BI Desktop" in title:
-            pid = ctypes.c_ulong(0)
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if pid.value and pid.value not in titles:
-                titles[pid.value] = title
+        pid = ctypes.c_ulong(0)
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not pid.value or pid.value in titles:
+            return True
+        if "Power BI Desktop" in title or pid.value in known_pids:
+            titles[pid.value] = title
         return True
 
     user32.EnumWindows(WNDENUMPROC(_callback), 0)
@@ -705,43 +770,45 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
             "Install with: pip install psutil"
         )
 
-    # Step 1 — PID → window title mapping
-    # This may return an empty dict (e.g. Store app, UAC elevation, hidden
-    # window) — we do NOT return early; msmdsrv scanning always continues.
-    pid_to_raw_title = _get_pbi_process_window_titles()
+    # Step 1a — discover the set of running PBIDesktop.exe PIDs and their
+    # cmdline-derived model names (when the .pbip path is present).  We
+    # do this BEFORE window enumeration so the EnumWindows pass can
+    # accept any visible window owned by a known PBI pid — newer/Store
+    # builds drop the legacy " - Power BI Desktop" suffix and would
+    # otherwise be filtered out by the title-substring check.
     pbi_pid_to_model: dict[int, str] = {}
+    for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            _pname = (_fp.info.get("name") or "").lower()
+            if _pname != "pbidesktop.exe":
+                continue
+            _pid = int(_fp.info.get("pid") or 0)
+            if not _pid:
+                continue
+            _model = ""
+            for _arg in (_fp.info.get("cmdline") or [])[1:]:
+                _p = Path(_arg)
+                if _p.suffix.lower() in (".pbix", ".pbip"):
+                    _model = _p.stem
+                    break
+            pbi_pid_to_model[_pid] = _model
+        except (_psutil.NoSuchProcess, _psutil.AccessDenied):
+            continue
+    pbi_pids = set(pbi_pid_to_model.keys())
+
+    # Step 1b — PID → window title mapping.  Pass the known PBI pids so
+    # newer-build windows (just the model name, no app suffix) are also
+    # captured.  Title trumps cmdline because the title reflects the
+    # currently-loaded model after Save As / rename, whereas the cmdline
+    # is frozen at process start.  A title-derived name only OVERWRITES
+    # the cmdline name when it's non-empty after suffix-stripping.
+    pid_to_raw_title = _get_pbi_process_window_titles(known_pbi_pids=pbi_pids)
     for pid, title in pid_to_raw_title.items():
         idx = title.rfind(" - ")
-        model_name = title[:idx].strip() if idx > 0 else title
-        pbi_pid_to_model[pid] = model_name
-
-    # Step 1b — command-line fallback.
-    # When window enumeration returns nothing (UAC elevation mismatch or
-    # Microsoft Store isolation), scan PBIDesktop.exe processes and extract
-    # the model name from the file-path argument:
-    #   PBIDesktop.exe "C:\...\RLS_Model.pbip"  →  "RLS_Model"
-    # This is more reliable than EnumWindows in those scenarios because
-    # psutil can access the process list even across elevation boundaries.
-    if not pbi_pid_to_model:
-        for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
-            try:
-                _pname = (_fp.info.get("name") or "").lower()
-                if _pname != "pbidesktop.exe":
-                    continue
-                _pid = int(_fp.info.get("pid") or 0)
-                if not _pid:
-                    continue
-                _model = ""
-                for _arg in (_fp.info.get("cmdline") or [])[1:]:
-                    _p = Path(_arg)
-                    if _p.suffix.lower() in (".pbix", ".pbip"):
-                        _model = _p.stem
-                        break
-                pbi_pid_to_model[_pid] = _model
-            except (_psutil.NoSuchProcess, _psutil.AccessDenied):
-                continue
-
-    pbi_pids = set(pbi_pid_to_model.keys())
+        model_name = title[:idx].strip() if idx > 0 else title.strip()
+        if model_name:
+            pbi_pid_to_model[pid] = model_name
+            pbi_pids.add(pid)
 
     # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
     # the plain string "LISTEN".  Accept both so the code works on any version.
@@ -894,6 +961,7 @@ def resolve_local_xmla_connection(
 # Local Power BI Desktop detection — port-file fallback
 # ---------------------------------------------------------------------------
 
+
 def _detect_local_pbi_desktop_port() -> Optional[str]:
     """
     Detect the Analysis Services port used by an open Power BI Desktop instance.
@@ -911,7 +979,10 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
 
     # Candidate base paths — standard installer and Microsoft Store package
     _ws_candidates = [
-        Path(local_app_data) / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces",
+        Path(local_app_data)
+        / "Microsoft"
+        / "Power BI Desktop"
+        / "AnalysisServicesWorkspaces",
     ]
     # Microsoft Store version stores data under the package's LocalState
     _packages_root = Path(local_app_data) / "Packages"
@@ -919,7 +990,11 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
         for _pkg in _packages_root.iterdir():
             if _pkg.name.startswith("Microsoft.MicrosoftPowerBIDesktop"):
                 _ws_candidates.append(
-                    _pkg / "LocalState" / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces"
+                    _pkg
+                    / "LocalState"
+                    / "Microsoft"
+                    / "Power BI Desktop"
+                    / "AnalysisServicesWorkspaces"
                 )
                 break  # only one PBI Desktop Store package expected
 
@@ -939,6 +1014,7 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
 # ---------------------------------------------------------------------------
 # XMLA connection resolution
 # ---------------------------------------------------------------------------
+
 
 def _resolve_authentication_with_stored_credentials(
     opts: XmlaConnectionOptions,
@@ -973,6 +1049,7 @@ def _resolve_authentication_with_stored_credentials(
 
     # Check if credentials are in environment variables
     import os
+
     env_tenant = os.getenv("PQL_TENANT_ID")
     env_client = os.getenv("PQL_CLIENT_ID")
     env_secret = os.getenv("PQL_CLIENT_SECRET")
@@ -1025,6 +1102,7 @@ def _resolve_authentication_with_stored_credentials(
         # dedicated error to the user; see cli.py.
         if config.method == AuthMethod.INTERACTIVE:
             import sys
+
             in_ci = bool(os.getenv("CI"))
             no_tty = not (hasattr(sys.stdin, "isatty") and sys.stdin.isatty())
             if in_ci or no_tty:
@@ -1083,11 +1161,15 @@ def resolve_xmla_connection(
     Resolve which XMLA endpoint to use for test execution.
 
     Priority:
-      1. Remote Power BI Premium / Fabric workspace (when tenant_id,
+      1. ``local/<model_name>`` identifier — strict name-based local
+         detection.  Never falls back to a remote service connection
+         (even if PQL_* credentials are present in the environment) and
+         never falls back to an arbitrary running PBI Desktop instance.
+         When the named instance isn't open, returns None so the caller
+         can surface a clear "instance not found" error instead of
+         silently running tests against the deployed dataset.
+      2. Remote Power BI Premium / Fabric workspace (when tenant_id,
          workspace_id, dataset_id are all provided), matching Invoke-DQVTesting.
-      2. ``local/<model_name>`` identifier — name-based local detection via
-         ``resolve_local_xmla_connection_by_name``.  Never falls back to an
-         arbitrary running PBI Desktop instance.
       3. Filesystem path — process-based local detection via
          ``resolve_local_xmla_connection``.
 
@@ -1096,7 +1178,15 @@ def resolve_xmla_connection(
     # Try to resolve credentials from stored config if not provided
     opts = _resolve_authentication_with_stored_credentials(opts)
 
-    # Option 1 — remote workspace (service principal).
+    # Option 1 — local/<model_name> identifier (strict).
+    # Short-circuit before any remote-service path so credentials in the
+    # environment can't silently redirect a user's "run against my open
+    # PBI Desktop instance" request to the deployed dataset.
+    ident = parse_model_identifier(model_path)
+    if ident.kind == "local":
+        return resolve_local_xmla_connection_by_name(ident.model_name)
+
+    # Option 2 — remote workspace (service principal).
     # If the service path raises (bad creds, dead workspace, unreachable
     # endpoint, etc.) we fall through to local detection instead of letting
     # the exception propagate or returning None silently.  Stale `.env`
@@ -1118,13 +1208,6 @@ def resolve_xmla_connection(
                 file=sys.stderr,
             )
             # Fall through to local detection below.
-
-    # Option 2 — local/<model_name> identifier
-    # When model_path uses the local/<model_name> format, use name-based
-    # matching so we never fall back to an arbitrary running PBI instance.
-    ident = parse_model_identifier(model_path)
-    if ident.kind == "local":
-        return resolve_local_xmla_connection_by_name(ident.model_name)
 
     # Option 3 — local Power BI Desktop (filesystem path)
     return resolve_local_xmla_connection(model_path)
@@ -1276,14 +1359,22 @@ def resolve_local_xmla_connection_by_name(
             return ResolvedXmlaConnection(server=port_str, catalog="")
         return None
 
+    needle = model_name.lower()
     for inst in instances:
-        if inst.model_name.lower() == model_name.lower():
+        # Use a substring (``in``) match against the detected name so this
+        # works for both window-title formats: newer builds show just the
+        # model name (``OLS_Model``) while older builds appended a suffix
+        # (``OLS_Model - Power BI Desktop``).  We keep suffix-stripping in
+        # the title parser so the displayed name stays clean, but a fall-
+        # back substring check here means callers also resolve correctly
+        # if the suffix-strip ever misses an unusual variant.
+        if needle and needle in inst.model_name.lower():
             return ResolvedXmlaConnection(
                 server=inst.server,
                 catalog=inst.catalog,
             )
 
-    # No exact name match.  The user typed a specific model name via
+    # No name match.  The user typed a specific model name via
     # ``local/<name>`` — we MUST honor it strictly.  The previous
     # unnamed-instance fallback (when window-title detection failed) caused
     # silent connections to the wrong model — e.g. ``local/SampleModel``
@@ -1299,6 +1390,7 @@ def resolve_local_xmla_connection_by_name(
 # ---------------------------------------------------------------------------
 # Power BI REST API helpers
 # ---------------------------------------------------------------------------
+
 
 def _resolve_pbi_workspace_and_dataset_names(
     workspace_id: str,
@@ -1383,6 +1475,7 @@ def _verify_dataset_exists_in_workspace(
 # MSAL token acquisition (service principal / client-credentials flow)
 # ---------------------------------------------------------------------------
 
+
 def _acquire_service_principal_token(
     tenant_id: str,
     client_id: str,
@@ -1409,9 +1502,7 @@ def _acquire_service_principal_token(
         client_credential=client_secret,
         authority=f"{login_url}/{tenant_id}",
     )
-    result = app.acquire_token_for_client(
-        scopes=[f"{resource_url}/.default"]
-    )
+    result = app.acquire_token_for_client(scopes=[f"{resource_url}/.default"])
     if "access_token" in result:
         return result["access_token"]
     raise RuntimeError(
@@ -1423,6 +1514,7 @@ def _acquire_service_principal_token(
 # ---------------------------------------------------------------------------
 # XMLA query execution via pyadomd (ADOMD.NET)
 # ---------------------------------------------------------------------------
+
 
 def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
     """
@@ -1528,9 +1620,7 @@ def _execute_dax_query(
             columns = [reader.GetName(i) for i in range(field_count)]
             rows: list[dict[str, object]] = []
             while reader.Read():
-                rows.append(
-                    {col: reader[i] for i, col in enumerate(columns)}
-                )
+                rows.append({col: reader[i] for i, col in enumerate(columns)})
             return rows
         finally:
             reader.Close()
@@ -1541,6 +1631,7 @@ def _execute_dax_query(
 # ---------------------------------------------------------------------------
 # Public API — discovery
 # ---------------------------------------------------------------------------
+
 
 def _retrieve_tests_via_dax(
     connection: "ResolvedXmlaConnection",
@@ -1579,7 +1670,11 @@ def _retrieve_tests_via_dax(
             # Both discovery queries failed — surface the verbatim error so
             # the user knows whether it's "PQL.Assert not installed" or a
             # real auth/permissions/connectivity problem.
-            target = f"{connection.server} / {connection.catalog}" if connection else "<unknown>"
+            target = (
+                f"{connection.server} / {connection.catalog}"
+                if connection
+                else "<unknown>"
+            )
             print(
                 f"Warning: live test discovery failed against {target}: "
                 f"{type(exc).__name__}: {str(exc)[:300]}",
@@ -1594,11 +1689,13 @@ def _retrieve_tests_via_dax(
             continue
         description = (_get_col(row, "Description") or None) if has_v2_columns else None
         impersonated_user = (
-            _get_col(row, "PQLAssert_ImpersonatedUserName") or None
-        ) if has_v2_columns else None
+            (_get_col(row, "PQLAssert_ImpersonatedUserName") or None)
+            if has_v2_columns
+            else None
+        )
         role_name = (
-            _get_col(row, "PQLAssert_RoleName") or None
-        ) if has_v2_columns else None
+            (_get_col(row, "PQLAssert_RoleName") or None) if has_v2_columns else None
+        )
         tests.append(
             PqlTest(
                 name=name,
@@ -1644,31 +1741,43 @@ def retrieve_tests(
     if connection is not None:
         live = _retrieve_tests_via_dax(connection)
         if live is not None:  # None means both queries failed
-            local_names = _discover_local_test_names(model_path)
-            if local_names:
-                # Local repo is the source of truth for "this model owns these
-                # tests".  Anything RetrieveTestsV2() returns that isn't declared
-                # locally (in definition/functions.tmdl or DAXQueries/) is
-                # cross-model contamination on the deployed dataset and is
-                # filtered out.  Drift is warned in both directions but is not
-                # fatal — the user can reconcile later.
+            # When model_path declares ownership-tracking artifacts (a
+            # DAXQueries/ folder or a functions.tmdl), the local repo is the
+            # source of truth — even an empty ownership set is meaningful (the
+            # model declares no tests), so live discovery is filtered strictly.
+            # Otherwise an auto-detected local Power BI Desktop instance
+            # unrelated to this model would silently leak its tests into the
+            # result.  For local/<name>, Fabric workspace.model paths, and bare
+            # PBIP skeletons with no declaration location, we pass live
+            # discovery through unfiltered.
+            if _has_local_ownership_sources(model_path):
+                local_names = _discover_local_test_names(model_path)
                 live_names = {t.name for t in live}
-                extras_on_server = sorted(live_names - local_names)
-                missing_on_server = sorted(local_names - live_names)
-                if extras_on_server:
+                if local_names:
+                    extras_on_server = sorted(live_names - local_names)
+                    missing_on_server = sorted(local_names - live_names)
+                    if extras_on_server:
+                        print(
+                            "Warning: deployed dataset contains "
+                            f"{len(extras_on_server)} test function(s) not declared "
+                            f"locally — skipping: {', '.join(extras_on_server)}",
+                            file=sys.stderr,
+                        )
+                    if missing_on_server:
+                        print(
+                            "Warning: "
+                            f"{len(missing_on_server)} local test function(s) "
+                            "are not registered in the deployed dataset — "
+                            f"deployment may be out of date: "
+                            f"{', '.join(missing_on_server)}",
+                            file=sys.stderr,
+                        )
+                elif live_names:
                     print(
-                        "Warning: deployed dataset contains "
-                        f"{len(extras_on_server)} test function(s) not declared "
-                        f"locally — skipping: {', '.join(extras_on_server)}",
-                        file=sys.stderr,
-                    )
-                if missing_on_server:
-                    print(
-                        "Warning: "
-                        f"{len(missing_on_server)} local test function(s) "
-                        "are not registered in the deployed dataset — "
-                        f"deployment may be out of date: "
-                        f"{', '.join(missing_on_server)}",
+                        f"Warning: model at {model_path} declares no tests "
+                        f"locally; ignoring {len(live_names)} test function(s) "
+                        "found on the auto-detected XMLA connection (likely "
+                        "an unrelated Power BI Desktop instance).",
                         file=sys.stderr,
                     )
                 return [t for t in live if t.name in local_names]
@@ -1678,7 +1787,9 @@ def retrieve_tests(
     semantic_model_dir = _find_semantic_model_dir(model_path)
     if not semantic_model_dir:
         return []
-    return [_parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)]
+    return [
+        _parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)
+    ]
 
 
 def retrieve_test_by_name(
