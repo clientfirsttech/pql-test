@@ -125,6 +125,15 @@ jobs:
     permissions:
       contents: read
 
+    # SampleModel.SemanticModel intentionally fails ~15 assertions to
+    # demonstrate the framework catching real model-quality issues
+    # (47 passed / 15 failed is the documented expected outcome).  Allow
+    # that single matrix entry to "fail" without failing the pipeline so
+    # the CI gate doesn't go red on documented expected behavior.  Every
+    # other model must still pass cleanly.  If you add another deliberately-
+    # failing demo model, extend the expression below.
+    continue-on-error: ${{ contains(matrix.model, 'SampleModel.SemanticModel') }}
+
     strategy:
       # Run all models even if one fails so we get complete results
       fail-fast: false
