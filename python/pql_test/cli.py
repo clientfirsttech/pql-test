@@ -48,15 +48,19 @@ Environment variables (loaded from .env when python-dotenv is installed):
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
-# Load .env automatically when python-dotenv is available
-try:
-    from dotenv import load_dotenv  # type: ignore[import-untyped]
-    load_dotenv()
-except ImportError:
-    pass  # env vars may be set externally (e.g. CI pipeline secrets)
+# Load .env automatically when python-dotenv is available — unless the test
+# suite has asked for hermetic mode (no developer-machine state leaking into
+# subprocess-launched CLI runs).  See run_cli() in tests/test_pql_test_cli.py.
+if not os.environ.get("PQL_TEST_HERMETIC"):
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-untyped]
+        load_dotenv()
+    except ImportError:
+        pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
 import click
 
@@ -707,6 +711,17 @@ def cmd_retrieve_test(
         if not Path(abs_path).exists():
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
+
+        # Mirror cmd_retrieve_tests / cmd_run_tests: derive dataset name
+        # from the .SemanticModel directory stem so a service-principal
+        # connection can be built without --dataset-id, and attempt
+        # connection resolution so tests declared only in functions.tmdl
+        # (no *.Tests.dax file) are still discoverable via live XMLA.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        conn = resolve_xmla_connection(abs_path, opts)
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
     if not test:

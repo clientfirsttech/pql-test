@@ -1042,13 +1042,19 @@ def _resolve_authentication_with_stored_credentials(
 
     See tasks/unified-auth-runtime-epic.md.
     """
+    # Hermetic test mode skips all developer-machine state: no .env, no
+    # stored credentials, no token acquisition.  Tests that need a
+    # connection mock it explicitly.
+    import os
+    if os.environ.get("PQL_TEST_HERMETIC"):
+        return opts
+
     # If any credentials are already provided (even partial), return as-is
     # This preserves the existing validation behavior where partial credentials fail
     if opts.tenant_id or opts.client_id or opts.client_secret:
         return opts
 
     # Check if credentials are in environment variables
-    import os
 
     env_tenant = os.getenv("PQL_TENANT_ID")
     env_client = os.getenv("PQL_CLIENT_ID")
@@ -1178,12 +1184,22 @@ def resolve_xmla_connection(
     # Try to resolve credentials from stored config if not provided
     opts = _resolve_authentication_with_stored_credentials(opts)
 
+    # Hermetic test mode disables auto-detection paths (stored
+    # credentials, local PBI Desktop) so tests don't pick up developer-
+    # machine state.  Explicit credentials passed on the command line
+    # are still honored — tests that exercise the remote path supply
+    # --tenant-id / --workspace-id / --dataset-id directly.
+    import os
+    hermetic = bool(os.environ.get("PQL_TEST_HERMETIC"))
+
     # Option 1 — local/<model_name> identifier (strict).
     # Short-circuit before any remote-service path so credentials in the
     # environment can't silently redirect a user's "run against my open
     # PBI Desktop instance" request to the deployed dataset.
     ident = parse_model_identifier(model_path)
     if ident.kind == "local":
+        if hermetic:
+            return None
         return resolve_local_xmla_connection_by_name(ident.model_name)
 
     # Option 2 — remote workspace (service principal).
@@ -1209,7 +1225,11 @@ def resolve_xmla_connection(
             )
             # Fall through to local detection below.
 
-    # Option 3 — local Power BI Desktop (filesystem path)
+    # Option 3 — local Power BI Desktop (filesystem path).  Skipped in
+    # hermetic test mode so a running PBI Desktop instance on the
+    # developer's machine doesn't leak into test subprocess results.
+    if hermetic:
+        return None
     return resolve_local_xmla_connection(model_path)
 
 

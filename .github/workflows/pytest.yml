@@ -1,0 +1,129 @@
+# Run the pql-test pytest suite on every push / PR.
+#
+# Why windows-latest?
+#   pyadomd (the ADOMD.NET XMLA driver used by pql-test) requires the
+#   Microsoft.AnalysisServices.AdomdClient NuGet package, which is a
+#   Windows/.NET component.  Some tests load it at import time, and the
+#   live-service tests need a real XMLA connection — both require Windows.
+#
+# Required secrets:
+#   PQL_TENANT_ID         – Azure AD tenant GUID
+#   PQL_CLIENT_ID         – Service principal application (client) ID
+#   PQL_CLIENT_SECRET     – Service principal client secret
+#   PQL_DATASET_ID        – Default dataset GUID (used by test_live_service.py)
+#   PQL_DATASET_ID_RLS    – RLS_Model dataset GUID (live RLS test)
+#   PQL_DATASET_ID_OLS    – OLS_Model dataset GUID (live OLS test)
+#
+# Required repository VARIABLE (not a secret — GUIDs alone aren't
+# authoritative for access):
+#   PQL_WORKSPACE_ID      – Power BI workspace GUID
+#
+# Optional secrets:
+#   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, USGovHigh, DOD,
+#                        Germany, China).  Default: Public.
+#
+# Tests marked @pytest.mark.live (TestRlsModel, test_live_service.py)
+# automatically skip when those credentials aren't configured, so the
+# workflow stays green on forks without secrets.
+
+name: pytest
+
+on:
+  workflow_call:
+    secrets:
+      PQL_TENANT_ID:
+        required: false
+      PQL_CLIENT_ID:
+        required: false
+      PQL_CLIENT_SECRET:
+        required: false
+      PQL_DATASET_ID:
+        required: false
+      PQL_DATASET_ID_RLS:
+        required: false
+      PQL_DATASET_ID_OLS:
+        required: false
+      PQL_ENVIRONMENT:
+        required: false
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    name: pytest (Windows + ADOMD.NET)
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install pql-test (with dev extras) and dependencies
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          # The [dev] extras pull in pytest + pytest-cov per pyproject.toml.
+          pip install ./python[dev]
+
+      # ---------------------------------------------------------------------
+      # ADOMD.NET — same install recipe as run-tests-remote.yml.  See that
+      # workflow for the rationale on package selection (19.114.0, the
+      # non-retail flavour fixes a bearer-token + Roles= regression).
+      # ---------------------------------------------------------------------
+      - name: Install ADOMD.NET client libraries
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient `
+            -Version 19.114.0 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+          if ($LASTEXITCODE -eq 0) {
+            $installed = Get-ChildItem $outputDir -Directory `
+              | Where-Object Name -like 'Microsoft.AnalysisServices.AdomdClient*' `
+              | Select-Object -First 1
+            Write-Host "ADOMD.NET installed: $($installed.Name)"
+          } else {
+            Write-Warning "ADOMD.NET package install failed – live tests will skip"
+          }
+
+      # ---------------------------------------------------------------------
+      # Run pytest.
+      #
+      # PQL_* env vars are exposed so live tests (TestRlsModel and
+      # test_live_service.py) can connect with the service principal.
+      # When secrets aren't configured (e.g. a fork), the live tests
+      # auto-skip via the marker guards and the suite still passes.
+      #
+      # PQL_WORKSPACE_ID is read from `vars.*` (repository variable), not
+      # `secrets.*` — GUIDs alone aren't authoritative for access and the
+      # variable form keeps them visible in CI logs for debugging.
+      #
+      # test_live_service.py uses PQL_DATASET_ID directly to identify
+      # which deployed dataset to hit.  TestRlsModel (in
+      # test_pql_test_cli.py) uses run_cli(live=True), which strips
+      # PQL_DATASET* from the subprocess env so the CLI's path-based
+      # dataset-name derivation runs instead — matching the production
+      # CI workflow's matrix-style behavior.
+      # ---------------------------------------------------------------------
+      - name: Run pytest
+        shell: bash
+        working-directory: python
+        run: |
+          pytest tests/ -v --tb=short
+        env:
+          PQL_TENANT_ID:      ${{ secrets.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID:   ${{ vars.PQL_WORKSPACE_ID }}
+          PQL_CLIENT_ID:      ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET:  ${{ secrets.PQL_CLIENT_SECRET }}
+          PQL_DATASET_ID:     ${{ secrets.PQL_DATASET_ID }}
+          PQL_DATASET_ID_RLS: ${{ secrets.PQL_DATASET_ID_RLS }}
+          PQL_DATASET_ID_OLS: ${{ secrets.PQL_DATASET_ID_OLS }}
+          PQL_ENVIRONMENT:    ${{ secrets.PQL_ENVIRONMENT || 'Public' }}

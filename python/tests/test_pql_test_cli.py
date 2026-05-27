@@ -22,11 +22,51 @@ from tests.conftest import make_dax_source
 _CLI_MODULE = "pql_test.cli"
 
 
-def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
-    """Run the CLI in a subprocess and return (stdout, stderr, returncode)."""
-    # Strip PQL_* vars so that credentials loaded by test_live_service.py at
-    # collection time do not bleed into subprocesses that don't expect them.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+def run_cli(
+    args: list[str],
+    cwd: str | None = None,
+    *,
+    live: bool = False,
+) -> tuple[str, str, int]:
+    """Run the CLI in a subprocess and return (stdout, stderr, returncode).
+
+    By default the subprocess runs in *hermetic* mode: no .env loading, no
+    stored interactive credentials, no auto-detection of a running PBI
+    Desktop instance.  This keeps unit tests deterministic regardless of
+    developer-machine state.
+
+    Pass ``live=True`` for tests that need a real XMLA connection (typically
+    ``@pytest.mark.live``).  In live mode the subprocess inherits the
+    parent's ``PQL_*`` environment variables and loads ``.env`` normally,
+    so a service principal configured via ``python/.env`` or
+    ``python/tests/.env`` is honored.
+    """
+    if live:
+        # Inherit tenant/workspace/client/secret from .env so the CLI can
+        # build a service-principal connection.  Strip any PQL_DATASET_ID
+        # variants — those would override the matrix-style path-based
+        # dataset-name derivation the CLI uses (and that the production
+        # CI workflow relies on), causing the subprocess to connect to
+        # whichever single dataset .env happens to point at instead of
+        # the model under test.
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith("PQL_DATASET")
+        }
+        # Set hermetic so the subprocess doesn't reload .env itself —
+        # if it did, PQL_DATASET_ID would come straight back.  We pass
+        # the SP credentials via env explicitly above; hermetic mode
+        # leaves the service-resolution path intact when explicit creds
+        # are present.
+        env["PQL_TEST_HERMETIC"] = "1"
+    else:
+        # Strip PQL_* vars so that credentials loaded by test_live_service.py
+        # at collection time do not bleed into hermetic subprocesses.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+        # Tell the CLI to skip .env loading, stored-credential lookups
+        # (would prompt a browser), and PBI Desktop auto-detection.
+        env["PQL_TEST_HERMETIC"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
         [sys.executable, "-m", _CLI_MODULE, *args],
@@ -34,10 +74,44 @@ def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
         text=True,
         encoding="utf-8",
         cwd=cwd,
-        timeout=30,
+        timeout=60 if live else 30,
         env=env,
     )
     return result.stdout, result.stderr, result.returncode
+
+
+def _live_creds_available() -> bool:
+    """Return True when PQL_* service-principal vars are populated.
+
+    Loads ``.env`` from a few well-known locations before checking, since
+    a parent pytest process doesn't auto-load it.
+    """
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-untyped]
+    except ImportError:
+        load_dotenv = None  # noqa: N806
+
+    if load_dotenv is not None:
+        here = Path(__file__).resolve()
+        for candidate in (
+            here.parent / ".env",                        # python/tests/.env
+            here.parent.parent / ".env",                 # python/.env
+            here.parent.parent.parent / ".env",          # repo root .env
+        ):
+            if candidate.is_file():
+                load_dotenv(candidate, override=False)
+
+    required = ("PQL_TENANT_ID", "PQL_WORKSPACE_ID", "PQL_CLIENT_ID", "PQL_CLIENT_SECRET")
+    return all(os.environ.get(k, "").strip() for k in required)
+
+
+# Eagerly load .env so live tests can decide to skip at collection time.
+_HAS_LIVE_CREDS = _live_creds_available()
+_requires_live_creds = pytest.mark.skipif(
+    not _HAS_LIVE_CREDS,
+    reason="live test: PQL_TENANT_ID/WORKSPACE_ID/CLIENT_ID/CLIENT_SECRET not configured. "
+    "Add a service principal to python/.env or python/tests/.env.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -708,24 +782,37 @@ class TestModelIdentifierFormats:
 # RLS_Model real-model tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.live
+@_requires_live_creds
 class TestRlsModel:
-    """CLI tests against the real RLS_Model example in examples/."""
+    """CLI tests against the real RLS_Model example in examples/.
+
+    Marked ``live`` because RLS_Model declares its test suite only in
+    ``definition/functions.tmdl`` (no ``*.Tests.dax`` file in DAXQueries/),
+    so the offline file-scan fallback finds nothing — these tests
+    inherently require a real XMLA connection to discover the suite via
+    ``PQL.Assert.RetrieveTestsV2``.  Each invocation passes ``live=True``
+    so the subprocess inherits the parent's ``PQL_*`` env vars and uses
+    the service-principal credentials from ``.env``.
+
+    Auto-skipped when those env vars aren't configured.
+    """
 
     def test_retrieve_tests_finds_rls_suite(self, rls_model_path):
         """retrieve-tests discovers the RLS.ANY.Tests suite in the RLS model."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         assert "RLS.ANY.Tests" in stdout
 
     def test_retrieve_tests_returns_non_empty_list(self, rls_model_path):
         """retrieve-tests returns a non-empty JSON array for the RLS model."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         assert stdout.strip() != "[]"
 
     def test_retrieve_tests_has_single_suite(self, rls_model_path):
         """The RLS model contains exactly one test suite."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         suites = json.loads(stdout)
         assert len(suites) == 1
@@ -733,17 +820,21 @@ class TestRlsModel:
 
     def test_retrieve_test_returns_rls_suite(self, rls_model_path):
         """retrieve-test returns the RLS.ANY.Tests suite when requested by name."""
-        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "RLS.ANY.Tests"])
+        stdout, _, code = run_cli(
+            ["retrieve-test", rls_model_path, "RLS.ANY.Tests"], live=True
+        )
         assert code == 0
         assert "RLS.ANY.Tests" in stdout
 
     def test_retrieve_test_exits_1_for_missing_suite(self, rls_model_path):
         """retrieve-test exits 1 when the requested suite does not exist."""
-        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "Missing.Tests"])
+        stdout, _, code = run_cli(
+            ["retrieve-test", rls_model_path, "Missing.Tests"], live=True
+        )
         assert code == 1
         assert stdout.strip() == "null"
 
     def test_run_tests_shows_summary_line(self, rls_model_path):
         """run-tests always prints a passed/failed/total summary for the RLS model."""
-        stdout, _, _ = run_cli(["run-tests", rls_model_path])
+        stdout, _, _ = run_cli(["run-tests", rls_model_path], live=True)
         assert "passed" in stdout and "failed" in stdout and "total" in stdout

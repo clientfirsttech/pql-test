@@ -39,7 +39,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v"
 markers = [
-    "live: marks tests that require real Power BI / Fabric XMLA credentials (deselected by default)",
+    "live: marks tests that need a real Power BI / Fabric XMLA connection. They auto-skip when PQL_* credentials aren't available, so plain `pytest` is safe to run; configure `.env` to opt them in.",
 ]
 
 [tool.coverage.run]
