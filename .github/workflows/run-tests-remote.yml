@@ -222,25 +222,51 @@ jobs:
           fi
 
           echo "Running: pql-test run-tests ${ARGS[*]}"
-          # SampleModel.SemanticModel intentionally fails ~15 assertions to
-          # demonstrate the framework catching real model-quality issues
-          # (47 passed / 15 failed is the documented expected outcome).
-          # For that model, surface the non-zero exit as a GitHub warning
-          # instead of a step failure so CI doesn't gate on documented
-          # demo behavior.  Every other model still gates strictly.
           set +e
           pql-test run-tests "${ARGS[@]}"
           rc=$?
           set -e
-          if [ "$rc" -ne 0 ]; then
-            case "${{ matrix.model }}" in
-              *SampleModel.SemanticModel*)
-                echo "::warning::SampleModel exited $rc — failures are intentional (demo of framework catching model-quality issues). Treating as success."
-                exit 0
-                ;;
-            esac
-          fi
-          exit $rc
+
+          # SampleModel.SemanticModel intentionally fails 15 assertions
+          # (47 passed / 15 failed is the documented expected outcome —
+          # the failures demo the framework catching real model-quality
+          # issues).  Pin that matrix entry to the exact baseline: a
+          # match treats pql-test's non-zero exit as success; any drift
+          # (fewer failures, more failures, different pass count, missing
+          # results file) gates CI so the baseline can't silently shift.
+          # Every other model propagates pql-test's exit code verbatim.
+          case "${{ matrix.model }}" in
+            *SampleModel.SemanticModel*)
+              python - <<'PYEOF'
+          import json, pathlib, sys
+          expected_passed, expected_failed = 47, 15
+          results = pathlib.Path("${{ steps.result-name.outputs.filename }}")
+          if not results.exists():
+              print("::error::SampleModel results file missing — cannot verify baseline.")
+              sys.exit(1)
+          data = json.loads(results.read_text(encoding="utf-8"))
+          actual_passed = int(data.get("passed", 0))
+          actual_failed = int(data.get("failed", 0))
+          if actual_passed == expected_passed and actual_failed == expected_failed:
+              print(
+                  f"::warning::SampleModel matches documented baseline "
+                  f"({expected_passed} passed / {expected_failed} failed) — "
+                  "failures are intentional. Treating as success."
+              )
+              sys.exit(0)
+          print(
+              f"::error::SampleModel result drift: expected "
+              f"{expected_passed} passed / {expected_failed} failed, got "
+              f"{actual_passed} passed / {actual_failed} failed. "
+              "Update the baseline in run-tests-remote.yml if this drift is intentional."
+          )
+          sys.exit(1)
+          PYEOF
+              ;;
+            *)
+              exit $rc
+              ;;
+          esac
         env:
           PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
           PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
