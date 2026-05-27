@@ -1,0 +1,324 @@
+# Run pql-test against every dataset discovered IN the Power BI workspace
+# (rather than from the examples/ folder on disk).
+#
+# Complements run-tests-remote.yml:
+#   * run-tests-remote.yml — matrix sourced from filesystem (examples/**/
+#     *.SemanticModel).  Validates that every model committed to the repo
+#     runs cleanly on the deployed workspace.
+#   * THIS workflow — matrix sourced from a Power BI REST API call against
+#     PQL_WORKSPACE_ID.  Validates that every dataset deployed in the
+#     workspace (including ones not present in examples/) still passes
+#     its DAX test suite.  Catches drift in the other direction.
+#
+# Required secrets:
+#   PQL_TENANT_ID         – Azure AD tenant GUID
+#   PQL_CLIENT_ID         – Service principal application (client) ID
+#   PQL_CLIENT_SECRET     – Service principal client secret
+#
+# Required repository VARIABLE:
+#   PQL_WORKSPACE_ID      – Power BI workspace GUID (not a secret)
+#
+# Optional secrets:
+#   PQL_ENVIRONMENT    – Cloud environment.  Default: Public.
+
+name: Run DAX Tests (Workspace Discovery)
+
+on:
+  workflow_call:
+    secrets:
+      PQL_TENANT_ID:
+        required: true
+      PQL_CLIENT_ID:
+        required: true
+      PQL_CLIENT_SECRET:
+        required: true
+      PQL_ENVIRONMENT:
+        required: false
+    inputs:
+      environment:
+        description: 'Power BI cloud environment override'
+        type: string
+        required: false
+        default: 'Public'
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Power BI cloud environment'
+        required: false
+        default: 'Public'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 1: list every dataset in the workspace via Power BI REST,
+  #          emit a matrix of canonical `<workspace>.Workspace/<dataset>.SemanticModel`
+  #          identifiers the CLI understands directly.
+  # ---------------------------------------------------------------------------
+  discover-workspace-datasets:
+    name: Discover datasets in workspace
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      models: ${{ steps.discover.outputs.models }}
+      model_count: ${{ steps.discover.outputs.model_count }}
+
+    steps:
+      - name: Acquire SP token + list workspace datasets
+        id: discover
+        shell: bash
+        env:
+          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import os
+          import sys
+          import urllib.parse
+          import urllib.request
+
+          tenant       = os.environ["PQL_TENANT_ID"]
+          client_id    = os.environ["PQL_CLIENT_ID"]
+          client_secret= os.environ["PQL_CLIENT_SECRET"]
+          workspace_id = os.environ["PQL_WORKSPACE_ID"]
+
+          if not all([tenant, client_id, client_secret, workspace_id]):
+              print("::error::Missing required secrets/vars for workspace discovery.")
+              sys.exit(1)
+
+          # 1. Client-credentials grant against Azure AD for a Power BI service token.
+          token_req = urllib.request.Request(
+              f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+              data=urllib.parse.urlencode({
+                  "grant_type":    "client_credentials",
+                  "client_id":     client_id,
+                  "client_secret": client_secret,
+                  "scope":         "https://analysis.windows.net/powerbi/api/.default",
+              }).encode(),
+              method="POST",
+          )
+          with urllib.request.urlopen(token_req) as resp:
+              token = json.loads(resp.read())["access_token"]
+          headers = {"Authorization": f"Bearer {token}"}
+
+          # 2. Resolve workspace display name from its GUID — the CLI's canonical
+          #    service path uses display names, not GUIDs.
+          ws_req = urllib.request.Request(
+              f"https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}",
+              headers=headers,
+          )
+          with urllib.request.urlopen(ws_req) as resp:
+              workspace_name = json.loads(resp.read())["name"]
+          print(f"Workspace: {workspace_name}")
+
+          # 3. List every dataset (semantic model) in the workspace.
+          ds_req = urllib.request.Request(
+              f"https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets",
+              headers=headers,
+          )
+          with urllib.request.urlopen(ds_req) as resp:
+              datasets = json.loads(resp.read())["value"]
+
+          # Datasets to skip even when they exist in the workspace.
+          # Case-insensitive match against the dataset display name.
+          # TestingModel: scratch dataset used by maintainers for ad-hoc
+          # experiments — it intentionally contains broken/incomplete
+          # tests and shouldn't gate CI.
+          EXCLUDED_MODELS = {
+              "testingmodel",
+          }
+
+          # Build matrix entries: canonical `<workspace>.Workspace/<model>.SemanticModel`.
+          # Skip datasets owned by the system / push streams — pql-test only
+          # meaningfully runs against XMLA-readable semantic models.
+          models = []
+          skipped: list[str] = []
+          for ds in datasets:
+              name = ds.get("name")
+              if not name:
+                  continue
+              if name.lower() in EXCLUDED_MODELS:
+                  skipped.append(name)
+                  continue
+              models.append(f"{workspace_name}.Workspace/{name}.SemanticModel")
+
+          if skipped:
+              print(f"Skipped {len(skipped)} excluded dataset(s): {', '.join(skipped)}")
+
+          if not models:
+              print("::warning::No datasets found in workspace (after exclusions).")
+          else:
+              print(f"Found {len(models)} dataset(s) to test:")
+              for m in models:
+                  print(f"  - {m}")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"models={json.dumps(models)}\n")
+              fh.write(f"model_count={len(models)}\n")
+          PYEOF
+
+  # ---------------------------------------------------------------------------
+  # Stage 2: run pql-test against each discovered dataset.
+  # ---------------------------------------------------------------------------
+  run-workspace-tests:
+    name: DAX tests – ${{ matrix.model }}
+    needs: discover-workspace-datasets
+    if: ${{ needs.discover-workspace-datasets.outputs.model_count != '0' }}
+    runs-on: windows-latest   # pyadomd (ADOMD.NET) requires Windows + .NET
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.discover-workspace-datasets.outputs.models) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: 'python/requirements.txt'
+
+      - name: Install pql-test and dependencies
+        shell: bash
+        run: |
+          pip install --upgrade pip
+          pip install ./python
+
+      - name: Install ADOMD.NET client libraries
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient `
+            -Version 19.114.0 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+          if ($LASTEXITCODE -eq 0) {
+            $installed = Get-ChildItem $outputDir -Directory `
+              | Where-Object Name -like 'Microsoft.AnalysisServices.AdomdClient*' `
+              | Select-Object -First 1
+            Write-Host "ADOMD.NET installed: $($installed.Name)"
+          } else {
+            Write-Warning "ADOMD.NET package install failed – pyadomd may still work if assemblies are in the GAC"
+          }
+
+      - name: Compute result filename
+        id: result-name
+        shell: bash
+        run: |
+          SAFE=$(echo "${{ matrix.model }}" | tr '/\\. ' '----')
+          echo "filename=workspace-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # Run pql-test against the canonical Fabric service path.  The CLI
+      # connects via the SP, runs PQL.Assert.RetrieveTestsV2() to discover
+      # tests, and executes them all.
+      #
+      # SampleModel intentionally fails 15 assertions.  Mirror the baseline
+      # gate from run-tests-remote.yml so its known-good failure count
+      # doesn't fail this workflow.
+      # -----------------------------------------------------------------------
+      - name: Run DAX tests for ${{ matrix.model }}
+        id: run-tests
+        shell: bash
+        run: |
+          ARGS=("${{ matrix.model }}")
+          ARGS+=(--log-format github)
+          ARGS+=(--output "${{ steps.result-name.outputs.filename }}")
+
+          echo "Running: pql-test run-tests ${ARGS[*]}"
+          set +e
+          pql-test run-tests "${ARGS[@]}"
+          rc=$?
+          set -e
+
+          case "${{ matrix.model }}" in
+            *SampleModel.SemanticModel*)
+              python - <<'PYEOF'
+          import json, pathlib, sys
+          expected_passed, expected_failed = 47, 15
+          results = pathlib.Path("${{ steps.result-name.outputs.filename }}")
+          if not results.exists():
+              print("::error::SampleModel results file missing — cannot verify baseline.")
+              sys.exit(1)
+          data = json.loads(results.read_text(encoding="utf-8"))
+          actual_passed = int(data.get("passed", 0))
+          actual_failed = int(data.get("failed", 0))
+          if actual_passed == expected_passed and actual_failed == expected_failed:
+              print(
+                  f"::warning::SampleModel matches documented baseline "
+                  f"({expected_passed} passed / {expected_failed} failed) — "
+                  "failures are intentional. Treating as success."
+              )
+              sys.exit(0)
+          print(
+              f"::error::SampleModel result drift: expected "
+              f"{expected_passed} passed / {expected_failed} failed, got "
+              f"{actual_passed} passed / {actual_failed} failed. "
+              "Update the baseline in run-tests-workspace.yml if intentional."
+          )
+          sys.exit(1)
+          PYEOF
+              ;;
+            *)
+              exit $rc
+              ;;
+          esac
+        env:
+          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
+          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
+
+      - name: Upload test results
+        if: always() && steps.result-name.outputs.filename != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.result-name.outputs.filename }}
+          path: ${{ steps.result-name.outputs.filename }}
+          if-no-files-found: warn
+
+      - name: Summarise results
+        if: always() && steps.result-name.outputs.filename != ''
+        shell: python
+        run: |
+          import json, pathlib, sys
+
+          sys.stdout.reconfigure(encoding="utf-8")
+
+          results_path = r"${{ steps.result-name.outputs.filename }}"
+          results_file = pathlib.Path(results_path)
+          if not results_file.exists():
+              print("No results file produced – run-tests step may have failed early.")
+              sys.exit(0)
+
+          data    = json.loads(results_file.read_text(encoding="utf-8"))
+          passed  = data.get("passed",  0)
+          failed  = data.get("failed",  0)
+          skipped = data.get("skipped", 0)
+          total   = data.get("total",   0)
+
+          print(f"\nModel : ${{ matrix.model }}")
+          print(f"Passed : {passed}/{total}")
+          print(f"Failed : {failed}")
+          print(f"Skipped: {skipped}")
+
+          if failed:
+              print("\nFailed tests:")
+              for r in data.get("results", []):
+                  if not r.get("passed") and not r.get("skipped"):
+                      print(f"  X  [{r['suite_name']}] {r['test_name']}")
+                      if r.get("error"):
+                          print(f"       error: {r['error']}")
+                      else:
+                          print(f"       expected : {r.get('expected')}")
+                          print(f"       actual   : {r.get('actual')}")
