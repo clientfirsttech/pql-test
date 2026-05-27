@@ -31,37 +31,6 @@ from pql_test.auth.exceptions import CredentialConfigError
 from pql_test.auth.models import AuthMethod, CredentialConfig
 
 
-# ---------------------------------------------------------------------------
-# Default interactive client_id
-# ---------------------------------------------------------------------------
-#
-# Power BI's XMLA endpoint only accepts bearer tokens whose `appid` claim
-# matches a client app the gateway trusts.  azure-identity's
-# InteractiveBrowserCredential defaults to the Azure development application
-# (Azure CLI's public client `04b07795-…`), which Power BI XMLA rejects with
-# `Authentication failed for all authenticators`.
-#
-# The pql-test project registers its own multi-tenant Azure AD application
-# (public client, delegated Power BI permissions) and ships its client_id
-# here as the default for the INTERACTIVE auth method.  End users grant
-# consent on first sign-in and never have to register their own app.
-#
-# Forks / enterprises that have registered their own pql-test equivalent
-# can override via the PQL_TEST_INTERACTIVE_CLIENT_ID env var without
-# touching the source.
-PQL_TEST_DEFAULT_INTERACTIVE_CLIENT_ID = "795808c6-1180-4f93-b875-98e1e157863c"
-
-
-def _resolve_interactive_client_id(config_client_id: str | None) -> str:
-    """Resolution order: explicit config > env-var override > bundled default."""
-    if config_client_id:
-        return config_client_id
-    return (
-        os.environ.get("PQL_TEST_INTERACTIVE_CLIENT_ID")
-        or PQL_TEST_DEFAULT_INTERACTIVE_CLIENT_ID
-    )
-
-
 def _persistent_token_cache_options():  # type: ignore[no-untyped-def]
     """Build ``TokenCachePersistenceOptions`` so MSAL writes tokens to the
     platform's secure store (Windows DPAPI / macOS Keychain / Linux
@@ -144,7 +113,6 @@ class CredentialFactory:
             return InteractiveBrowserCredential(
                 tenant_id=config.tenant_id,
                 authority=authority,
-                client_id=_resolve_interactive_client_id(config.client_id),
                 cache_persistence_options=cache_opts,
             )
 
