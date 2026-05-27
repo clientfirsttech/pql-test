@@ -28,7 +28,8 @@ Microsoft Fabric workspace endpoint.
   - [Model Path Formats](#model-path-formats)
     - [Filesystem path (default)](#filesystem-path-default)
     - [Local model name (`local/<model_name>`)](#local-model-name-localmodel_name)
-    - [Fabric CLI dot notation (`workspace.semanticmodel`)](#fabric-cli-dot-notation-workspacesemanticmodel)
+    - [Fabric service path (`<workspace>.Workspace/<model>.SemanticModel`)](#fabric-service-path-workspaceworkspacemodelsemanticmodel)
+    - [Legacy dot notation (deprecated)](#legacy-dot-notation-deprecated)
   - [Example Models](#example-models)
     - [SampleModel](#samplemodel)
     - [RLS\_Model (Row-Level Security)](#rls_model-row-level-security)
@@ -486,7 +487,7 @@ pql-test auth login
 pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
 
 # Now run tests without credential flags
-pql-test run-tests "MyWorkspace.MySemanticModel"
+pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
 
 # Or with GUID-based connection
 pql-test run-tests ./examples/SampleModel.SemanticModel --workspace-id <id> --dataset-id <id>
@@ -645,10 +646,10 @@ pql-test retrieve-tests ./examples/SampleModel.SemanticModel --test "Calculation
 pql-test retrieve-tests local/SampleModel
 ```
 
-**Using Fabric CLI dot notation:**
+**Using the Fabric service path:**
 
 ```bash
-pql-test retrieve-tests "MyWorkspace.MySemanticModel" \
+pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
   --tenant-id $PQL_TENANT_ID --client-id $PQL_CLIENT_ID --client-secret $PQL_CLIENT_SECRET
 ```
 
@@ -741,10 +742,10 @@ pql-test run-tests ./examples/SampleModel.SemanticModel \
   --dataset-id   22222222-2222-2222-2222-222222222222
 ```
 
-**Run using Fabric CLI dot notation (no local file path or GUIDs needed):**
+**Run using the Fabric service path (no local file path or GUIDs needed):**
 
 ```bash
-pql-test run-tests "MyWorkspace.MySemanticModel" \
+pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
   --tenant-id  $PQL_TENANT_ID \
   --client-id  $PQL_CLIENT_ID \
   --client-secret $PQL_CLIENT_SECRET

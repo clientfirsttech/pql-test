@@ -1058,8 +1058,20 @@ def _resolve_authentication_with_stored_credentials(
     except ImportError:
         # auth module not available
         return opts
-    except Exception:
-        # Any other error in loading stored credentials - return original opts
+    except Exception as exc:  # noqa: BLE001
+        # Surface unexpected errors on stderr so the user can diagnose
+        # why their stored credentials aren't being honored.  The bridge
+        # still returns opts unchanged so the caller can fall back to
+        # other code paths (file-based discovery, local PBI Desktop, etc.).
+        # Without this, the run silently fails with the generic "Service
+        # connection requires --tenant-id..." error, masking the real
+        # cause (corrupt AuthenticationRecord, expired token, MSAL cache
+        # access failure, etc.).
+        print(
+            f"Warning: failed to acquire token from stored credentials: "
+            f"{type(exc).__name__}: {str(exc)[:300]}",
+            file=sys.stderr,
+        )
         return opts
 
 
@@ -1271,15 +1283,16 @@ def resolve_local_xmla_connection_by_name(
                 catalog=inst.catalog,
             )
 
-    # No exact name match — if there is exactly one unnamed instance, use it
-    unnamed = [i for i in instances if not i.model_name]
-    named = [i for i in instances if i.model_name]
-    if unnamed and not named and len(instances) == 1:
-        return ResolvedXmlaConnection(
-            server=instances[0].server,
-            catalog=instances[0].catalog,
-        )
-
+    # No exact name match.  The user typed a specific model name via
+    # ``local/<name>`` — we MUST honor it strictly.  The previous
+    # unnamed-instance fallback (when window-title detection failed) caused
+    # silent connections to the wrong model — e.g. ``local/SampleModel``
+    # silently connecting to an open RLS_Model and running its tests under
+    # SampleModel's name.  See tasks/surface-silent-test-discovery-failures-epic.md.
+    #
+    # If window-title detection is unreliable on your machine (Microsoft Store
+    # packaging, UAC mismatch), open Power BI Desktop from an elevated
+    # terminal or use the filesystem-path form instead.
     return None
 
 
@@ -1541,8 +1554,14 @@ def _retrieve_tests_via_dax(
 
     Returns a (possibly empty) list of PqlTest objects when either query
     succeeds, or ``None`` when both queries fail (e.g. PQL.Assert is not
-    installed in this model), signalling the caller to fall back to the
-    file-based scan.
+    installed in this model, OR an auth/permission/connectivity error
+    occurred), signalling the caller to fall back to the file-based scan.
+
+    When both queries fail, emits a one-line stderr warning with the verbatim
+    exception so the user can distinguish "PQL.Assert isn't installed in
+    this model" (legitimate fallback) from "I don't have access" /
+    "authentication failed" (real problem).  See
+    tasks/surface-silent-test-discovery-failures-epic.md.
     """
     rows: list[dict] | None = None
     has_v2_columns = False
@@ -1556,7 +1575,16 @@ def _retrieve_tests_via_dax(
     if rows is None:
         try:
             rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTests()")
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            # Both discovery queries failed — surface the verbatim error so
+            # the user knows whether it's "PQL.Assert not installed" or a
+            # real auth/permissions/connectivity problem.
+            target = f"{connection.server} / {connection.catalog}" if connection else "<unknown>"
+            print(
+                f"Warning: live test discovery failed against {target}: "
+                f"{type(exc).__name__}: {str(exc)[:300]}",
+                file=sys.stderr,
+            )
             return None  # neither function available — fall back to file scan
 
     tests: list[PqlTest] = []

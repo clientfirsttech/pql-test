@@ -281,6 +281,21 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
             click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
         click.echo("")
 
+    # When discovery returned nothing, make it obvious instead of producing
+    # a confusing "0 passed, 0 failed, 0 total" line that looks like success.
+    # See tasks/surface-silent-test-discovery-failures-epic.md.
+    if suite.total == 0:
+        click.echo(_sep("No tests found.", fg="yellow"))
+        click.echo(
+            "  Possible causes:\n"
+            "    • The model has no PQL.Assert tests defined.\n"
+            "    • Your account doesn't have access to the workspace/model.\n"
+            "    • PQL.Assert isn't installed in this model.\n"
+            "    • The connection failed (check the warning above)."
+        )
+        click.echo(_sep("0 passed, 0 failed, 0 total", fg="yellow"))
+        return
+
     summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
     if suite.skipped:
         plural = "s" if suite.skipped != 1 else ""
@@ -1137,15 +1152,31 @@ def cmd_auth_login(
         # Create the credential and test it by acquiring a token
         # This triggers the actual authentication flow (browser for interactive, etc.)
         credential = manager._factory.create(config, manager._cloud_config)
-        
+
         # Get scope for Power BI service
         scope = manager._cloud_config.get_resource_scope(environment)
-        
-        # Trigger authentication by getting a token
+
+        # Trigger authentication.  For INTERACTIVE we use authenticate(scopes=...)
+        # so we can capture the AuthenticationRecord and store it — future runs
+        # then use the persistent MSAL cache silently instead of opening a new
+        # browser tab on every CLI invocation.
         click.echo()
-        token = credential.get_token(scope)
-        
-        # Save the configuration after successful authentication
+        if config.method == AuthMethod.INTERACTIVE and hasattr(credential, "authenticate"):
+            record = credential.authenticate(scopes=[scope])
+            try:
+                config.authentication_record_json = record.serialize()
+            except Exception:  # noqa: BLE001
+                # If serialization fails the credential still works for this
+                # invocation; we just lose the silent-replay optimization.
+                pass
+            # Account name from the record's username is more accurate than
+            # our generic "Interactive User" placeholder.
+            if getattr(record, "username", None):
+                config.account_name = record.username
+        else:
+            credential.get_token(scope)
+
+        # Save the configuration after successful authentication.
         manager.save_credential(config)
 
         click.echo()

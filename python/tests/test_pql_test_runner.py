@@ -1961,6 +1961,71 @@ class TestRetrieveTestsViaDax:
         assert result is None
 
     # ------------------------------------------------------------------
+    # Discovery errors must surface on stderr instead of being silently
+    # swallowed (see tasks/surface-silent-test-discovery-failures-epic.md).
+    # ------------------------------------------------------------------
+
+    def test_emits_stderr_warning_when_both_dax_queries_fail(self, capsys):
+        """When both V2 and V1 raise, the verbatim exception type+message
+        must appear on stderr so users can distinguish "PQL.Assert not
+        installed" from "auth/permission/connectivity error"."""
+        conn = MagicMock()
+        conn.server = "powerbi://fake/server"
+        conn.catalog = "FakeModel"
+        with patch(
+            "pql_test.runner._execute_dax_query",
+            side_effect=RuntimeError("Authentication failed for all authenticators"),
+        ):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is None
+        captured = capsys.readouterr()
+        # The warning must reach stderr
+        assert "Authentication failed" in captured.err
+        # And include the verbatim exception type so the reader knows it
+        # was a real error, not a 'PQL.Assert not installed' fallback.
+        assert "RuntimeError" in captured.err
+        # And mention which target we were querying
+        assert "FakeModel" in captured.err or "fake/server" in captured.err
+        # No stderr pollution into stdout
+        assert "Authentication failed" not in captured.out
+
+    def test_emits_no_warning_when_v2_succeeds(self, capsys):
+        """The happy path must remain silent on stderr."""
+        v2_rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": "x",
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": "",
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test.runner._execute_dax_query", return_value=v2_rows):
+            _retrieve_tests_via_dax(conn)
+
+        captured = capsys.readouterr()
+        assert "Warning" not in captured.err
+        assert "fail" not in captured.err.lower()
+
+    def test_emits_no_warning_when_v1_succeeds_after_v2_fails(self, capsys):
+        """V2-fails-but-V1-succeeds is a legitimate older-model fallback —
+        must remain silent on stderr."""
+        v1_rows = [{"PQL.Assert.RetrieveTests()[Name]": "Suite.A.Tests"}]
+
+        def _fake_execute(_conn, query):
+            if "V2" in query:
+                raise Exception("V2 not installed")
+            return v1_rows
+
+        conn = MagicMock()
+        with patch("pql_test.runner._execute_dax_query", side_effect=_fake_execute):
+            _retrieve_tests_via_dax(conn)
+
+        captured = capsys.readouterr()
+        assert "Warning" not in captured.err
+        assert "fail" not in captured.err.lower()
+
+    # ------------------------------------------------------------------
     # retrieve_tests() integration: connection threading
     # ------------------------------------------------------------------
 
@@ -2271,8 +2336,17 @@ class TestResolveLocalXmlaConnectionByName:
         assert conn is not None
         assert conn.server == fallback_server
 
-    def test_returns_single_unnamed_instance(self):
-        """Single unnamed instance → connection returned."""
+    def test_returns_none_when_only_unnamed_instance_does_not_match_name(self):
+        """When the user types local/<name>, name match must be strict.
+
+        The historical "if exactly one unnamed instance, use it" fallback
+        silently connected the user to whatever PBI Desktop window happened to
+        be open, even when its model was something different from what was
+        requested — producing accurate-looking but misleading results
+        (e.g. local/SampleModel running RLS_Model's tests).  After
+        tasks/surface-silent-test-discovery-failures-epic.md, the resolver
+        returns None in this case so the CLI can print a clear warning.
+        """
         inst = LocalPbiInstance(
             model_name="",
             server=f"localhost:{_MOCK_AS_PORT_A}",
@@ -2280,7 +2354,10 @@ class TestResolveLocalXmlaConnectionByName:
         )
         with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("AnyModel")
-        assert conn is not None
+        assert conn is None, (
+            "local/<name> must be strict — unnamed-instance fallback was "
+            "silently misleading users into running against the wrong model."
+        )
 
 
 # ---------------------------------------------------------------------------

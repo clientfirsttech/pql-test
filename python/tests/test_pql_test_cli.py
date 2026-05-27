@@ -340,6 +340,36 @@ class TestRunTests:
         stdout, _, _ = run_cli(["run-tests", str(tmp_path)])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
+    def test_zero_total_shows_no_tests_found_message(self, tmp_path):
+        """When discovery finds nothing, output must say 'No tests found.'
+        instead of just rendering the bare '0 passed, 0 failed, 0 total' line —
+        users couldn't tell whether the model was legitimately empty or whether
+        an access/permission/connectivity error was silently swallowed.
+        See tasks/surface-silent-test-discovery-failures-epic.md.
+
+        Skipped on dev machines that have any PBI Desktop instance open,
+        because resolve_local_xmla_connection silently grabs it and runs
+        against whichever model is loaded.
+        """
+        try:
+            from pql_test.runner import get_pbi_files_opened
+            if get_pbi_files_opened():
+                pytest.skip(
+                    "PBI Desktop running; test only meaningful when no "
+                    "local instances are detected"
+                )
+        except ImportError:
+            pass
+
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path)])
+        combined = stdout + stderr
+        assert "No tests found" in combined, (
+            "Expected an explicit 'No tests found.' line; got just:\n"
+            + combined[:600]
+        )
+
     # ------------------------------------------------------------------
     # local/<name> model-path syntax replaces the removed --local flag
     # (see tasks/remove-local-cli-flag-epic.md).

@@ -9,16 +9,20 @@ from typing import TYPE_CHECKING
 
 try:
     from azure.identity import (
+        AuthenticationRecord,
         CertificateCredential,
         ClientAssertionCredential,
         ClientSecretCredential,
         InteractiveBrowserCredential,
         ManagedIdentityCredential,
+        TokenCachePersistenceOptions,
     )
     from azure.core.credentials import TokenCredential
     HAS_AZURE_IDENTITY = True
 except ImportError:
     HAS_AZURE_IDENTITY = False
+    AuthenticationRecord = None  # type: ignore[assignment,misc]
+    TokenCachePersistenceOptions = None  # type: ignore[assignment,misc]
     if TYPE_CHECKING:
         from azure.core.credentials import TokenCredential
 
@@ -58,6 +62,32 @@ def _resolve_interactive_client_id(config_client_id: str | None) -> str:
     )
 
 
+def _persistent_token_cache_options():  # type: ignore[no-untyped-def]
+    """Build ``TokenCachePersistenceOptions`` so MSAL writes tokens to the
+    platform's secure store (Windows DPAPI / macOS Keychain / Linux
+    libsecret).  Without this, every CLI invocation builds a fresh credential
+    with a cold cache and triggers a new interactive sign-in — the user
+    sees a browser tab pop on every ``pql-test`` command.
+
+    Defaults to encrypted-only storage.  Set
+    ``PQL_TEST_ALLOW_UNENCRYPTED_TOKEN_CACHE=1`` on headless Linux without
+    libsecret to opt into unencrypted file-backed caching.
+
+    Returns ``None`` if azure-identity is missing — the caller treats that
+    as "no persistence configured" which falls back to azure-identity's
+    default in-memory cache.
+    """
+    if TokenCachePersistenceOptions is None:
+        return None
+    allow_unencrypted = os.environ.get(
+        "PQL_TEST_ALLOW_UNENCRYPTED_TOKEN_CACHE", ""
+    ).lower() in ("1", "true", "yes")
+    return TokenCachePersistenceOptions(
+        name="pql-test",
+        allow_unencrypted_storage=allow_unencrypted,
+    )
+
+
 class CredentialFactory:
     """Factory for creating azure.identity credential objects from configuration."""
 
@@ -84,12 +114,38 @@ class CredentialFactory:
             )
 
         authority = cloud_config.get_authority(config.environment)
+        cache_opts = _persistent_token_cache_options()
 
         if config.method == AuthMethod.INTERACTIVE:
+            # Replay the AuthenticationRecord captured on first sign-in so
+            # azure-identity can look up the cached token by homeAccountId
+            # instead of triggering a fresh browser flow.  Without this,
+            # cache_persistence_options writes a cache that's never read.
+            record = None
+            if config.authentication_record_json and AuthenticationRecord is not None:
+                try:
+                    record = AuthenticationRecord.deserialize(
+                        config.authentication_record_json
+                    )
+                except Exception:  # noqa: BLE001
+                    # Corrupted record — fall through to interactive prompt.
+                    record = None
+
+            # When a record is supplied, azure-identity reads tenant_id,
+            # authority, and client_id from it directly — passing those
+            # kwargs ALSO causes a "got multiple values for keyword argument"
+            # TypeError inside MsalCredential.__init__.  Only pass them on
+            # the first-login path where we have no record.
+            if record is not None:
+                return InteractiveBrowserCredential(
+                    cache_persistence_options=cache_opts,
+                    authentication_record=record,
+                )
             return InteractiveBrowserCredential(
                 tenant_id=config.tenant_id,
                 authority=authority,
                 client_id=_resolve_interactive_client_id(config.client_id),
+                cache_persistence_options=cache_opts,
             )
 
         elif config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
@@ -102,6 +158,7 @@ class CredentialFactory:
                 client_id=config.client_id,
                 client_secret=config.client_secret,
                 authority=authority,
+                cache_persistence_options=cache_opts,
             )
 
         elif config.method == AuthMethod.SERVICE_PRINCIPAL_CERT:
@@ -115,6 +172,7 @@ class CredentialFactory:
                 certificate_path=config.certificate_path,
                 password=config.certificate_password,
                 authority=authority,
+                cache_persistence_options=cache_opts,
             )
 
         elif config.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED:
@@ -132,6 +190,7 @@ class CredentialFactory:
                 client_id=config.client_id,
                 func=token_provider,
                 authority=authority,
+                cache_persistence_options=cache_opts,
             )
 
         elif config.method == AuthMethod.MANAGED_IDENTITY:
