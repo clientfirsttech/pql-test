@@ -10,6 +10,12 @@
 
 ## Completed Work
 
+- **Issue Review Agent Workflow** — See [tasks/archive/2026-05-28-issue-review-agent.md](tasks/archive/2026-05-28-issue-review-agent.md)
+  - GitHub Agentic Workflow triggered by issue creation or manual dispatch
+  - Two-phase execution: bash pre-computation + Copilot agent instructions
+  - Automated issue analysis, code generation, and PR creation
+  - Tool restrictions for security (edit + limited bash commands)
+  - Comprehensive documentation with usage examples
 - **Fabric CLI Authentication** — See [tasks/fabric-cli-auth-epic.md](tasks/fabric-cli-auth-epic.md) (archived)
   - Modern authentication with azure-identity and keyring
   - Support for 5 authentication methods (interactive, service principal, managed identity)
