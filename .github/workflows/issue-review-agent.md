@@ -4,7 +4,7 @@ description: Analyzes GitHub issues and generates code fixes - automatically rev
 
 on:
   issues:
-    types: [opened]
+    types: [labeled]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -15,7 +15,6 @@ on:
 permissions:
   contents: read
   issues: read
-  pull-requests: write
 
 safe-outputs:
   create-pull-request: {}
@@ -46,6 +45,8 @@ steps:
       persist-credentials: false
 
   - name: Fetch and analyze issue
+    env:
+      INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
     run: |
       set -e
 
@@ -60,7 +61,7 @@ steps:
       if [ "$GITHUB_EVENT_NAME" = "issues" ]; then
         ISSUE_NUMBER=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
       else
-        ISSUE_NUMBER="${{ inputs.issue_number }}"
+        ISSUE_NUMBER="$INPUT_ISSUE_NUMBER"
       fi
 
       echo "Fetching issue #$ISSUE_NUMBER..."
@@ -166,7 +167,7 @@ fn generateFixes() {
   2. For feature requests:
      - Identify where the feature should be implemented
      - Follow existing patterns and architecture
-     - Add tests for new functionality
+     - Add tests for new functionality. THIS CANNOT BE SKIPPED
      - Update relevant documentation
   
   3. For documentation issues:
