@@ -267,10 +267,14 @@ anywhere in the repo.
 **One-time setup (already done for the initial release):**
 - A "trusted publisher" is registered at
   https://pypi.org/manage/account/publishing/ with this repo
-  (`clientfirsttech/pql-test`), workflow name `release.yml`, and environment
-  name `pypi`.  An equivalent publisher exists for `testpypi`.
-- The GitHub repository has two environments (`pypi`, `testpypi`) configured
-  in Settings → Environments.
+  (`clientfirsttech/pql-test`), workflow name `release.yml`, and the
+  Environment-name field left **blank**.  An equivalent publisher exists on
+  TestPyPI.
+- No GitHub Environments are required.  (They need a paid plan on private
+  repos; trusted publishing works without them.  If you later want a
+  manual-approval gate on production releases, add a `pypi` environment and
+  wire it into `release.yml` + the PyPI publisher config — see the NOTE in
+  that workflow file.)
 
 **Per-release checklist:**
 

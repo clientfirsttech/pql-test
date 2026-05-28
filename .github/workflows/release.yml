@@ -10,11 +10,18 @@
 #        Owner             : clientfirsttech
 #        Repository name   : pql-test
 #        Workflow name     : release.yml
-#        Environment name  : pypi
+#        Environment name  : (leave blank)
 #   3. After the first successful release the publisher transitions from
 #      "pending" to fully active.
 #
-# Same dance against test.pypi.org for the TestPyPI dry-run path (env: testpypi).
+# Same dance against test.pypi.org for the TestPyPI dry-run path.
+#
+# NOTE: we deliberately do NOT use a GitHub Environment here — they require
+# a paid plan on private repos, and trusted publishing works fine without
+# one (the OIDC claim matches on repo + workflow filename alone).  If you
+# later want a manual-approval gate on production releases, create a `pypi`
+# environment, add it back as `environment: name: pypi` on publish-pypi,
+# and set the Environment name in the PyPI publisher config to match.
 #
 # Release cadence:
 #   * Bump version in python/pyproject.toml
@@ -101,9 +108,6 @@ jobs:
     needs: build
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi' }}
     runs-on: ubuntu-latest
-    environment:
-      name: testpypi
-      url: https://test.pypi.org/p/pql-test
     permissions:
       id-token: write   # OIDC token for trusted publishing
     steps:
@@ -126,9 +130,6 @@ jobs:
     needs: build
     if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') }}
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pql-test
     permissions:
       id-token: write   # OIDC token for trusted publishing
     steps:
