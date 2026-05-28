@@ -258,6 +258,51 @@ Before opening a PR:
 
 ---
 
+## Releasing a new version to PyPI
+
+Releases are tag-driven and published via PyPI's trusted-publishing OIDC flow
+in [release.yml](.github/workflows/release.yml) — no API tokens are stored
+anywhere in the repo.
+
+**One-time setup (already done for the initial release):**
+- A "trusted publisher" is registered at
+  https://pypi.org/manage/account/publishing/ with this repo
+  (`clientfirsttech/pql-test`), workflow name `release.yml`, and environment
+  name `pypi`.  An equivalent publisher exists for `testpypi`.
+- The GitHub repository has two environments (`pypi`, `testpypi`) configured
+  in Settings → Environments.
+
+**Per-release checklist:**
+
+1. Bump `version` in [python/pyproject.toml](python/pyproject.toml) per
+   [PEP 440](https://peps.python.org/pep-0440/) / semver.
+2. Update the README's "What's New" / a `CHANGELOG.md` if you keep one.
+3. Optional rehearsal against TestPyPI before tagging:
+   - GitHub → Actions → Publish to PyPI → Run workflow → target `testpypi`
+   - Verify install:
+     `pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ pql-test==X.Y.Z`
+4. Commit + tag + push (the tag must match the pyproject version):
+   ```
+   git commit -am "release vX.Y.Z"
+   git tag vX.Y.Z
+   git push && git push --tags
+   ```
+5. The `release.yml` workflow builds the sdist + wheel, validates them with
+   `twine check --strict`, and publishes to PyPI.  Watch the run at
+   https://github.com/clientfirsttech/pql-test/actions/workflows/release.yml
+6. Smoke-test the published package in a fresh venv:
+   ```powershell
+   python -m venv $env:TEMP\pql-release-check
+   & $env:TEMP\pql-release-check\Scripts\pip install --upgrade pql-test==X.Y.Z
+   & $env:TEMP\pql-release-check\Scripts\pql-test --version
+   ```
+
+**The tag-vs-pyproject version guard** in `release.yml` will fail the build
+if you tag `v0.2.0` while pyproject still says `0.1.5`.  Bump the version in
+the same commit as the tag (or as the commit immediately before).
+
+---
+
 ## Where to ask
 
 - Linear / GitHub Issues for bug reports

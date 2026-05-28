@@ -12,6 +12,8 @@
 
 - **Local-machine service smoke validation** — `python/tests/.env` is not configured on the maintainer's machine. CI's [run-tests-remote.yml](.github/workflows/run-tests-remote.yml) exercises the service path on every push, so the gap is informational only.
 
+- **PyPI initial release — manual steps remain** — code/config side is ready ([python/pyproject.toml](python/pyproject.toml), [.github/workflows/release.yml](.github/workflows/release.yml), MIT [LICENSE.txt](LICENSE.txt) synced to `python/`, release checklist in [CONTRIBUTING.md](CONTRIBUTING.md)).  Maintainer still has to: (1) `cd python && python -m build && twine check --strict dist/*` locally to confirm a clean build, (2) create accounts on https://test.pypi.org and https://pypi.org if they don't exist, (3) register trusted publishers on both for `pql-test` with workflow name `release.yml` and environments `testpypi` / `pypi`, (4) create matching GitHub Environments in repo settings, (5) `git tag v0.1.0 && git push --tags` to fire the release workflow.  See the "Releasing a new version" section in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Backlog
 
 - **Split `python/pql_test/runner.py` into a focused module package** — the file is currently ~1,800 lines mixing 9+ responsibilities (ADOMD loading, model-path parsing, data classes, PBIP filesystem helpers, local PBI Desktop process detection, auth bridge, Power BI REST helpers, MSAL, XMLA execution, test discovery, and the actual test runner). Proposed split into `python/pql_test/runner/` with `models.py`, `adomd.py`, `auth.py`, `pbi_rest.py`, `local_pbi.py`, `model_path.py`, `resolver.py`, `discovery.py`, and `execution.py` (~150–350 lines each). `runner/__init__.py` re-exports the current public API so existing `from pql_test.runner import ...` callers keep working. **Defer** until a feature lands that would otherwise pile more code into the monolith — single-PR mechanical refactor with high regression surface, only worth doing alongside a substantive change.
@@ -21,6 +23,14 @@
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
 ## Completed Work
+
+### 2026-05-27 — PyPI publishing prep
+
+- **License resolved + corrected** — repo previously had a contradiction: [LICENSE.txt](LICENSE.txt) was Business Source License 1.1 (with a stale "Power Query Lint VS Code Extension" Licensed-Work name copy-pasted from the sibling repo) while [python/pyproject.toml](python/pyproject.toml) claimed MIT.  Maintainer confirmed BSL 1.1 is the intended license, matching the sibling [power-query-lint-vs-code-extension](https://github.com/clientfirsttech/power-query-lint-vs-code-extension) repo.  LICENSE.txt now uses the upstream BSL 1.1 text verbatim with `Licensed Work: pql-test`, `Additional Use Grant: None`, `Change Date: Four years from publish`, `Change License: GNU Affero General Public License v3.0`.  Synced to `python/LICENSE.txt` so the wheel ships it.
+- **[python/pyproject.toml](python/pyproject.toml)** polished for PyPI: PEP 639 SPDX form (`license = "BUSL-1.1"` + `license-files`), explicit `authors`/`maintainers`, ten classifiers including the `Operating System :: Microsoft :: Windows` constraint that reflects pyadomd's reality, `[project.urls]` block, expanded `dev` extras to include `build` + `twine`, `setuptools>=77` requirement (for PEP 639 support).  No `License :: OSI Approved :: ...` classifier — BSL 1.1 is source-available, not OSI-approved.
+- **Release workflow added** — [.github/workflows/release.yml](.github/workflows/release.yml) uses PyPI Trusted Publishing (OIDC) instead of stored tokens.  Tag-triggered for real PyPI, workflow_dispatch for TestPyPI rehearsal.  Includes a tag-vs-pyproject version guard that fails fast on mismatch.
+- **Release checklist** added to [CONTRIBUTING.md](CONTRIBUTING.md) covering version bump, optional TestPyPI rehearsal, tagging, and post-publish smoke test.
+- `README.md` and `LICENSE.txt` copied into `python/` so setuptools can find them at build time without restructuring the repo.  Both copies stay in sync via the release checklist (manual until/unless we automate it).
 
 ### 2026-05-27 — Open-items + local-mode hardening
 
