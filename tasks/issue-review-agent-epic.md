@@ -1,68 +1,68 @@
 # Issue Review Agent Workflow Epic
 
-**Status**: 📋 PLANNED
-**Goal**: Enable automated issue analysis and PR generation via GitHub Actions
+**Status**: 📋 PLANNED  
+**Goal**: Enable automated issue analysis and PR generation via GitHub Agentic Workflows
 
 ## Overview
 
-DevOps engineers and repository maintainers need automated assistance in responding to issues with code changes. This workflow will monitor new issues, analyze them using GitHub's agent capabilities, and automatically propose fixes or enhancements through pull requests, reducing response time and improving issue resolution efficiency.
+DevOps engineers and repository maintainers need automated assistance in responding to issues with code changes. This workflow uses GitHub's Copilot engine to analyze issues, generate targeted code fixes, and automatically create pull requests. The agentic workflow format separates pre-computation (bash steps) from agent instructions, ensuring efficient and constrained AI-driven code changes.
 
 ---
 
-## Create Workflow File
+## Create Agentic Workflow Structure
 
-Create the GitHub Actions workflow file that triggers on issue creation and manual dispatch.
+Create the GitHub Agentic Workflow file with proper engine configuration and metadata.
 
 **Requirements**:
-- Given an issue is created, should trigger the workflow automatically
-- Given a user runs workflow_dispatch, should accept issue_number as input parameter
-- Given the workflow runs, should have appropriate permissions for issues and pull requests
-- Given the workflow needs agent capabilities, should use GitHub's copilot or agent actions
+- Given workflow needs AI capabilities, should specify engine as copilot
+- Given workflow creates PRs, should declare safe-outputs for create-pull-request
+- Given workflow runs on issues, should trigger on issues opened and workflow_dispatch with issue_number input
+- Given workflow modifies code, should configure appropriate permissions and checkout settings
 
 ---
 
-## Implement Issue Analysis Step
+## Add Pre-Execution Issue Analysis Steps
 
-Add workflow step to fetch and analyze the issue content.
+Implement bash steps that fetch and prepare issue data before agent execution.
 
 **Requirements**:
-- Given an issue number, should fetch issue title and body via GitHub API
-- Given issue content is retrieved, should parse and extract key requirements
-- Given issue has labels, should incorporate label context into analysis
-- Given analysis fails, should log error and exit gracefully
+- Given an issue number from trigger or input, should fetch issue via GitHub API
+- Given issue is fetched, should extract title, body, labels, and metadata
+- Given issue data is extracted, should save to /tmp/gh-aw/agent/ directory for agent consumption
+- Given any step fails, should exit gracefully with error status
 
 ---
 
-## Implement Code Change Generation
+## Write Agent Instructions
 
-Add workflow step to generate appropriate code changes based on issue analysis.
+Define natural language instructions that tell the Copilot agent how to process issue data and generate fixes.
 
 **Requirements**:
-- Given issue analysis is complete, should identify affected files and components
-- Given target files are identified, should generate code changes that address the issue
-- Given generated changes exist, should validate syntax and compatibility
-- Given changes are invalid, should retry with corrected approach
+- Given pre-computed issue data exists, should read from /tmp/gh-aw/agent/ directory
+- Given issue describes a bug or feature, should identify relevant files and components
+- Given target files are identified, should generate surgical code changes using edit tool
+- Given changes are applied, should verify with git diff and create PR if changes exist
 
 ---
 
-## Create Pull Request Step
+## Configure Tools and Constraints
 
-Add workflow step to commit changes and create a pull request.
+Restrict agent to safe tool usage following the agentic workflow security model.
 
 **Requirements**:
-- Given code changes are validated, should create a new branch with descriptive name
-- Given branch is created, should commit changes with conventional commit message
-- Given commits exist, should create PR with reference to original issue
-- Given PR is created, should link back to the issue and request review
+- Given agent needs file modification, should allow edit tool for all paths
+- Given agent needs inspection, should allow bash commands for cat, echo, find, git diff only
+- Given agent should not execute arbitrary code, should not allow unrestricted bash access
+- Given workflow uses external analysis tools, should configure any MCP servers needed
 
 ---
 
 ## Add Workflow Documentation
 
-Document the workflow configuration and usage in repository.
+Document the agentic workflow setup and usage patterns in repository.
 
 **Requirements**:
-- Given workflow is implemented, should add README section explaining usage
-- Given workflow has secrets/variables, should document required configuration
-- Given workflow can be manually triggered, should document dispatch parameters
-- Given workflow integrates with issues, should provide example issue templates
+- Given workflow is implemented, should add .github/workflows/README.md section for agentic workflows
+- Given workflow uses pre-execution steps, should document the two-phase execution model
+- Given workflow can be manually triggered, should document workflow_dispatch parameters
+- Given workflow creates PRs automatically, should explain review and approval process
