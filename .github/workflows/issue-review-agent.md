@@ -50,6 +50,11 @@ steps:
     run: |
       set -e
 
+      if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+        echo "Skipping: workflow only runs on main (current ref: $GITHUB_REF)."
+        exit 0
+      fi
+
       WORKSPACE="${GITHUB_WORKSPACE}"
       AGENT_DIR="/tmp/gh-aw/agent"
       ISSUE_FILE="$AGENT_DIR/issue-data.json"
