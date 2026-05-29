@@ -1969,6 +1969,19 @@ class TestParseModelIdentifier:
         assert ident.kind == "local"
         assert ident.model_name == "My Model"
 
+    def test_local_prefix_with_spaces_and_parentheses(self):
+        """'local/OLS_Model (1)' → kind='local', model_name='OLS_Model (1)'."""
+        ident = parse_model_identifier("local/OLS_Model (1)")
+        assert ident.kind == "local"
+        assert ident.model_name == "OLS_Model (1)"
+        assert ident.raw == "local/OLS_Model (1)"
+
+    def test_local_prefix_with_multiple_spaces(self):
+        """'local/My Power BI Model' → kind='local', model_name='My Power BI Model'."""
+        ident = parse_model_identifier("local/My Power BI Model")
+        assert ident.kind == "local"
+        assert ident.model_name == "My Power BI Model"
+
     def test_local_prefix_existing_path_uses_path_kind(self, tmp_path):
         """If 'local/<name>' exists on disk, treat it as a filesystem path."""
         local_dir = tmp_path / "local" / "Model"
@@ -1990,6 +2003,27 @@ class TestParseModelIdentifier:
         assert ident.kind == "service"
         assert ident.workspace_name == "My.Complex.Workspace"
         assert ident.model_name == "MyModel"
+
+    def test_dotted_name_with_spaces_in_workspace(self):
+        """'My Workspace.MyModel' → kind='service', workspace='My Workspace'."""
+        ident = parse_model_identifier("My Workspace.MyModel")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My Workspace"
+        assert ident.model_name == "MyModel"
+
+    def test_dotted_name_with_spaces_in_model(self):
+        """'MyWorkspace.My Model' → kind='service', model='My Model'."""
+        ident = parse_model_identifier("MyWorkspace.My Model")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "My Model"
+
+    def test_dotted_name_with_spaces_in_both(self):
+        """'Sales Team Workspace.Q1 Sales Model' → kind='service'."""
+        ident = parse_model_identifier("Sales Team Workspace.Q1 Sales Model")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "Sales Team Workspace"
+        assert ident.model_name == "Q1 Sales Model"
 
     def test_dotted_name_existing_path_uses_path_kind(self, tmp_path):
         """If a dotted path exists on disk, treat it as a filesystem path."""

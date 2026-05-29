@@ -222,6 +222,8 @@ The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
 | `local/<model_name>` | Local | Connect to a locally-open Power BI Desktop instance by model name |
 | `<workspace>.<semantic_model>` | Service | Fabric CLI dot notation — connect to a remote workspace by display names |
 
+> **Important:** Model paths or workspace/semantic model names containing **spaces** must be wrapped in **double quotes** to ensure proper parsing by the shell. For example: `"local/My Model"` or `"My Workspace.My Model"`. See examples below.
+
 ### Filesystem path (default)
 
 Pass the PBIP root directory, the `.SemanticModel` sub-folder, or the `.pbip`
@@ -246,6 +248,10 @@ defined directly in the model's `functions.tmdl`). Test discovery uses
 # Open SampleModel in Power BI Desktop first, then:
 pql-test retrieve-tests local/SampleModel
 pql-test run-tests local/SampleModel
+
+# Model names with spaces must be quoted:
+pql-test retrieve-tests "local/OLS_Model (1)"
+pql-test run-tests "local/My Power BI Model"
 ```
 
 ### Fabric CLI dot notation (`workspace.semanticmodel`)
@@ -264,6 +270,10 @@ pql-test auth login
 # Then run commands without credential flags
 pql-test retrieve-tests "MyWorkspace.MySemanticModel"
 pql-test run-tests "MyWorkspace.MySemanticModel"
+
+# Names with spaces must be quoted:
+pql-test retrieve-tests "My Workspace.My Semantic Model"
+pql-test run-tests "Sales Team Workspace.Q1 Sales Model"
 ```
 
 **Legacy approach** (credentials via flags - still supported for CI/CD):
