@@ -67,6 +67,7 @@ Microsoft Fabric workspace endpoint.
     - [`Error: Model path not found`](#error-model-path-not-found)
     - [`No tests found`](#no-tests-found)
     - [`No XMLA connection detected`](#no-xmla-connection-detected)
+    - [`ADOMD.NET not found` / `pyadomd unavailable`](#adomdnet-not-found--pyadomd-unavailable)
     - [`msal not installed` / `pythonnet not installed`](#msal-not-installed--pythonnet-not-installed)
     - [`Failed to acquire access token`](#failed-to-acquire-access-token)
     - [Query returned no rows](#query-returned-no-rows)
@@ -79,10 +80,37 @@ Microsoft Fabric workspace endpoint.
 | Requirement | Minimum version | Notes |
 |---|---|---|
 | Python | 3.9+ | [python.org](https://www.python.org/downloads/) |
+| ADOMD.NET Client | 16.0+ | **Required** — [Analysis Services client libraries](https://learn.microsoft.com/en-us/analysis-services/client-libraries?view=sql-analysis-services-2025) provide the native XMLA connector. Install via the MSI link or Power BI Desktop. |
 | pythonnet | 3.x | `pip install pythonnet` — needed to load the ADOMD.NET assembly |
-| Power BI Desktop | any | Provides `Microsoft.PowerBI.AdomdClient.dll` used for local XMLA connections |
+| Power BI Desktop | any | *Optional* — Provides `Microsoft.PowerBI.AdomdClient.dll` for local XMLA connections. Not required if standalone ADOMD.NET client is installed. |
 | msal | 1.24+ | `pip install msal` — required for service-principal auth against remote workspaces |
 | psutil | any | `pip install psutil` — required for `--local` mode; optional otherwise |
+
+### Installing ADOMD.NET Client Libraries
+
+The ADOMD.NET client libraries are **required** for `pql-test` to execute DAX queries via XMLA. You must install them on your machine before using `pql-test`.
+
+**Option 1: Install standalone ADOMD.NET client (recommended for CI/CD)**
+
+Download and install the MSI package from Microsoft:
+
+[Analysis Services Client Libraries - Microsoft Learn](https://learn.microsoft.com/en-us/analysis-services/client-libraries?view=sql-analysis-services-2025)
+
+The installer places the DLLs in:
+```
+C:\Program Files\Microsoft.NET\ADOMD.NET\<version>\
+```
+
+Supported versions: 140, 150, 160 (any will work).
+
+**Option 2: Install Power BI Desktop**
+
+If you have Power BI Desktop installed, the ADOMD.NET client is included:
+```
+C:\Program Files\Microsoft Power BI Desktop\bin\Microsoft.PowerBI.AdomdClient.dll
+```
+
+> **Note:** On Windows, `pql-test` automatically searches both locations. The standalone client is preferred for servers or CI/CD agents that don't need the full Power BI Desktop installation.
 
 Run the built-in check to verify your environment:
 
@@ -1182,9 +1210,29 @@ When running locally, make sure:
 For CI/CD pipelines, always supply all five remote connection flags:
 `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 
+### `ADOMD.NET not found` / `pyadomd unavailable`
+
+If `pql-test check-prereqs` reports that ADOMD.NET is not available, you need to install the Analysis Services client libraries.
+
+**Install the standalone ADOMD.NET client:**
+
+1. Download from [Microsoft Learn - Analysis Services client libraries](https://learn.microsoft.com/en-us/analysis-services/client-libraries?view=sql-analysis-services-2025)
+2. Run the MSI installer (choose the 64-bit version)
+3. Verify installation: Check that the DLL exists in `C:\Program Files\Microsoft.NET\ADOMD.NET\<version>\`
+4. Re-run `pql-test check-prereqs` to confirm
+
+**Alternatively, install Power BI Desktop:**
+
+Power BI Desktop includes the ADOMD.NET client. After installation, the DLL will be located at:
+```
+C:\Program Files\Microsoft Power BI Desktop\bin\Microsoft.PowerBI.AdomdClient.dll
+```
+
+> **Note:** This issue only affects Windows machines. ADOMD.NET is not available on Linux/macOS.
+
 ### `msal not installed` / `pythonnet not installed`
 
-Install missing dependencies:
+Install missing Python dependencies:
 
 ```powershell
 pip install msal pythonnet psutil
