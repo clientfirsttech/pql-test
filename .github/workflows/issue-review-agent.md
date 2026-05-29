@@ -41,6 +41,7 @@ steps:
   - name: Checkout repository
     uses: actions/checkout@v4
     with:
+      ref: dev
       fetch-depth: 0
       persist-credentials: false
 
@@ -49,11 +50,6 @@ steps:
       INPUT_ISSUE_NUMBER: ${{ inputs.issue_number }}
     run: |
       set -e
-
-      if [ "$GITHUB_REF" != "refs/heads/dev" ]; then
-        echo "Skipping: workflow only runs on dev (current ref: $GITHUB_REF)."
-        exit 0
-      fi
 
       WORKSPACE="${GITHUB_WORKSPACE}"
       AGENT_DIR="/tmp/gh-aw/agent"
