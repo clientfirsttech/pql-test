@@ -243,16 +243,15 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
         if suite.results:
             click.echo("")
     else:
-        dots_parts = []
         for r in suite.results:
             if r.skipped:
-                dots_parts.append(click.style("s", fg="yellow"))
+                sym = click.style("s", fg="yellow")
             elif r.passed:
-                dots_parts.append(click.style(".", fg="green"))
+                sym = click.style(".", fg="green")
             else:
-                dots_parts.append(click.style("F", fg="red"))
-        if dots_parts:
-            click.echo("".join(dots_parts))
+                sym = click.style("F", fg="red")
+            click.echo(f"{sym} {r.test_name}")
+        if suite.results:
             click.echo("")
 
     if failures:

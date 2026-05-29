@@ -393,6 +393,19 @@ class TestRunTests:
         stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--local"])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
+    def test_non_verbose_shows_test_names(self, tmp_path):
+        """Non-verbose mode should show test names (not just dots)."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Suite.Tests.dax").write_text(
+            make_dax_source("MyTestName"), encoding="utf-8"
+        )
+        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        # Should show test name in non-verbose mode
+        assert "MyTestName" in stdout
+        # Should NOT show duration in non-verbose mode
+        assert "ms)" not in stdout
+
     def test_local_flag_with_verbose_does_not_crash(self, tmp_path):
         """
         Mirrors Pester 'Should run tests for a subset based on folder path':
