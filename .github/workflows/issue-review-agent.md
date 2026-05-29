@@ -198,6 +198,7 @@ fn verifyChanges() {
 fn createPullRequest() {
   1. If git diff shows changes:
      - Use create-pull-request to open a PR
+     - Base: "dev"
      - Title: "Fix #$ISSUE_NUMBER: $ISSUE_TITLE"
      - Description should include:
        - Summary of changes made
