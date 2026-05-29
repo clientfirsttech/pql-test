@@ -83,6 +83,7 @@ steps:
       ISSUE_LABELS=$(echo "$ISSUE_DATA" | jq -r '.labels[].name' | tr '\n' ',' | sed 's/,$//')
       ISSUE_STATE=$(echo "$ISSUE_DATA" | jq -r '.state')
       ISSUE_AUTHOR=$(echo "$ISSUE_DATA" | jq -r '.user.login')
+      ISSUE_IS_PR=$(echo "$ISSUE_DATA" | jq -r 'if has("pull_request") then "true" else "false" end')
 
       # Save status file
       cat > "$STATUS_FILE" <<EOF
@@ -91,6 +92,7 @@ steps:
       ISSUE_LABELS=$ISSUE_LABELS
       ISSUE_STATE=$ISSUE_STATE
       ISSUE_AUTHOR=$ISSUE_AUTHOR
+      ISSUE_IS_PR=$ISSUE_IS_PR
       WORKSPACE=$WORKSPACE
       REPOSITORY=${{ github.repository }}
       EVENT_NAME=$GITHUB_EVENT_NAME
@@ -121,6 +123,8 @@ Constraints {
   Read status from /tmp/gh-aw/agent/status.txt
   Use `edit` tool to modify files — do NOT use bash heredoc or redirection to write files
   Only use allowed bash commands: cat, echo, find, git diff, git log, git status
+  If `issueData.pull_request` is present, do not create a new PR from this run; report incomplete with reason "Triggered from PR-labeled issue event"
+  If `git diff --name-only` shows a large or unrelated change set, do not create a PR; report incomplete with reason "Unexpected diff scope"
   Make surgical, minimal changes — do not refactor unrelated code
   If source code changes are required, update plan.md and the corresponding tasks epic file to keep AIDD artifacts in sync
   Follow existing code style and patterns in the repository
@@ -147,13 +151,14 @@ interface Inputs {
 
 fn analyzeIssue() {
   1. Read issue data from inputs.issueData
-  2. Parse the issue title and body to understand:
+  2. If `inputs.issueData.pull_request` exists, stop normal fix flow and report incomplete (this workflow is for issues, not PR branches)
+  3. Parse the issue title and body to understand:
      - Is this a bug report or feature request?
      - What components or files are mentioned?
      - What is the expected behavior vs actual behavior?
      - Are there error messages or stack traces?
-  3. Check labels for additional context (e.g., "bug", "enhancement", "documentation")
-  4. Identify relevant files using:
+  4. Check labels for additional context (e.g., "bug", "enhancement", "documentation")
+  5. Identify relevant files using:
      - Explicit file mentions in the issue
      - Keyword search with `find` and `git log`
      - Related test files or documentation
@@ -185,6 +190,7 @@ fn verifyChanges() {
   2. Verify:
      - Changes are minimal and targeted
      - No unintended files were modified
+     - `git diff --name-only` reflects only the expected small set of files for this issue
      - plan.md and the active tasks epic were updated whenever code files changed
      - Code follows repository style
      - No syntax errors introduced
@@ -193,6 +199,8 @@ fn verifyChanges() {
 
 fn createPullRequest() {
   1. If git diff shows changes:
+  - If `issueData.pull_request` exists, do not create a PR; report incomplete instead
+  - If diff scope is unexpectedly broad, do not create a PR; report incomplete instead
      - Use create-pull-request to open a PR
      - Base: "dev"
      - Title: "Fix #$ISSUE_NUMBER: $ISSUE_TITLE"
