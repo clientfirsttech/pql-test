@@ -312,15 +312,20 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
 
     # 2. Canonical Fabric-style: <workspace>.Workspace/<model>.SemanticModel
     # (or backslash form). Anchored on the suffixes so workspaces with dots
-    # in their names parse unambiguously.
+    # in their names parse unambiguously.  Suffix matching is
+    # case-insensitive — give the user the benefit of the doubt if they type
+    # ``.workspace`` / ``.semanticmodel`` in a different case.  We still
+    # require BOTH suffixes: ``.SemanticModel`` alone is also the local PBIP
+    # directory convention, so demanding both keeps service paths
+    # distinguishable from a filesystem path like ``dir/Model.SemanticModel``.
     if not Path(model_path).exists():
         # Try both '/' and '\\' as separators — Fabric exports use '/', but
         # users on Windows may type the path with '\\'.
         for sep in ("/", "\\"):
             if sep in model_path:
                 ws_part, _, model_part = model_path.partition(sep)
-                if ws_part.endswith(".Workspace") and model_part.endswith(
-                    ".SemanticModel"
+                if ws_part.lower().endswith(".workspace") and model_part.lower().endswith(
+                    ".semanticmodel"
                 ):
                     ws = ws_part[: -len(".Workspace")]
                     sm = model_part[: -len(".SemanticModel")]

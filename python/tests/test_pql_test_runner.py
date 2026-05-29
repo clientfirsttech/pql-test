@@ -2119,6 +2119,27 @@ class TestParseModelIdentifier:
         assert ident.kind == "local"
         assert ident.model_name == "My Model"
 
+    def test_local_prefix_with_spaces_and_parentheses(self):
+        """A quoted name with spaces AND parentheses (e.g. a '(1)' copy
+        suffix) survives intact: 'local/OLS_Model (1)' →
+        model_name='OLS_Model (1)'.  This is the documented form for names
+        the shell would otherwise split — see the quoting note in the CLI
+        docstrings and README."""
+        ident = parse_model_identifier("local/OLS_Model (1)")
+        assert ident.kind == "local"
+        assert ident.model_name == "OLS_Model (1)"
+        assert ident.raw == "local/OLS_Model (1)"
+
+    def test_fabric_service_path_with_spaces_in_names(self):
+        """Workspace/model display names with spaces parse correctly when the
+        whole MODEL_PATH is passed as one (quoted) argument."""
+        ident = parse_model_identifier(
+            "My Workspace.Workspace/Sales Model.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My Workspace"
+        assert ident.model_name == "Sales Model"
+
     def test_local_prefix_existing_path_uses_path_kind(self, tmp_path):
         """If 'local/<name>' exists on disk, treat it as a filesystem path."""
         local_dir = tmp_path / "local" / "Model"
@@ -2223,6 +2244,21 @@ class TestParseModelIdentifier:
         # Only .SemanticModel, no .Workspace
         ident2 = parse_model_identifier("MyWs/MyModel.SemanticModel")
         assert ident2.kind == "path"  # falls through to path
+
+    def test_fabric_style_path_suffixes_are_case_insensitive(self):
+        """Suffix casing is forgiven: '.workspace' / '.semanticmodel' in any
+        case still parse as the canonical service path, and the stripped
+        workspace/model names are preserved verbatim (only the suffix is
+        case-insensitive, not the names)."""
+        for raw in (
+            "MyWorkspace.workspace/MyModel.semanticmodel",
+            "MyWorkspace.WORKSPACE/MyModel.SEMANTICMODEL",
+            "MyWorkspace.Workspace/MyModel.semanticModel",
+        ):
+            ident = parse_model_identifier(raw)
+            assert ident.kind == "service", raw
+            assert ident.workspace_name == "MyWorkspace", raw
+            assert ident.model_name == "MyModel", raw
 
     # ------------------------------------------------------------------
     # Legacy <workspace>.<model> form: still accepted, but warns once.

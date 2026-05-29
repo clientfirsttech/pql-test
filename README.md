@@ -224,6 +224,18 @@ The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
 | `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
 | `<workspace>.<model>` | Service (deprecated) | Legacy dot notation — still works, but prints a one-line deprecation warning on stderr |
 
+> **Quoting:** if the workspace or model name contains spaces or other shell
+> metacharacters (e.g. parentheses), wrap the **entire** `MODEL_PATH` argument
+> in double quotes so your shell passes it as one argument:
+>
+> ```bash
+> pql-test retrieve-tests "local/OLS_Model (1)"
+> pql-test run-tests "My Workspace.Workspace/Sales Model.SemanticModel"
+> ```
+>
+> Without quotes the shell splits `local/OLS_Model (1)` into two arguments and
+> the CLI never sees the full name.
+
 ### Filesystem path (default)
 
 Pass the PBIP root directory, the `.SemanticModel` sub-folder, or the `.pbip`

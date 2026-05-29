@@ -232,34 +232,26 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     failures = [r for r in suite.results if not r.passed and not r.skipped]
     skipped_results = [r for r in suite.results if r.skipped]
 
-    if verbose:
-        for r in suite.results:
-            if r.skipped:
-                tag = click.style("SKIP", fg="yellow")
-            elif r.passed:
-                tag = click.style("PASS", fg="green")
-            else:
-                tag = click.style("FAIL", fg="red")
-            line = f"  {tag} {r.test_name}"
+    # Always list every result by name with a PASS/FAIL/SKIP tag so the
+    # user can see exactly which tests had which outcome without needing
+    # --verbose.  --verbose additionally appends the per-assertion message
+    # and duration to each line.
+    for r in suite.results:
+        if r.skipped:
+            tag = click.style("SKIP", fg="yellow")
+        elif r.passed:
+            tag = click.style("PASS", fg="green")
+        else:
+            tag = click.style("FAIL", fg="red")
+        line = f"  {tag} {r.test_name}"
+        if verbose:
             if r.message:
                 line += f" -- {r.message}"
             if r.duration_ms is not None:
                 line += f" ({r.duration_ms:.0f}ms)"
-            click.echo(line)
-        if suite.results:
-            click.echo("")
-    else:
-        dots_parts = []
-        for r in suite.results:
-            if r.skipped:
-                dots_parts.append(click.style("s", fg="yellow"))
-            elif r.passed:
-                dots_parts.append(click.style(".", fg="green"))
-            else:
-                dots_parts.append(click.style("F", fg="red"))
-        if dots_parts:
-            click.echo("".join(dots_parts))
-            click.echo("")
+        click.echo(line)
+    if suite.results:
+        click.echo("")
 
     if failures:
         click.echo(_sep("FAILURES", "-", fg="red"))
@@ -463,6 +455,8 @@ def _format_local_miss_diagnostic(model_name: str) -> str:
             "Common causes:",
             f"  • The model isn't open yet — open '{model_name}' in Power BI Desktop and retry.",
             "  • Typo or case mismatch in the model name (matching is case-insensitive but exact otherwise).",
+            "  • Spaces or parentheses in the name without quotes — wrap the whole argument in",
+            '    double quotes, e.g. "local/OLS_Model (1)", so the shell passes it as one argument.',
             "  • Microsoft Store build of Power BI Desktop — its process tree runs under an",
             "    AppContainer ACL that blocks window-title detection, so the instance shows as",
             "    <unnamed>. Use the installer build, or switch to a filesystem path argument.",
@@ -562,6 +556,10 @@ def cmd_retrieve_tests(
       <filesystem_path>           Traditional PBIP root directory.
       <workspace>.<model>         Legacy dot notation (deprecated — still
                                   accepted, emits a one-line warning).
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
 
     \b
     Examples:
@@ -685,6 +683,10 @@ def cmd_retrieve_test(
       <filesystem_path>           Traditional PBIP root directory.
       <workspace>.<model>         Legacy dot notation (deprecated — still
                                   accepted, emits a one-line warning).
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
     """
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
@@ -806,6 +808,10 @@ def cmd_run_tests(
       <filesystem_path>           Traditional PBIP root directory.
       <workspace>.<model>         Legacy dot notation (deprecated — still
                                   accepted, emits a one-line warning).
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
 
     \b
     Examples:
