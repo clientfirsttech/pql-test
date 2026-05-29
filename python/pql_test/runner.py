@@ -358,15 +358,15 @@ def _find_semantic_model_dir(model_path: str) -> Optional[str]:
     if not p.exists():
         return None
     # Passed the .SemanticModel directory directly
-    if p.is_dir() and p.name.endswith(".SemanticModel"):
+    if p.is_dir() and p.name.lower().endswith(".semanticmodel"):
         return str(p)
     # Passed a .pbip file — use its parent
-    if p.is_file() and p.suffix == ".pbip":
+    if p.is_file() and p.suffix.lower() == ".pbip":
         p = p.parent
     # Standard: scan the directory for a .SemanticModel subdirectory
     if p.is_dir():
         for entry in p.iterdir():
-            if entry.name.endswith(".SemanticModel") and entry.is_dir():
+            if entry.name.lower().endswith(".semanticmodel") and entry.is_dir():
                 return str(entry)
     return None
 
@@ -382,10 +382,10 @@ def _find_pbip_file(model_path: str) -> Optional[str]:
     if not p.exists():
         return None
     # If given the .SemanticModel dir, look in the parent for the .pbip
-    if p.is_dir() and p.name.endswith(".SemanticModel"):
+    if p.is_dir() and p.name.lower().endswith(".semanticmodel"):
         p = p.parent
     for entry in p.iterdir():
-        if entry.name.endswith(".pbip") and entry.is_file():
+        if entry.name.lower().endswith(".pbip") and entry.is_file():
             return str(entry)
     return None
 
@@ -671,8 +671,10 @@ def resolve_local_xmla_connection(
     # Fallback: derive model name from the .SemanticModel directory stem
     if model_name is None:
         p = Path(model_path)
-        if p.is_dir() and p.name.endswith(".SemanticModel"):
-            model_name = p.name[: -len(".SemanticModel")]
+        if p.is_dir() and p.name.lower().endswith(".semanticmodel"):
+            # Find where ".semanticmodel" starts (case-insensitive)
+            suffix_start = p.name.lower().rfind(".semanticmodel")
+            model_name = p.name[:suffix_start]
 
     try:
         instances = get_pbi_files_opened()

@@ -830,7 +830,13 @@ def cmd_run_tests(
                 from pql_test_runner import _find_pbip_file as _fpf
                 from pathlib import Path as _Path
                 _pbip = _fpf(abs_path)
-                _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
+                _path_name = _Path(abs_path).name
+                # Case-insensitive suffix removal
+                if _path_name.lower().endswith(".semanticmodel"):
+                    _suffix_start = _path_name.lower().rfind(".semanticmodel")
+                    _searched_name = _path_name[:_suffix_start] if not _pbip else _Path(_pbip).stem
+                else:
+                    _searched_name = _Path(_pbip).stem if _pbip else _path_name
                 pre_warnings.append(
                     "--local specified but no matching Power BI Desktop instance found. "
                     "Make sure the model is open in Power BI Desktop."

@@ -211,6 +211,28 @@ class TestFindSemanticModelDir:
         assert result is not None
         assert result.endswith(".SemanticModel")
 
+    def test_case_insensitive_semantic_model_extension(self, tmp_path):
+        """Should find .semanticmodel with different casing."""
+        # Lowercase
+        sem_dir_lower = tmp_path / "Model.semanticmodel"
+        sem_dir_lower.mkdir()
+        result = _find_semantic_model_dir(str(tmp_path))
+        assert result == str(sem_dir_lower)
+        
+        # Mixed case
+        sem_dir_lower.rmdir()
+        sem_dir_mixed = tmp_path / "Model.SemanticMODEL"
+        sem_dir_mixed.mkdir()
+        result = _find_semantic_model_dir(str(tmp_path))
+        assert result == str(sem_dir_mixed)
+
+    def test_accepts_semantic_model_dir_directly_case_insensitive(self, tmp_path):
+        """Should accept .semanticmodel directory with different casing."""
+        sem_dir = tmp_path / "Model.SEMANTICMODEL"
+        sem_dir.mkdir()
+        result = _find_semantic_model_dir(str(sem_dir))
+        assert result == str(sem_dir)
+
 
 # ---------------------------------------------------------------------------
 # _find_pbip_file
@@ -238,6 +260,24 @@ class TestFindPbipFile:
         pbip = tmp_path / "MyModel.pbip"
         pbip.write_text("{}")
         semantic_dir = tmp_path / "MyModel.SemanticModel"
+        semantic_dir.mkdir()
+        result = _find_pbip_file(str(semantic_dir))
+        assert result == str(pbip)
+
+    def test_case_insensitive_pbip_extension(self, tmp_path):
+        """Should find .pbip with different casing."""
+        # Uppercase
+        pbip_upper = tmp_path / "MyModel.PBIP"
+        pbip_upper.write_text("{}")
+        result = _find_pbip_file(str(tmp_path))
+        assert result == str(pbip_upper)
+
+    def test_case_insensitive_semantic_model_in_pbip_search(self, tmp_path):
+        """Should handle case-insensitive .SemanticModel when searching for .pbip."""
+        pbip = tmp_path / "Model.pbip"
+        pbip.write_text("{}")
+        # Mixed case SemanticModel directory
+        semantic_dir = tmp_path / "Model.semanticMODEL"
         semantic_dir.mkdir()
         result = _find_pbip_file(str(semantic_dir))
         assert result == str(pbip)
@@ -1653,6 +1693,33 @@ class TestResolveLocalXmlaConnection:
         assert conn is not None
         assert conn.server == fallback_server
         assert conn.catalog == ""  # local: no Initial Catalog; AS auto-selects
+
+    def test_case_insensitive_semantic_model_suffix_in_model_name_extraction(self, tmp_path):
+        """
+        When deriving the model name from a .SemanticModel directory with different casing,
+        the suffix should be removed correctly.
+        """
+        fallback_server = f"localhost:{_MOCK_AS_PORT_A}"
+        # Mixed-case directory
+        semantic_dir = tmp_path / "TestModel.semanticMODEL"
+        semantic_dir.mkdir()
+        (semantic_dir / "DAXQueries").mkdir()
+        with (
+            patch(
+                "pql_test.runner.get_pbi_files_opened",
+                return_value=[
+                    LocalPbiInstance(
+                        model_name="TestModel",
+                        server=fallback_server,
+                        catalog="TestModel",
+                    )
+                ],
+            ),
+        ):
+            conn = resolve_local_xmla_connection(str(semantic_dir))
+        assert conn is not None
+        # The model name should be extracted correctly regardless of .semanticMODEL casing
+        assert conn.catalog == "TestModel"
 
     @pytest.mark.live
     def test_runs_full_suite_from_sample_model_when_pbi_open(self, sample_model_path):
