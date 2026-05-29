@@ -126,6 +126,7 @@ Constraints {
   Use `edit` tool to modify files — do NOT use bash heredoc or redirection to write files
   Only use allowed bash commands: cat, echo, find, git diff, git log, git status
   Make surgical, minimal changes — do not refactor unrelated code
+  If source code changes are required, update plan.md and the corresponding tasks epic file to keep AIDD artifacts in sync
   Follow existing code style and patterns in the repository
   Do not introduce new dependencies without explicit justification
   Verify changes do not break existing tests or functionality
@@ -167,12 +168,14 @@ fn generateFixes() {
      - Locate the source of the bug based on error messages or described behavior
      - Generate minimal fix that addresses the root cause
      - Update or add tests to prevent regression
+  - Update plan.md and the active tasks epic when code changes are made
      - Update documentation if API or behavior changes
   
   2. For feature requests:
      - Identify where the feature should be implemented
      - Follow existing patterns and architecture
      - Add tests for new functionality. THIS CANNOT BE SKIPPED
+      - Update plan.md and the active tasks epic when code changes are made
      - Update relevant documentation
   
   3. For documentation issues:
@@ -186,6 +189,7 @@ fn verifyChanges() {
   2. Verify:
      - Changes are minimal and targeted
      - No unintended files were modified
+     - plan.md and the active tasks epic were updated whenever code files changed
      - Code follows repository style
      - No syntax errors introduced
   3. If changes look good, prepare commit message
@@ -198,6 +202,7 @@ fn createPullRequest() {
      - Description should include:
        - Summary of changes made
        - Reference to original issue (#$ISSUE_NUMBER)
+       - AIDD synchronization notes (what was updated in plan.md and tasks)
        - Testing notes or verification steps
        - Any questions or uncertainties
   
