@@ -50,8 +50,8 @@ steps:
     run: |
       set -e
 
-      if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-        echo "Skipping: workflow only runs on main (current ref: $GITHUB_REF)."
+      if [ "$GITHUB_REF" != "refs/heads/dev" ]; then
+        echo "Skipping: workflow only runs on dev (current ref: $GITHUB_REF)."
         exit 0
       fi
 
