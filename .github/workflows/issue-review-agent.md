@@ -19,12 +19,16 @@ permissions:
 safe-outputs:
   create-pull-request: {}
 
+env:
+  DEFAULT_BRANCH: dev
+
 engine:
   id: copilot
 
 timeout-minutes: 15
 
 checkout:
+  ref: dev
   fetch-depth: 0
 
 tools:
@@ -202,7 +206,7 @@ fn createPullRequest() {
   - If `issueData.pull_request` exists, do not create a PR; report incomplete instead
   - If diff scope is unexpectedly broad, do not create a PR; report incomplete instead
      - Use create-pull-request to open a PR
-     - Base: "dev"
+     - Base: "dev" (REQUIRED - must always be explicitly specified)
      - Title: "Fix #$ISSUE_NUMBER: $ISSUE_TITLE"
      - Description should include:
        - Summary of changes made
