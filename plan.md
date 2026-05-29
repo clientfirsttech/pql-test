@@ -4,6 +4,12 @@
 
 ## Active Work
 
+- **Format Test Results** — See [tasks/2026-05-29-format-test-results.md](tasks/2026-05-29-format-test-results.md) (Issue #30)
+  - Enhanced human-readable output with visual icons (✓, ✗, ⊘)
+  - Pass rate percentage and color-coded summary stats
+  - Total test duration display in summary
+  - Improved failure context with labeled fields (Message, Error, Expected, Actual)
+  - Better visual grouping in compact mode (dots grouped every 10 tests)
 - Incorporate AIDD framework into pql-test repository
 - Set up agent-based development workflows with @aidd commands
 - Maintain CI pipeline: validate-plugin → promptfoo-eval → run-tests-remote

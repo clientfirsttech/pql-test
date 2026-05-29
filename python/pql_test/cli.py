@@ -206,7 +206,7 @@ def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
 
 
 def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | None = None) -> None:
-    """Print test results in a pytest-style format."""
+    """Print test results in an enhanced human-readable format."""
     width = 72
 
     def _sep(title: str = "", char: str = "=", fg: str | None = None) -> str:
@@ -219,49 +219,86 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
             line = char * left + inner + char * right
         return click.style(line, fg=fg) if fg else line
 
-    click.echo("\n" + _sep("test session starts"))
-    click.echo(f"model: {suite.model_path}")
+    # Calculate total duration
+    total_duration_ms = sum(r.duration_ms for r in suite.results if r.duration_ms is not None)
+    
+    # Print header with model path
+    click.echo("\n" + _sep("TEST SESSION STARTS", "=", fg="cyan"))
+    click.echo(f"Model: {click.style(suite.model_path, fg='bright_white', bold=True)}")
+    click.echo(f"Tests: {suite.total}")
     click.echo("")
 
     failures = [r for r in suite.results if not r.passed and not r.skipped]
     skipped_results = [r for r in suite.results if r.skipped]
 
     if verbose:
+        # Verbose mode: show each test with visual icons
         for r in suite.results:
             if r.skipped:
-                tag = click.style("SKIP", fg="yellow")
+                icon = "⊘"  # Skipped icon
+                tag = click.style(f"{icon} SKIP", fg="yellow")
             elif r.passed:
-                tag = click.style("PASS", fg="green")
+                icon = "✓"  # Checkmark
+                tag = click.style(f"{icon} PASS", fg="green", bold=True)
             else:
-                tag = click.style("FAIL", fg="red")
-            line = f"  {tag} {r.test_name}"
-            if r.message:
-                line += f" -- {r.message}"
+                icon = "✗"  # Cross
+                tag = click.style(f"{icon} FAIL", fg="red", bold=True)
+            
+            line = f"  {tag} {click.style(r.test_name, fg='bright_white')}"
+            
+            # Add duration in a more prominent format
             if r.duration_ms is not None:
-                line += f" ({r.duration_ms:.0f}ms)"
+                duration_str = f"{r.duration_ms:.0f}ms"
+                line += f" {click.style(f'[{duration_str}]', fg='bright_black')}"
+            
             click.echo(line)
+            
+            # Show message on a separate line for better readability
+            if r.message and not r.passed:
+                click.echo(f"    {click.style('→', fg='bright_black')} {r.message}")
+        
         if suite.results:
             click.echo("")
     else:
+        # Compact mode: dots with better visual grouping
         dots_parts = []
-        for r in suite.results:
+        for i, r in enumerate(suite.results):
             if r.skipped:
                 dots_parts.append(click.style("s", fg="yellow"))
             elif r.passed:
                 dots_parts.append(click.style(".", fg="green"))
             else:
                 dots_parts.append(click.style("F", fg="red"))
+            
+            # Add space every 10 tests for readability
+            if (i + 1) % 10 == 0 and i + 1 < len(suite.results):
+                dots_parts.append(" ")
+        
         if dots_parts:
             click.echo("".join(dots_parts))
             click.echo("")
 
+    # Failures section with enhanced formatting
     if failures:
-        click.echo(_sep("FAILURES", "-", fg="red"))
-        for r in failures:
-            click.echo(f"\n  {click.style('FAILED', fg='red')} {r.test_name}")
-            click.echo(f"  {r.message}")
+        click.echo(_sep("FAILURES", "=", fg="red"))
+        for idx, r in enumerate(failures, 1):
+            click.echo(f"\n{click.style(f'[{idx}/{len(failures)}]', fg='bright_black')} {click.style('FAILED', fg='red', bold=True)} {click.style(r.test_name, fg='bright_white', bold=True)}")
+            
+            # Show message with better formatting
+            if r.message:
+                click.echo(f"  {click.style('Message:', fg='yellow')} {r.message}")
+            
+            # Show error with clear separation
             if r.error:
-                click.echo(f"  Error: {r.error}")
+                click.echo(f"  {click.style('Error:', fg='red')} {r.error}")
+            
+            # Show expected vs actual if available
+            if r.expected is not None or r.actual is not None:
+                if r.expected is not None:
+                    click.echo(f"  {click.style('Expected:', fg='cyan')} {r.expected}")
+                if r.actual is not None:
+                    click.echo(f"  {click.style('Actual:', fg='cyan')} {r.actual}")
+        
         click.echo("")
 
     # Collect all warnings: pre-run messages + skipped-test messages (deduplicated)
@@ -274,23 +311,52 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
             seen.add(msg)
 
     if warn_msgs:
-        click.echo(_sep("warnings summary", "-", fg="yellow"))
-        for msg in warn_msgs:
-            click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
+        click.echo(_sep("WARNINGS", "=", fg="yellow"))
+        for idx, msg in enumerate(warn_msgs, 1):
+            click.echo(f"  {click.style(f'[{idx}]', fg='bright_black')} {click.style('⚠', fg='yellow')} {msg}")
         click.echo("")
 
-    summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
+    # Enhanced summary with pass rate and duration
+    pass_rate = (suite.passed / suite.total * 100) if suite.total > 0 else 0
+    
+    summary_parts = []
+    summary_parts.append(f"{click.style(str(suite.passed), fg='green', bold=True)} passed")
+    summary_parts.append(f"{click.style(str(suite.failed), fg='red', bold=True)} failed")
+    summary_parts.append(f"{suite.total} total")
+    
     if suite.skipped:
         plural = "s" if suite.skipped != 1 else ""
-        summary += f", {suite.skipped} warning{plural}"
+        summary_parts.append(f"{click.style(str(suite.skipped), fg='yellow')} warning{plural}")
+    
+    summary_line = ", ".join(summary_parts)
+    
+    # Add pass rate
+    if suite.total > 0:
+        rate_color = "green" if pass_rate == 100 else "yellow" if pass_rate >= 80 else "red"
+        summary_line += f" ({click.style(f'{pass_rate:.1f}%', fg=rate_color)} pass rate)"
+    
+    # Add total duration
+    if total_duration_ms > 0:
+        if total_duration_ms >= 1000:
+            duration_str = f"{total_duration_ms / 1000:.2f}s"
+        else:
+            duration_str = f"{total_duration_ms:.0f}ms"
+        summary_line += f" in {click.style(duration_str, fg='bright_black')}"
 
+    # Determine overall status
     if suite.failed > 0:
-        summary_color = "red"
+        status = "FAILED"
+        status_color = "red"
     elif suite.skipped > 0:
-        summary_color = "yellow"
+        status = "PASSED WITH WARNINGS"
+        status_color = "yellow"
     else:
-        summary_color = "green"
-    click.echo(_sep(summary, fg=summary_color))
+        status = "PASSED"
+        status_color = "green"
+    
+    click.echo(_sep(status, "=", fg=status_color))
+    click.echo(summary_line)
+    click.echo("")
 
 
 def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
