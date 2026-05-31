@@ -77,15 +77,16 @@ Microsoft Fabric workspace endpoint.
 
 ## Prerequisites
 
-| Requirement | Minimum version | Notes |
-|---|---|---|
-| Python | 3.9+ | [python.org](https://www.python.org/downloads/) |
-| pythonnet | 3.x | `pip install pythonnet` — needed to load the ADOMD.NET assembly |
-| Power BI Desktop | any | Provides `Microsoft.PowerBI.AdomdClient.dll` used for local XMLA connections |
-| msal | 1.24+ | `pip install msal` — required for service-principal auth against remote workspaces |
-| psutil | any | `pip install psutil` — required for `local/<model_name>` discovery; optional otherwise |
+The only thing you install manually is **Python 3.9+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
 
-Run the built-in check to verify your environment:
+| Requirement | How it's installed |
+|---|---|
+| Python 3.9+ | **Manual** — install from python.org and ensure it's on PATH |
+| pythonnet, msal, azure-identity, keyring, click, python-dotenv, psutil | **Automatic via pip** — pulled in as Python dependencies when you `pip install pql-test` |
+| ADOMD.NET assemblies (the .NET XMLA client) | **Automatic on first use** — when no ADOMD.NET install is detected, pql-test downloads the official `Microsoft.AnalysisServices.AdomdClient` NuGet package (~5 MB) from `nuget.org` to `%USERPROFILE%\.pql-test\adomd\` and uses it for every subsequent run. No admin rights, no manual MSI. Set `PQL_TEST_NO_AUTO_INSTALL_ADOMD=1` if you'd rather provide ADOMD yourself. |
+| Power BI Desktop *(optional)* | Only needed for `local/<model_name>` mode against a locally-open model. Skip if you only target the service. |
+
+Run the built-in check to verify your environment (this is also when the one-time ADOMD download will fire, if needed):
 
 ```powershell
 pql-test check-prereqs

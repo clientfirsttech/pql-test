@@ -134,6 +134,165 @@ def _discover_adomd_search_dirs() -> list[str]:
 
 _ADOMD_SEARCH_DIRS = _discover_adomd_search_dirs()
 
+
+# ---------------------------------------------------------------------------
+# ADOMD.NET auto-install (NuGet bootstrap)
+# ---------------------------------------------------------------------------
+#
+# When ADOMD.NET assemblies aren't already installed in any of the standard
+# locations, we download the official Microsoft NuGet package
+# (Microsoft.AnalysisServices.AdomdClient) and unpack its lib/net472/ DLLs
+# into a user-local cache directory.  The next import (or this one, after
+# the fetch) finds them via clr.AddReference exactly as if they'd been
+# installed manually.
+#
+# This turns the brand-new-user install story from
+#   1. install Python  2. install ADOMD.NET MSI  3. pip install pql-test
+# into just
+#   1. install Python  2. pip install pql-test         (auto-fetch on first use)
+#
+# Opt-outs:
+#   * PQL_TEST_HERMETIC=1        — used by the test suite; skips everything.
+#   * PQL_TEST_NO_AUTO_INSTALL_ADOMD=1  — for users who manage ADOMD.NET
+#                                  themselves (corporate-managed machines,
+#                                  air-gapped envs, custom NuGet feeds).
+
+_ADOMD_AUTO_INSTALL_VERSION = "19.114.0"
+_ADOMD_AUTO_INSTALL_PKG_ID = "microsoft.analysisservices.adomdclient"
+_ADOMD_AUTO_INSTALL_LIB_FOLDER = "lib/net472"
+
+
+def _adomd_assemblies_present(search_dirs: list[str]) -> bool:
+    """Return True when any *search_dirs* entry contains an ADOMD.NET DLL.
+
+    We accept either the standalone client (`Microsoft.AnalysisServices.
+    AdomdClient.dll`, NuGet / installer redist) or the Power BI Desktop
+    flavour (`Microsoft.PowerBI.AdomdClient.dll`) — the .NET namespace
+    inside is the same.
+    """
+    candidate_files = (
+        "Microsoft.AnalysisServices.AdomdClient.dll",
+        "Microsoft.PowerBI.AdomdClient.dll",
+    )
+    for d in search_dirs:
+        if not os.path.isdir(d):
+            continue
+        for name in candidate_files:
+            if os.path.isfile(os.path.join(d, name)):
+                return True
+    return False
+
+
+def _adomd_auto_install_cache_dir() -> Optional[str]:
+    """Return the user-local cache path the auto-installer extracts to."""
+    home = os.path.expanduser("~")
+    if not home or home == "~":
+        return None
+    return os.path.join(
+        home,
+        ".pql-test",
+        "adomd",
+        _ADOMD_AUTO_INSTALL_PKG_ID,
+        _ADOMD_AUTO_INSTALL_VERSION,
+        *_ADOMD_AUTO_INSTALL_LIB_FOLDER.split("/"),
+    )
+
+
+def _auto_install_adomd_from_nuget() -> Optional[str]:
+    """Download the Microsoft.AnalysisServices.AdomdClient NuGet package and
+    extract its `lib/net472/` contents to the user cache.
+
+    Returns the directory holding the extracted DLLs on success, or None on
+    any failure (network error, opt-out, missing home directory, …).  This
+    function is intentionally tolerant: callers fall back to the standard
+    "ADOMD.NET not loaded" path when it returns None.
+    """
+    if os.environ.get("PQL_TEST_HERMETIC") or os.environ.get(
+        "PQL_TEST_NO_AUTO_INSTALL_ADOMD"
+    ):
+        return None
+
+    cache_dir = _adomd_auto_install_cache_dir()
+    if cache_dir is None:
+        return None
+
+    # Already cached from a prior run — fast path.
+    if os.path.isdir(cache_dir) and any(
+        f.lower().endswith(".dll") for f in os.listdir(cache_dir)
+    ):
+        return cache_dir
+
+    pkg = _ADOMD_AUTO_INSTALL_PKG_ID
+    version = _ADOMD_AUTO_INSTALL_VERSION
+    # NuGet flat-container public endpoint — no auth required.
+    nupkg_url = (
+        f"https://api.nuget.org/v3-flatcontainer/{pkg}/{version}/{pkg}.{version}.nupkg"
+    )
+
+    print(
+        f"ADOMD.NET assemblies not detected. Downloading "
+        f"{pkg} {version} from nuget.org to {cache_dir} (one-time, ~5 MB)...",
+        file=sys.stderr,
+    )
+
+    import tempfile  # noqa: PLC0415 — avoid the cost on the fast path
+    import urllib.request  # noqa: PLC0415
+    import zipfile  # noqa: PLC0415
+
+    tmp_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".nupkg", delete=False) as f:
+            tmp_path = f.name
+        urllib.request.urlretrieve(nupkg_url, tmp_path)
+        os.makedirs(cache_dir, exist_ok=True)
+        member_prefix = _ADOMD_AUTO_INSTALL_LIB_FOLDER + "/"
+        with zipfile.ZipFile(tmp_path) as z:
+            for member in z.namelist():
+                if not member.startswith(member_prefix) or member.endswith("/"):
+                    continue
+                # Preserve subdirectory structure under lib/net472/ — the
+                # NuGet package ships satellite-resource DLLs in culture
+                # subdirs (de/, es/, zh-Hans/, …) and the .NET assembly
+                # loader expects them in those subdirs to localise error
+                # messages.  Flattening would collide every culture's
+                # `*.resources.dll` to the same path.
+                rel = member[len(member_prefix):]
+                dest = os.path.join(cache_dir, *rel.split("/"))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with z.open(member) as src, open(dest, "wb") as out:
+                    out.write(src.read())
+        print(
+            f"ADOMD.NET assemblies installed to {cache_dir}.  Subsequent runs "
+            "use the cached install.",
+            file=sys.stderr,
+        )
+        return cache_dir
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"Warning: failed to auto-install ADOMD.NET ({type(exc).__name__}: "
+            f"{exc}). Install manually from https://learn.microsoft.com/en-us/"
+            f"analysis-services/client-libraries and retry, or run with "
+            f"PQL_TEST_NO_AUTO_INSTALL_ADOMD=1 to silence this attempt.",
+            file=sys.stderr,
+        )
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+# Bootstrap: when none of the discovered directories already carry ADOMD
+# assemblies, attempt a one-time fetch into the user-local cache.  No-op
+# when assemblies are already present anywhere on the search path.
+if not _adomd_assemblies_present(_ADOMD_SEARCH_DIRS):
+    _auto_dir = _auto_install_adomd_from_nuget()
+    if _auto_dir:
+        _ADOMD_SEARCH_DIRS.append(_auto_dir)
+
+
 try:
     import clr  # type: ignore[import-untyped]  # pythonnet
 
