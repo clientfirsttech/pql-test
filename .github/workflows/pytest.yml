@@ -68,7 +68,10 @@ jobs:
       - name: Install pql-test (with dev extras) and dependencies
         shell: bash
         run: |
-          pip install --upgrade pip
+          # pip 26.1+ refuses self-upgrade via `pip install --upgrade pip`
+          # and requires the `python -m pip` form to avoid the Windows
+          # exe-replacement race.  Use that form for forward compatibility.
+          python -m pip install --upgrade pip
           # The [dev] extras pull in pytest + pytest-cov per pyproject.toml.
           pip install ./python[dev]
 
