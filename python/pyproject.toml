@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pql-test"
-version = "0.1.6"
+version = "0.1.7"
 description = "CLI for discovering and running DAX tests in Power BI PBIP semantic models via XMLA"
 readme = "README.md"
 requires-python = ">=3.9"

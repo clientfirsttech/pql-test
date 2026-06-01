@@ -232,50 +232,159 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     failures = [r for r in suite.results if not r.passed and not r.skipped]
     skipped_results = [r for r in suite.results if r.skipped]
 
-    # Always list every result by name with a PASS/FAIL/SKIP tag so the
-    # user can see exactly which tests had which outcome without needing
-    # --verbose.  --verbose additionally appends the per-assertion message
-    # and duration to each line.
+    # Roll the per-assertion list up by SUITE and render as a table.  A
+    # 60-test run shows ~6 rows (one per suite) with Pass/Fail/Skip counts
+    # broken out into their own columns so the eye snaps straight to any
+    # non-zero Fail/Skip cell.  `--verbose` additionally expands every
+    # suite to show its individual assertions in a Details section below.
+    by_suite: dict[str, list] = {}
     for r in suite.results:
-        if r.skipped:
-            tag = click.style("SKIP", fg="yellow")
-        elif r.passed:
-            tag = click.style("PASS", fg="green")
-        else:
-            tag = click.style("FAIL", fg="red")
-        line = f"  {tag} {r.test_name}"
+        sn = r.suite_name or r.test_name
+        by_suite.setdefault(sn, []).append(r)
+
+    if by_suite:
+        # ---- column geometry ----
+        STATUS_W = 4   # "PASS"/"FAIL"/"SKIP" / header "Stat"
+        COUNT_W = 4    # headers "Pass"/"Fail"/"Skip", up to 4-digit counts
+        SUITE_MAX = 50
+        # Suite column expands to fit the longest name but is capped so
+        # one pathological name can't blow past the terminal.  Longer
+        # names get an ellipsis truncation.
+        suite_width = max(
+            len("Suite"),
+            min(SUITE_MAX, max(len(sn) for sn in by_suite)),
+        )
+
+        def _trunc(s: str, n: int) -> str:
+            return s if len(s) <= n else s[: n - 1] + "…"
+
+        def _pad(text: str, width: int, align: str = "left") -> str:
+            return text.rjust(width) if align == "right" else text.ljust(width)
+
+        def _row(c1: str, c2: str, c3: str, c4: str, c5: str) -> str:
+            # Each cell gets 1 space of inner padding on each side.
+            return f"│ {c1} │ {c2} │ {c3} │ {c4} │ {c5} │"
+
+        def _hline(left: str, mid: str, right: str) -> str:
+            parts = [
+                "─" * (STATUS_W + 2),
+                "─" * (suite_width + 2),
+                "─" * (COUNT_W + 2),
+                "─" * (COUNT_W + 2),
+                "─" * (COUNT_W + 2),
+            ]
+            return left + mid.join(parts) + right
+
+        # ---- top border + header row ----
+        click.echo(_hline("┌", "┬", "┐"))
+        click.echo(
+            _row(
+                _pad("Stat", STATUS_W),
+                _pad("Suite", suite_width),
+                _pad("Pass", COUNT_W),
+                _pad("Fail", COUNT_W),
+                _pad("Skip", COUNT_W),
+            )
+        )
+        click.echo(_hline("├", "┼", "┤"))
+
+        # ---- data rows ----
+        tag_color = {"PASS": "green", "FAIL": "red", "SKIP": "yellow"}
+        for sn, results in by_suite.items():
+            n_pass = sum(1 for r in results if r.passed and not r.skipped)
+            n_fail = sum(1 for r in results if not r.passed and not r.skipped)
+            n_skip = sum(1 for r in results if r.skipped)
+            if n_fail:
+                tag = "FAIL"
+            elif n_skip and not n_pass:
+                tag = "SKIP"
+            else:
+                tag = "PASS"
+            # Pad cells using the raw text length first; THEN colorize so
+            # ANSI escape codes stay outside the visible-width math and
+            # don't break alignment with the borders.
+            stat_cell = click.style(_pad(tag, STATUS_W), fg=tag_color[tag])
+            suite_cell = _pad(_trunc(sn, suite_width), suite_width)
+            pass_str = str(n_pass) if n_pass else "-"
+            fail_str = str(n_fail) if n_fail else "-"
+            skip_str = str(n_skip) if n_skip else "-"
+            pass_cell = _pad(pass_str, COUNT_W, align="right")
+            # Tint Fail red and Skip yellow when non-zero so the eye snaps
+            # to the actionable cells.
+            fail_cell = _pad(fail_str, COUNT_W, align="right")
+            if n_fail:
+                fail_cell = click.style(fail_cell, fg="red")
+            skip_cell = _pad(skip_str, COUNT_W, align="right")
+            if n_skip:
+                skip_cell = click.style(skip_cell, fg="yellow")
+            click.echo(_row(stat_cell, suite_cell, pass_cell, fail_cell, skip_cell))
+
+        click.echo(_hline("└", "┴", "┘"))
+        click.echo("")
+
+        # ---- verbose: per-suite expansion of every assertion ----
         if verbose:
-            if r.message:
-                line += f" -- {r.message}"
-            if r.duration_ms is not None:
-                line += f" ({r.duration_ms:.0f}ms)"
-        click.echo(line)
-    if suite.results:
-        click.echo("")
+            click.echo(_sep("Details", "-"))
+            for sn, results in by_suite.items():
+                click.echo(f"\n  {click.style(sn, bold=True)}")
+                for r in results:
+                    if r.skipped:
+                        rtag = click.style("SKIP", fg="yellow")
+                    elif r.passed:
+                        rtag = click.style("PASS", fg="green")
+                    else:
+                        rtag = click.style("FAIL", fg="red")
+                    rline = f"    {rtag} {r.test_name}"
+                    if r.message:
+                        rline += f" -- {r.message}"
+                    if r.duration_ms is not None:
+                        rline += f" ({r.duration_ms:.0f}ms)"
+                    click.echo(rline)
+            click.echo("")
 
-    if failures:
-        click.echo(_sep("FAILURES", "-", fg="red"))
-        for r in failures:
-            click.echo(f"\n  {click.style('FAILED', fg='red')} {r.test_name}")
-            click.echo(f"  {r.message}")
-            if r.error:
-                click.echo(f"  Error: {r.error}")
-        click.echo("")
+    # Detail sections (FAILURES + warnings summary) are --verbose only.
+    # The default view is the table + the totals line at the bottom — for
+    # everything else, the user opts in with --verbose.
+    if verbose:
+        if failures:
+            click.echo(_sep("FAILURES", "-", fg="red"))
+            # Group failures by suite so related failures cluster together —
+            # much easier to scan than a flat list when several suites fail.
+            failures_by_suite: dict[str, list] = {}
+            for r in failures:
+                sn = r.suite_name or r.test_name
+                failures_by_suite.setdefault(sn, []).append(r)
+            for sn, fs in failures_by_suite.items():
+                click.echo(
+                    f"\n  {click.style(sn, bold=True)}  "
+                    f"({click.style(f'{len(fs)} failed', fg='red')})"
+                )
+                for r in fs:
+                    mark = click.style("✗", fg="red")
+                    msg = r.message or ""
+                    if msg:
+                        click.echo(f"    {mark} {r.test_name} — {msg}")
+                    else:
+                        click.echo(f"    {mark} {r.test_name}")
+                    if r.error:
+                        click.echo(f"        Error: {r.error}")
+            click.echo("")
 
-    # Collect all warnings: pre-run messages + skipped-test messages (deduplicated)
-    warn_msgs: list[str] = list(pre_warnings or [])
-    seen: set[str] = set(warn_msgs)
-    for r in skipped_results:
-        msg = r.message or r.test_name
-        if msg not in seen:
-            warn_msgs.append(msg)
-            seen.add(msg)
+        # Collect all warnings: pre-run messages + skipped-test messages
+        # (deduplicated).
+        warn_msgs: list[str] = list(pre_warnings or [])
+        seen: set[str] = set(warn_msgs)
+        for r in skipped_results:
+            msg = r.message or r.test_name
+            if msg not in seen:
+                warn_msgs.append(msg)
+                seen.add(msg)
 
-    if warn_msgs:
-        click.echo(_sep("warnings summary", "-", fg="yellow"))
-        for msg in warn_msgs:
-            click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
-        click.echo("")
+        if warn_msgs:
+            click.echo(_sep("warnings summary", "-", fg="yellow"))
+            for msg in warn_msgs:
+                click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
+            click.echo("")
 
     # When discovery returned nothing, make it obvious instead of producing
     # a confusing "0 passed, 0 failed, 0 total" line that looks like success.
