@@ -29,7 +29,6 @@ Microsoft Fabric workspace endpoint.
     - [Filesystem path (default)](#filesystem-path-default)
     - [Local model name (`local/<model_name>`)](#local-model-name-localmodel_name)
     - [Fabric service path (`<workspace>.Workspace/<model>.SemanticModel`)](#fabric-service-path-workspaceworkspacemodelsemanticmodel)
-    - [Legacy dot notation (deprecated)](#legacy-dot-notation-deprecated)
   - [Example Models](#example-models)
     - [SampleModel](#samplemodel)
     - [RLS\_Model (Row-Level Security)](#rls_model-row-level-security)
@@ -77,15 +76,16 @@ Microsoft Fabric workspace endpoint.
 
 ## Prerequisites
 
-| Requirement | Minimum version | Notes |
-|---|---|---|
-| Python | 3.9+ | [python.org](https://www.python.org/downloads/) |
-| pythonnet | 3.x | `pip install pythonnet` — needed to load the ADOMD.NET assembly |
-| Power BI Desktop | any | Provides `Microsoft.PowerBI.AdomdClient.dll` used for local XMLA connections |
-| msal | 1.24+ | `pip install msal` — required for service-principal auth against remote workspaces |
-| psutil | any | `pip install psutil` — required for `local/<model_name>` discovery; optional otherwise |
+The only thing you install manually is **Python 3.9+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
 
-Run the built-in check to verify your environment:
+| Requirement | How it's installed |
+|---|---|
+| Python 3.9+ | **Manual** — install from python.org and ensure it's on PATH |
+| pythonnet, msal, azure-identity, keyring, click, python-dotenv, psutil | **Automatic via pip** — pulled in as Python dependencies when you `pip install pql-test` |
+| ADOMD.NET assemblies (the .NET XMLA client) | **Automatic on first use** — when no ADOMD.NET install is detected, pql-test downloads the official `Microsoft.AnalysisServices.AdomdClient` NuGet package (~5 MB) from `nuget.org` to `%USERPROFILE%\.pql-test\adomd\` and uses it for every subsequent run. No admin rights, no manual MSI. Set `PQL_TEST_NO_AUTO_INSTALL_ADOMD=1` if you'd rather provide ADOMD yourself. |
+| Power BI Desktop *(optional)* | Only needed for `local/<model_name>` mode against a locally-open model. Skip if you only target the service. |
+
+Run the built-in check to verify your environment (this is also when the one-time ADOMD download will fire, if needed):
 
 ```powershell
 pql-test check-prereqs
@@ -222,7 +222,18 @@ The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
 | `<workspace>.Workspace/<model>.SemanticModel` | Service | **Canonical Fabric service path** — connect to a remote workspace by display names. Matches Fabric's own filesystem layout. |
 | `local/<model_name>` | Local | Connect to a locally-open Power BI Desktop instance by model name |
 | `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
-| `<workspace>.<model>` | Service (deprecated) | Legacy dot notation — still works, but prints a one-line deprecation warning on stderr |
+
+> **Quoting:** if the workspace or model name contains spaces or other shell
+> metacharacters (e.g. parentheses), wrap the **entire** `MODEL_PATH` argument
+> in double quotes so your shell passes it as one argument:
+>
+> ```bash
+> pql-test retrieve-tests "local/OLS_Model (1)"
+> pql-test run-tests "My Workspace.Workspace/Sales Model.SemanticModel"
+> ```
+>
+> Without quotes the shell splits `local/OLS_Model (1)` into two arguments and
+> the CLI never sees the full name.
 
 ### Filesystem path (default)
 
@@ -294,18 +305,6 @@ pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
 > shape and does not exist as a real directory on the local filesystem, it
 > is interpreted as a Fabric service path. A real on-disk directory at the
 > same string takes precedence and is treated as a filesystem path.
-
-### Legacy dot notation (deprecated)
-
-The older `<workspace>.<model>` shorthand still works for backward
-compatibility, but emits a one-line deprecation warning to stderr each
-invocation pointing you at the canonical form. Migrate to the
-`.Workspace/.SemanticModel` form when you can.
-
-```bash
-# Still works — prints a "deprecated" warning on stderr:
-pql-test run-tests "MyWorkspace.MySemanticModel"
-```
 
 ---
 

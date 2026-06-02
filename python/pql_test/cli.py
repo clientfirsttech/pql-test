@@ -16,8 +16,6 @@ Model path formats:
   - <filesystem_path>           Traditional PBIP root directory.
   - local/<model_name>          Connect to a locally-open Power BI
                                 Desktop instance by model name.
-  - <workspace>.<model>         Legacy dot notation (deprecated — still
-                                accepted, emits a one-line warning).
 
 Connection resolution:
   - When --tenant-id, --workspace-id, and --dataset-id are all provided (or
@@ -663,8 +661,6 @@ def cmd_retrieve_tests(
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
       <filesystem_path>           Traditional PBIP root directory.
-      <workspace>.<model>         Legacy dot notation (deprecated — still
-                                  accepted, emits a one-line warning).
 
     Wrap MODEL_PATH in double quotes when the workspace or model name contains
     spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
@@ -790,8 +786,6 @@ def cmd_retrieve_test(
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
       <filesystem_path>           Traditional PBIP root directory.
-      <workspace>.<model>         Legacy dot notation (deprecated — still
-                                  accepted, emits a one-line warning).
 
     Wrap MODEL_PATH in double quotes when the workspace or model name contains
     spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
@@ -915,8 +909,6 @@ def cmd_run_tests(
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
       <filesystem_path>           Traditional PBIP root directory.
-      <workspace>.<model>         Legacy dot notation (deprecated — still
-                                  accepted, emits a one-line warning).
 
     Wrap MODEL_PATH in double quotes when the workspace or model name contains
     spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell

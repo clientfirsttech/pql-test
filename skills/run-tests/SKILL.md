@@ -8,7 +8,7 @@ Run `pql-test run-tests MODEL_PATH` to execute all DAX test suites found in a Po
 MODEL_PATH accepts three formats:
 - **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory itself).
 - **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name, without requiring a local file path. Useful when test files are defined in the model's `functions.tmdl` and may not exist locally.
-- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation (similar to `fab run`). Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`).
+- **`<workspace>.Workspace/<semantic_model>.SemanticModel`** — canonical Fabric service path (matches Fabric's own filesystem layout). Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`, or a stored interactive login via `pql-test auth login`).
 
 The command auto-detects a locally-open Power BI Desktop instance via the Analysis Services port file, or connects to a remote Power BI Premium / Microsoft Fabric XMLA endpoint when `--tenant-id`, `--workspace-id`, and `--dataset-id` are supplied.
 

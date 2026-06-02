@@ -8,7 +8,7 @@ Run `pql-test retrieve-tests MODEL_PATH` to discover all DAX test suites stored 
 MODEL_PATH accepts three formats:
 - **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory / `.pbip` file directly).
 - **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name, without requiring a local file path.
-- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation. Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`).
+- **`<workspace>.Workspace/<semantic_model>.SemanticModel`** — canonical Fabric service path (matches Fabric's own filesystem layout). Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`, or a stored interactive login via `pql-test auth login`).
 
 Options:
 - `--test NAME` — Show only the named test suite.

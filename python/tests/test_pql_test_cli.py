@@ -720,10 +720,14 @@ class TestModelIdentifierFormats:
         assert "local/" in stdout
 
     def test_run_tests_help_mentions_service_format(self):
-        """run-tests help text mentions the workspace.model format."""
+        """run-tests help text mentions the canonical Fabric service path."""
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
-        assert "Fabric CLI" in stdout or "dot notation" in stdout
+        # Canonical Fabric service path is the only documented service form
+        # (legacy dot notation is still accepted at runtime but no longer
+        # advertised — see the docs-cleanup pass on 2026-06-01).
+        assert ".Workspace/" in stdout and ".SemanticModel" in stdout
+        assert "Fabric" in stdout
 
     def test_retrieve_tests_help_mentions_local_model_format(self):
         """retrieve-tests help text mentions the local/<model_name> format."""

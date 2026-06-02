@@ -29,7 +29,6 @@ Microsoft Fabric workspace endpoint.
     - [Filesystem path (default)](#filesystem-path-default)
     - [Local model name (`local/<model_name>`)](#local-model-name-localmodel_name)
     - [Fabric service path (`<workspace>.Workspace/<model>.SemanticModel`)](#fabric-service-path-workspaceworkspacemodelsemanticmodel)
-    - [Legacy dot notation (deprecated)](#legacy-dot-notation-deprecated)
   - [Example Models](#example-models)
     - [SampleModel](#samplemodel)
     - [RLS\_Model (Row-Level Security)](#rls_model-row-level-security)
@@ -223,7 +222,6 @@ The `MODEL_PATH` argument accepted by `retrieve-tests`, `retrieve-test`, and
 | `<workspace>.Workspace/<model>.SemanticModel` | Service | **Canonical Fabric service path** — connect to a remote workspace by display names. Matches Fabric's own filesystem layout. |
 | `local/<model_name>` | Local | Connect to a locally-open Power BI Desktop instance by model name |
 | `<filesystem_path>` | File / local | Traditional PBIP root directory (default) |
-| `<workspace>.<model>` | Service (deprecated) | Legacy dot notation — still works, but prints a one-line deprecation warning on stderr |
 
 > **Quoting:** if the workspace or model name contains spaces or other shell
 > metacharacters (e.g. parentheses), wrap the **entire** `MODEL_PATH` argument
@@ -307,18 +305,6 @@ pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
 > shape and does not exist as a real directory on the local filesystem, it
 > is interpreted as a Fabric service path. A real on-disk directory at the
 > same string takes precedence and is treated as a filesystem path.
-
-### Legacy dot notation (deprecated)
-
-The older `<workspace>.<model>` shorthand still works for backward
-compatibility, but emits a one-line deprecation warning to stderr each
-invocation pointing you at the canonical form. Migrate to the
-`.Workspace/.SemanticModel` form when you can.
-
-```bash
-# Still works — prints a "deprecated" warning on stderr:
-pql-test run-tests "MyWorkspace.MySemanticModel"
-```
 
 ---
 
