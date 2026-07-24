@@ -467,8 +467,11 @@ EVALUATE BestPractices.ANY.Tests()
 | `Schema.DEV.Tests.dax` | Table / column / relationship existence |
 | `BestPractices.ANY.Tests.dax` | PQL best-practice rule checks (5-column schema) |
 
-The `DEV` / `ANY` segment is a convention indicating the environment scope;
-`pql-test` treats all `*.Tests.dax` files equally.
+The `DEV` / `ANY` segment indicates the environment scope. By default
+`pql-test` treats all `*.Tests.dax` files equally; pass `--env <ENV>` to
+`run-tests` / `retrieve-tests` to restrict discovery and execution to one
+environment's suites (see
+[Environment-specific test discovery](#environment-specific-test-discovery---env)).
 
 ---
 
@@ -587,7 +590,7 @@ All prerequisites met.
 List all DAX test suites discovered in a PBIP model.
 
 ```bash
-pql-test retrieve-tests <modelPath> [--verbose]
+pql-test retrieve-tests <modelPath> [--env <environment>] [--verbose]
 ```
 
 **Arguments:**
@@ -595,6 +598,7 @@ pql-test retrieve-tests <modelPath> [--verbose]
 | Argument | Required | Description |
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
+| `--env <environment>` | ❌ | Only list suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--verbose`, `-v` | ❌ | Also print file paths and connection info |
 
 **Example:**
@@ -636,6 +640,12 @@ Connection: none detected — open the model in Power BI Desktop or supply
 
 ```bash
 pql-test retrieve-tests ./examples/SampleModel.SemanticModel --test "Calculations.DEV.Tests"
+```
+
+**Filter to one environment's suites using `--env`:**
+
+```bash
+pql-test retrieve-tests ./examples/SampleModel.SemanticModel --env DEV
 ```
 
 **Using `local/<model_name>` (no local file path needed):**
@@ -695,7 +705,7 @@ pql-test retrieve-test ./examples/SampleModel.SemanticModel "DataQuality.DEV.Tes
 Execute DAX test suites in a PBIP model via XMLA and report pass/fail results.
 
 ```bash
-pql-test run-tests <modelPath> [--test <name>] [--verbose]
+pql-test run-tests <modelPath> [--test <name>] [--env <environment>] [--verbose]
                                [--output <file>]
                                [--log-format {azuredevops,github}]
                                [--tenant-id <id>]
@@ -709,6 +719,7 @@ pql-test run-tests <modelPath> [--test <name>] [--verbose]
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `--test <name>` | ❌ | Run only the named test suite |
+| `--env <environment>` | ❌ | Run only suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
 | `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
 | `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
@@ -755,6 +766,50 @@ pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" \
 ```bash
 pql-test run-tests ./examples/SampleModel.SemanticModel --test "Calculations.DEV.Tests"
 ```
+
+#### Environment-specific test discovery (`--env`)
+
+A semantic model stores *all* of its test suites, but not every suite is meant
+to run against every workspace. Suites encode their target environment as the
+second-to-last segment of the function name — `<Suite>.<ENV>.Tests`:
+
+```
+Calculations.DEV.Tests.dax    ← discovered with --env DEV
+DataQuality.DEV.Tests.dax     ← discovered with --env DEV
+Schema.DEV.Tests.dax          ← discovered with --env DEV
+BestPractices.ANY.Tests.dax   ← discovered with --env ANY
+ColumnTests.BKUP.Tests.dax    ← discovered with --env BKUP
+```
+
+`--env <ENV>` restricts discovery and execution to that environment's suites,
+so you no longer have to retrieve all tests, parse out the ones you want, and
+run them one at a time with `--test`:
+
+```bash
+pql-test run-tests ./examples/SampleModel.SemanticModel --env DEV
+pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --env PROD
+pql-test run-tests "Backups.Workspace/MySemanticModel.SemanticModel" --env BKUP
+```
+
+How it filters:
+
+- **Live discovery** (local Desktop, `local/<name>`, or service connection):
+  the environment is passed straight to the model's UDF as
+  `PQL.Assert.RetrieveTestsV2("<ENV>")`, so the model decides which suites
+  match. If the installed `RetrieveTestsV2` doesn't accept an argument yet,
+  the CLI falls back to parameterless discovery and filters client-side by the
+  naming convention.
+- **Offline file scan**: `DAXQueries/*.Tests.dax` files are matched against
+  the `<Suite>.<ENV>.Tests` convention.
+
+Matching is case-insensitive and **exact** — `ANY` is an ordinary environment
+token, not a wildcard, so `--env DEV` does not include `*.ANY.Tests` suites
+(run them with a separate `--env ANY` invocation). Suites without an
+environment segment (e.g. `Calcs.Tests`) never match an `--env` filter.
+
+> **Note:** `--environment` (without the abbreviation) is a different flag — it
+> selects the Power BI *cloud* (`Public`, `USGov`, `China`, …). The test-suite
+> environment flag is `--env` only.
 
 **Save JSON results to a file while still printing to the console:**
 

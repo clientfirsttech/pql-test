@@ -842,3 +842,75 @@ class TestRlsModel:
         """run-tests always prints a passed/failed/total summary for the RLS model."""
         stdout, _, _ = run_cli(["run-tests", rls_model_path], live=True)
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+
+# ---------------------------------------------------------------------------
+# --env (environment-specific test discovery)
+# ---------------------------------------------------------------------------
+
+class TestEnvOption:
+    """--env filters discovery/execution to one environment's test suites
+    (<Suite>.<ENV>.Tests naming convention)."""
+
+    def _make_multi_env_model(self, tmp_path) -> str:
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        for suite in ("Calculations.DEV", "Schema.PROD", "BestPractices.ANY"):
+            (dax_dir / f"{suite}.Tests.dax").write_text(
+                make_dax_source(f"{suite}.Tests"), encoding="utf-8"
+            )
+        return str(tmp_path)
+
+    def test_retrieve_tests_env_filters_suites(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "DEV"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["Calculations.DEV.Tests"]
+
+    def test_retrieve_tests_env_any_is_not_a_wildcard(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "ANY"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["BestPractices.ANY.Tests"]
+
+    def test_retrieve_tests_env_is_case_insensitive(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "prod"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["Schema.PROD.Tests"]
+
+    def test_retrieve_tests_env_without_match_returns_empty(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "UAT"])
+        assert code == 0
+        assert json.loads(stdout) == []
+
+    def test_run_tests_env_runs_only_matching_suites(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        # No XMLA connection in hermetic mode → the matching suite is
+        # reported as skipped (exit 1); the point is discovery scoping.
+        stdout, _, _ = run_cli(["run-tests", model, "--env", "DEV"])
+        assert "Calculations.DEV.Tests" in stdout
+        assert "Schema.PROD.Tests" not in stdout
+        assert "BestPractices.ANY.Tests" not in stdout
+        assert "1 total" in stdout
+
+    def test_run_tests_env_no_match_shows_env_hint(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["run-tests", model, "--env", "UAT"])
+        assert code == 0  # zero discovered tests is a legitimate outcome
+        assert "No tests found." in stdout
+        assert "--env UAT" in stdout
+
+    def test_run_tests_help_documents_env(self):
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "--env" in stdout
+
+    def test_retrieve_tests_help_documents_env(self):
+        stdout, _, code = run_cli(["retrieve-tests", "--help"])
+        assert code == 0
+        assert "--env" in stdout

@@ -29,18 +29,28 @@ Connection resolution:
 
 Usage:
   pql-test check-prereqs
-  pql-test retrieve-tests <modelPath> [--test <name>] [--verbose]
+  pql-test retrieve-tests <modelPath> [--test <name>] [--env <environment>]
+                           [--verbose]
   pql-test retrieve-test  <modelPath> <name> [--verbose]
   pql-test run-tests      <modelPath> [--test <name>] [--verbose]
+                           [--env <environment>]
                            [--output <file>]
                            [--log-format {azuredevops,github}]
                            [--tenant-id <id>] [--workspace-id <id>]
                            [--dataset-id <id>] [--client-id <id>]
                            [--client-secret <secret>]
 
+Environment-specific test discovery (--env):
+  Test suites follow the <Suite>.<ENV>.Tests naming convention, e.g.
+  Calculations.DEV.Tests, BestPractices.ANY.Tests, ColumnTests.BKUP.Tests.
+  --env DEV runs only the *.DEV.Tests suites: live discovery calls
+  PQL.Assert.RetrieveTestsV2("DEV"); file scans match the naming convention.
+  (--environment is the Power BI *cloud* selector, so the test-suite
+  environment flag is --env.)
+
 Environment variables (loaded from .env when python-dotenv is installed):
   PQL_TENANT_ID, PQL_WORKSPACE_ID, PQL_DATASET_ID,
-  PQL_CLIENT_ID, PQL_CLIENT_SECRET, PQL_ENVIRONMENT
+  PQL_CLIENT_ID, PQL_CLIENT_SECRET, PQL_ENVIRONMENT, PQL_TEST_ENV
 """
 
 from __future__ import annotations
@@ -209,7 +219,12 @@ def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
     click.echo("")
 
 
-def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | None = None) -> None:
+def _print_results(
+    suite: TestSuite,
+    verbose: bool,
+    pre_warnings: list[str] | None = None,
+    environment: str | None = None,
+) -> None:
     """Print test results in a pytest-style format."""
     width = 72
 
@@ -389,13 +404,19 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     # See tasks/surface-silent-test-discovery-failures-epic.md.
     if suite.total == 0:
         click.echo(_sep("No tests found.", fg="yellow"))
-        click.echo(
+        causes = (
             "  Possible causes:\n"
             "    • The model has no PQL.Assert tests defined.\n"
             "    • Your account doesn't have access to the workspace/model.\n"
             "    • PQL.Assert isn't installed in this model.\n"
             "    • The connection failed (check the warning above)."
         )
+        if environment:
+            causes += (
+                f"\n    • No test suite matches --env {environment} "
+                f"(expected names like <Suite>.{environment}.Tests)."
+            )
+        click.echo(causes)
         click.echo(_sep("0 passed, 0 failed, 0 total", fg="yellow"))
         return
 
@@ -529,6 +550,27 @@ def conn_options(func):
     return func
 
 
+# Test-environment selector (--env).  NOTE: the long form --environment is
+# already taken by the Power BI *cloud* selector above (Public/USGov/China…,
+# PQL_ENVIRONMENT), so the test-suite environment intentionally uses --env
+# only.
+_env_option = click.option(
+    "--env",
+    "test_environment",
+    envvar="PQL_TEST_ENV",
+    default=None,
+    metavar="ENV",
+    help=(
+        "Only discover/run test suites for this environment (e.g. DEV, PROD, "
+        "ANY, BKUP; or set PQL_TEST_ENV env var). Live discovery calls "
+        'PQL.Assert.RetrieveTestsV2("<ENV>"); file scans match the '
+        "<Suite>.<ENV>.Tests naming convention (case-insensitive, exact — "
+        "ANY is a normal token, not a wildcard). Not to be confused with "
+        "--environment, which selects the Power BI cloud."
+    ),
+)
+
+
 def _format_local_miss_diagnostic(model_name: str) -> str:
     """Build a multi-line diagnostic when local/<model_name> doesn't resolve.
 
@@ -628,12 +670,14 @@ def cmd_check_prereqs() -> None:
 )
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="With --human: show file paths and connection info.")
+@_env_option
 @conn_options
 def cmd_retrieve_tests(
     model_path: str,
     test_name: str | None,
     human: bool,
     verbose: bool,
+    test_environment: str | None,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
@@ -670,6 +714,7 @@ def cmd_retrieve_tests(
     Examples:
       pql-test retrieve-tests ../examples
       pql-test retrieve-tests local/SampleModel
+      pql-test retrieve-tests ../examples --env DEV
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
@@ -726,7 +771,9 @@ def cmd_retrieve_tests(
         conn = resolve_xmla_connection(abs_path, opts)
 
     if test_name:
-        test = retrieve_test_by_name(abs_path, test_name, connection=conn)
+        test = retrieve_test_by_name(
+            abs_path, test_name, connection=conn, environment=test_environment
+        )
         if not test:
             if human:
                 click.echo(f'No test found with name: "{test_name}"')
@@ -735,7 +782,7 @@ def cmd_retrieve_tests(
             sys.exit(1)
         results = [test]
     else:
-        results = retrieve_tests(abs_path, connection=conn)
+        results = retrieve_tests(abs_path, connection=conn, environment=test_environment)
 
     if human:
         _print_tests(results, verbose)
@@ -879,6 +926,7 @@ def cmd_retrieve_test(
         "github: ::group::/::error::/::notice:: commands."
     ),
 )
+@_env_option
 @conn_options
 def cmd_run_tests(
     model_path: str,
@@ -886,6 +934,7 @@ def cmd_run_tests(
     verbose: bool,
     output: str | None,
     log_format: str | None,
+    test_environment: str | None,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
@@ -899,6 +948,9 @@ def cmd_run_tests(
     Use --output to also save full JSON results to a file.
     Use --log-format to emit CI-native annotations for Azure DevOps or
     GitHub Actions pipelines.
+    Use --env to run only the test suites targeting one environment
+    (suites follow the <Suite>.<ENV>.Tests naming convention, e.g.
+    Calculations.DEV.Tests, BestPractices.ANY.Tests).
 
     MODEL_PATH accepts these formats:
 
@@ -920,6 +972,8 @@ def cmd_run_tests(
       pql-test run-tests local/SampleModel
       pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
       pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
+      pql-test run-tests ../examples/SampleModel.SemanticModel --env DEV
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --env PROD
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
       pql-test run-tests local/SampleModel --log-format github
     """
@@ -1020,14 +1074,21 @@ def cmd_run_tests(
             "or supply --tenant-id, --workspace-id, and --dataset-id."
         )
 
-    suite = run_tests_from_model(abs_path, test_name, opts, connection=conn, skip_message=skip_message)
+    suite = run_tests_from_model(
+        abs_path,
+        test_name,
+        opts,
+        connection=conn,
+        skip_message=skip_message,
+        environment=test_environment,
+    )
 
     if log_format == "azuredevops":
         _print_results_azuredevops(suite, pre_warnings=pre_warnings)
     elif log_format == "github":
         _print_results_github(suite, pre_warnings=pre_warnings)
     else:
-        _print_results(suite, verbose, pre_warnings=pre_warnings)
+        _print_results(suite, verbose, pre_warnings=pre_warnings, environment=test_environment)
 
     if output:
         out_path = Path(output)

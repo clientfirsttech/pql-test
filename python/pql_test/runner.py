@@ -1817,8 +1817,26 @@ def _execute_dax_query(
 # ---------------------------------------------------------------------------
 
 
+def _test_matches_environment(test_name: str, environment: str) -> bool:
+    """Return True when *test_name* targets *environment* by naming convention.
+
+    Test suites encode their target environment as the second-to-last
+    dot-separated segment: ``<Suite>.<ENV>.Tests`` (or ``.Test``), e.g.
+    ``Calculations.DEV.Tests``, ``BestPractices.ANY.Tests``,
+    ``ColumnTests.BKUP.Test``.  Matching is case-insensitive and exact —
+    ``--env DEV`` selects only ``*.DEV.Tests`` suites; ``ANY`` is an ordinary
+    environment token, not a wildcard.  Names without an environment segment
+    (e.g. ``Calcs.Tests``) never match an environment filter.
+    """
+    parts = test_name.split(".")
+    if len(parts) < 3 or parts[-1].lower() not in ("test", "tests"):
+        return False
+    return parts[-2].lower() == environment.lower()
+
+
 def _retrieve_tests_via_dax(
     connection: "ResolvedXmlaConnection",
+    environment: Optional[str] = None,
 ) -> Optional[list["PqlTest"]]:
     """
     Discover test functions from a live model using XMLA.
@@ -1826,6 +1844,13 @@ def _retrieve_tests_via_dax(
     Tries ``PQL.Assert.RetrieveTestsV2()`` first (returns Name, Description,
     PQLAssert_ImpersonatedUserName).  Falls back to ``PQL.Assert.RetrieveTests()``
     (returns Name only) when V2 is absent from the model.
+
+    When *environment* is supplied, ``PQL.Assert.RetrieveTestsV2("<env>")``
+    is tried first so the model's own UDF does the environment filtering
+    server-side.  If that call fails (e.g. the installed V2 takes no
+    arguments) discovery falls back to the parameterless queries and the
+    environment filter is applied client-side against the
+    ``<Suite>.<ENV>.Tests`` naming convention instead.
 
     Returns a (possibly empty) list of PqlTest objects when either query
     succeeds, or ``None`` when both queries fail (e.g. PQL.Assert is not
@@ -1840,12 +1865,26 @@ def _retrieve_tests_via_dax(
     """
     rows: list[dict] | None = None
     has_v2_columns = False
+    server_filtered = False
 
-    try:
-        rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTestsV2()")
-        has_v2_columns = True
-    except Exception:  # noqa: BLE001
-        pass
+    if environment:
+        env_literal = environment.replace('"', '""')
+        try:
+            rows = _execute_dax_query(
+                connection,
+                f'EVALUATE PQL.Assert.RetrieveTestsV2("{env_literal}")',
+            )
+            has_v2_columns = True
+            server_filtered = True
+        except Exception:  # noqa: BLE001
+            pass
+
+    if rows is None:
+        try:
+            rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTestsV2()")
+            has_v2_columns = True
+        except Exception:  # noqa: BLE001
+            pass
 
     if rows is None:
         try:
@@ -1890,12 +1929,15 @@ def _retrieve_tests_via_dax(
                 role_name=role_name,
             )
         )
+    if environment and not server_filtered:
+        tests = [t for t in tests if _test_matches_environment(t.name, environment)]
     return tests
 
 
 def retrieve_tests(
     model_path: str,
     connection: Optional["ResolvedXmlaConnection"] = None,
+    environment: Optional[str] = None,
 ) -> list[PqlTest]:
     """
     Retrieve all DAX test suites for a PBIP model.
@@ -1917,13 +1959,19 @@ def retrieve_tests(
         Root directory of the PBIP model (contains the .pbip file).
     connection:
         Optional live XMLA connection.  Pass to enable live discovery.
+    environment:
+        Optional environment name (e.g. ``DEV``, ``PROD``, ``ANY``, ``BKUP``).
+        When supplied, only suites targeting that environment are returned:
+        live discovery passes it to ``PQL.Assert.RetrieveTestsV2("<env>")``,
+        and file-scan / fallback paths match the ``<Suite>.<ENV>.Tests``
+        naming convention (case-insensitive, exact).
 
     Returns
     -------
     List of PqlTest descriptors; empty list when none are found.
     """
     if connection is not None:
-        live = _retrieve_tests_via_dax(connection)
+        live = _retrieve_tests_via_dax(connection, environment=environment)
         if live is not None:  # None means both queries failed
             # When model_path declares ownership-tracking artifacts (a
             # DAXQueries/ folder or a functions.tmdl), the local repo is the
@@ -1936,6 +1984,14 @@ def retrieve_tests(
             # discovery through unfiltered.
             if _has_local_ownership_sources(model_path):
                 local_names = _discover_local_test_names(model_path)
+                # Scope the ownership comparison to the requested environment
+                # so suites for other environments don't trigger spurious
+                # "missing on server" warnings or leak past the filter.
+                if environment:
+                    local_names = {
+                        n for n in local_names
+                        if _test_matches_environment(n, environment)
+                    }
                 live_names = {t.name for t in live}
                 if local_names:
                     extras_on_server = sorted(live_names - local_names)
@@ -1971,24 +2027,29 @@ def retrieve_tests(
     semantic_model_dir = _find_semantic_model_dir(model_path)
     if not semantic_model_dir:
         return []
-    return [
+    tests = [
         _parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)
     ]
+    if environment:
+        tests = [t for t in tests if _test_matches_environment(t.name, environment)]
+    return tests
 
 
 def retrieve_test_by_name(
     model_path: str,
     test_name: str,
     connection: Optional["ResolvedXmlaConnection"] = None,
+    environment: Optional[str] = None,
 ) -> Optional[PqlTest]:
     """
     Retrieve a single DAX test suite by name (case-insensitive).
 
     The name is matched against the function name (e.g. "Calcs.DEV.Tests").
     When *connection* is supplied live discovery is used; otherwise the
-    DAXQueries/ folder is scanned.
+    DAXQueries/ folder is scanned.  When *environment* is supplied the name
+    must also belong to that environment's suite set.
     """
-    for t in retrieve_tests(model_path, connection=connection):
+    for t in retrieve_tests(model_path, connection=connection, environment=environment):
         if t.name.lower() == test_name.lower():
             return t
     return None
@@ -2130,6 +2191,7 @@ def run_tests_from_model(
     conn_opts: Optional[XmlaConnectionOptions] = None,
     connection: Optional[ResolvedXmlaConnection] = None,
     skip_message: str = _DEFAULT_SKIP_MESSAGE,
+    environment: Optional[str] = None,
 ) -> TestSuite:
     """
     High-level helper: discover tests, optionally filter, execute, and summarise.
@@ -2142,6 +2204,10 @@ def run_tests_from_model(
         Optional. When supplied only that test suite is executed.
     conn_opts:
         XMLA connection options. Defaults to local auto-detection only.
+    environment:
+        Optional environment name (e.g. ``DEV``, ``PROD``, ``ANY``, ``BKUP``).
+        When supplied, only suites targeting that environment are discovered
+        and executed (see :func:`retrieve_tests`).
 
     Returns
     -------
@@ -2156,10 +2222,12 @@ def run_tests_from_model(
         connection = resolve_xmla_connection(model_path, conn_opts)
 
     if test_name:
-        found = retrieve_test_by_name(model_path, test_name, connection=connection)
+        found = retrieve_test_by_name(
+            model_path, test_name, connection=connection, environment=environment
+        )
         tests: list[PqlTest] = [found] if found else []
     else:
-        tests = retrieve_tests(model_path, connection=connection)
+        tests = retrieve_tests(model_path, connection=connection, environment=environment)
     results = run_tests(tests, connection, skip_message=skip_message)
     passed = sum(1 for r in results if r.passed)
     skipped = sum(1 for r in results if r.skipped)
