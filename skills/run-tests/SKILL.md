@@ -23,7 +23,9 @@ Options:
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
 - `--client-id ID` — Service principal client ID (or set `PQL_CLIENT_ID` env var).
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
-- `--environment ENV` — Cloud environment: `Public` (default), `Germany`, `China`, `USGov`, `USGovHigh`, or `DOD` (or set `PQL_ENVIRONMENT` env var).
+- `--env ENV` — Run only test suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`), matching the `<Suite>.<ENV>.Tests` naming convention (or set `PQL_TEST_ENV` env var).
+
+The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --environment`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
 
 Exit codes: `0` = all tests passed, `1` = one or more tests failed.
 

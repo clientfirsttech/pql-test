@@ -1249,6 +1249,17 @@ def _resolve_authentication_with_stored_credentials(
         if config is None:
             return opts
 
+        # The stored credential records which cloud it was created for
+        # (`pql-test auth login --environment`), so the credential and its
+        # cloud travel together — a USGov login should never be aimed at
+        # the Public endpoints.  Fall back to opts.environment when the
+        # stored value doesn't parse.
+        stored_env = opts.environment
+        for e in Environment:
+            if e.value.lower() == (config.environment or "").strip().lower():
+                stored_env = e
+                break
+
         # SPN-with-secret: forward the secret so MSAL acquires the token
         # downstream.  Keeps the legacy code path intact for the SPN happy
         # path (env-based CI workflows).
@@ -1259,7 +1270,7 @@ def _resolve_authentication_with_stored_credentials(
                 dataset_id=opts.dataset_id,
                 client_id=config.client_id or opts.client_id,
                 client_secret=config.client_secret or opts.client_secret,
-                environment=opts.environment,
+                environment=stored_env,
             )
 
         # INTERACTIVE: refuse to launch the browser in non-interactive
@@ -1299,7 +1310,7 @@ def _resolve_authentication_with_stored_credentials(
             dataset_id=opts.dataset_id,
             client_id=config.client_id or opts.client_id,
             client_secret=opts.client_secret,
-            environment=opts.environment,
+            environment=stored_env,
             access_token=token,
         )
 

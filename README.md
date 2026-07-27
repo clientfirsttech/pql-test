@@ -728,7 +728,6 @@ pql-test run-tests <modelPath> [--test <name>] [--env <environment>] [--verbose]
 | `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (or set `PQL_DATASET_ID`) |
 | `--client-id <id>` | ❌ | Service-principal client ID (or set `PQL_CLIENT_ID`) |
 | `--client-secret <secret>` | ❌ | Service-principal client secret (or set `PQL_CLIENT_SECRET`) |
-| `--environment <env>` | ❌ | Cloud environment: `Public` (default), `Germany`, `China`, `USGov`, `USGovHigh`, `USGovDoD` (or set `PQL_ENVIRONMENT`) |
 
 **Run all suites against a locally-open Power BI Desktop model:**
 
@@ -807,9 +806,10 @@ token, not a wildcard, so `--env DEV` does not include `*.ANY.Tests` suites
 (run them with a separate `--env ANY` invocation). Suites without an
 environment segment (e.g. `Calcs.Tests`) never match an `--env` filter.
 
-> **Note:** `--environment` (without the abbreviation) is a different flag — it
-> selects the Power BI *cloud* (`Public`, `USGov`, `China`, …). The test-suite
-> environment flag is `--env` only.
+> **Note:** the Power BI *cloud* (`Public`, `USGov`, `China`, …) is not a
+> per-command flag. It comes from the credential stored by
+> `pql-test auth login --environment <cloud>`, or from the `PQL_ENVIRONMENT`
+> env var when explicit service-principal credentials are supplied.
 
 **Save JSON results to a file while still printing to the console:**
 
@@ -980,7 +980,7 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 |  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
 | `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
 | `--client-secret` | `PQL_CLIENT_SECRET` | Service principal client secret |
-| `--environment` | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) |
+|  | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) — no flag; also stored by `pql-test auth login --environment` |
 
 Place these in a `.env` file (git-ignored) at the directory where you invoke
 the CLI — typically the repo root or `python/`. The CLI loads `.env`
@@ -1010,7 +1010,9 @@ with the dataset display name as the `Initial Catalog`.
 
 ### Sovereign / government clouds
 
-Pass `--environment` (or set `PQL_ENVIRONMENT`) to target a non-commercial cloud:
+Log in with `pql-test auth login --environment <cloud>` (or set
+`PQL_ENVIRONMENT` when supplying explicit service-principal credentials) to
+target a non-commercial cloud:
 
 | Value | Cloud |
 |---|---|
@@ -1022,8 +1024,8 @@ Pass `--environment` (or set `PQL_ENVIRONMENT`) to target a non-commercial cloud
 | `USGovDoD` | US Government DoD |
 
 ```powershell
+$env:PQL_ENVIRONMENT = 'USGovHigh'
 pql-test run-tests ./examples/SampleModel.SemanticModel `
-  --environment USGovHigh `
   --tenant-id $env:PQL_TENANT_ID `
   --workspace-id $env:PQL_WORKSPACE_ID `
   --dataset-id $env:PQL_DATASET_ID `

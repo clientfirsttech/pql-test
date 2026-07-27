@@ -20,7 +20,8 @@ Options:
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
 - `--client-id ID` — Service principal client ID (or set `PQL_CLIENT_ID` env var).
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
-- `--environment ENV` — Cloud environment (or set `PQL_ENVIRONMENT` env var).
+
+The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --environment`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
 
 Usage:
 ```

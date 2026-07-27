@@ -45,8 +45,12 @@ Environment-specific test discovery (--env):
   Calculations.DEV.Tests, BestPractices.ANY.Tests, ColumnTests.BKUP.Tests.
   --env DEV runs only the *.DEV.Tests suites: live discovery calls
   PQL.Assert.RetrieveTestsV2("DEV"); file scans match the naming convention.
-  (--environment is the Power BI *cloud* selector, so the test-suite
-  environment flag is --env.)
+
+Power BI cloud environment (Public, USGov, China, …):
+  Not a per-command flag.  It comes from the credential stored by
+  `pql-test auth login --environment <cloud>`, or from the PQL_ENVIRONMENT
+  env var when explicit service-principal credentials are supplied
+  (e.g. CI pipelines).  Default: Public.
 
 Environment variables (loaded from .env when python-dotenv is installed):
   PQL_TENANT_ID, PQL_WORKSPACE_ID, PQL_DATASET_ID,
@@ -532,14 +536,6 @@ _conn_options_list = [
         default=None,
         help="Service principal client secret (or set PQL_CLIENT_SECRET env var).",
     ),
-    click.option(
-        "--environment",
-        "environment",
-        envvar="PQL_ENVIRONMENT",
-        default=Environment.PUBLIC.value,
-        type=click.Choice([e.value for e in Environment], case_sensitive=False),
-        help="Power BI cloud environment (or set PQL_ENVIRONMENT env var). Default: Public.",
-    ),
 ]
 
 
@@ -550,10 +546,10 @@ def conn_options(func):
     return func
 
 
-# Test-environment selector (--env).  NOTE: the long form --environment is
-# already taken by the Power BI *cloud* selector above (Public/USGov/China…,
-# PQL_ENVIRONMENT), so the test-suite environment intentionally uses --env
-# only.
+# Test-environment selector (--env).  The Power BI *cloud* environment is
+# not a per-command flag: it comes from the stored `pql-test auth login
+# --environment` credential (or the PQL_ENVIRONMENT env var), so --env here
+# unambiguously means the test-suite environment.
 _env_option = click.option(
     "--env",
     "test_environment",
@@ -565,8 +561,7 @@ _env_option = click.option(
         "ANY, BKUP; or set PQL_TEST_ENV env var). Live discovery calls "
         'PQL.Assert.RetrieveTestsV2("<ENV>"); file scans match the '
         "<Suite>.<ENV>.Tests naming convention (case-insensitive, exact — "
-        "ANY is a normal token, not a wildcard). Not to be confused with "
-        "--environment, which selects the Power BI cloud."
+        "ANY is a normal token, not a wildcard)."
     ),
 )
 
@@ -620,9 +615,18 @@ def _make_conn_opts(
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str | None = None,
 ) -> XmlaConnectionOptions:
-    env = Environment(environment) if environment else Environment.PUBLIC
+    # The Power BI cloud environment is not a per-command flag.  It defaults
+    # to PQL_ENVIRONMENT (kept for CI pipelines that pass explicit
+    # service-principal env vars), and the runner's stored-credential bridge
+    # overrides it with the cloud recorded by `pql-test auth login`.
+    raw_env = os.environ.get("PQL_ENVIRONMENT", "").strip()
+    env = Environment.PUBLIC
+    if raw_env:
+        for e in Environment:
+            if e.value.lower() == raw_env.lower():
+                env = e
+                break
     return XmlaConnectionOptions(
         tenant_id=tenant_id,
         workspace_id=workspace_id,
@@ -683,7 +687,6 @@ def cmd_retrieve_tests(
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """List DAX test suites in MODEL_PATH.
 
@@ -719,7 +722,7 @@ def cmd_retrieve_tests(
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
     abs_path: str = ""
@@ -818,7 +821,6 @@ def cmd_retrieve_test(
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """Show a specific DAX test suite by name.
 
@@ -839,7 +841,7 @@ def cmd_retrieve_test(
     splits it into multiple arguments and the CLI never sees the full name.
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
     abs_path: str = ""
@@ -940,7 +942,6 @@ def cmd_run_tests(
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """Run all DAX test suites in a PBIP model via XMLA.
 
@@ -978,7 +979,7 @@ def cmd_run_tests(
       pql-test run-tests local/SampleModel --log-format github
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     pre_warnings: list[str] = []
     conn = None
