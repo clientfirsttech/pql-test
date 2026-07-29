@@ -95,32 +95,42 @@ pql-test check-prereqs
 
 ## Installation
 
-`pql-test` is a Python package inside the `python/` directory of this
-repository.
+### From PyPI (recommended)
 
-**1. Create and activate a virtual environment** (recommended):
-
-```powershell
-cd python
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-**2. Install the package and its dependencies:**
+Requires Python 3.9+ on Windows (the XMLA driver is ADOMD.NET, a
+Windows/.NET component):
 
 ```powershell
-pip install -e .
+pip install pql-test
 ```
 
-The `-e` flag installs in *editable* mode so source changes are reflected
-immediately without reinstalling.
-
-**3. Verify the CLI is on `PATH`:**
+Then verify:
 
 ```powershell
 pql-test --version
 pql-test check-prereqs
 ```
+
+> **Tip:** install into a virtual environment to keep dependencies isolated:
+> ```powershell
+> python -m venv .venv
+> .venv\Scripts\Activate.ps1
+> pip install pql-test
+> ```
+
+### From source (development)
+
+`pql-test` lives in the `python/` directory of this repository:
+
+```powershell
+cd python
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e .
+```
+
+The `-e` flag installs in *editable* mode so source changes are reflected
+immediately without reinstalling.
 
 > If you skip activating the venv, use the full path instead:
 > `.venv\Scripts\pql-test check-prereqs`
@@ -186,6 +196,7 @@ pql-test check-prereqs
 
 | Method | How |
 |---|---|
+| **PyPI** (primary) | Published by the release workflow when a `vX.Y.Z` tag is pushed; consumers just `pip install pql-test` |
 | **Direct file share** | Copy the `.whl` to the target machine and `pip install` it |
 | **GitHub Release** | Attach the `.whl` as a release asset; install with `pip install <asset-url>` |
 | **Private PyPI feed** (e.g. Azure Artifacts) | `pip install twine` then `twine upload --repository-url <feed-url> dist/*`; consumers install with `pip install pql-test --index-url <feed-url>` |
