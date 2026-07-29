@@ -6,12 +6,18 @@
 #   Microsoft.AnalysisServices.AdomdClient NuGet package, which is a
 #   Windows/.NET component.  The job must run on a Windows runner.
 #
-# Required secrets (set in repo Settings → Secrets → Actions):
-#   PQL_TENANT_ID      – Azure AD tenant GUID
-#   PQL_WORKSPACE_ID   – Power BI workspace GUID
-#   PQL_DATASET_ID     – Dataset / semantic model GUID
-#   PQL_CLIENT_ID      – Service principal application (client) ID
-#   PQL_CLIENT_SECRET  – Service principal client secret
+# Required secrets (Settings → Secrets and variables → Actions → Secrets):
+#   PQL_TENANT_ID         – Azure AD tenant GUID
+#   PQL_CLIENT_ID         – Service principal application (client) ID
+#   PQL_CLIENT_SECRET     – Service principal client secret
+#
+# Required repository variables (Settings → Secrets and variables → Actions → Variables):
+#   PQL_WORKSPACE_ID      – Power BI workspace GUID.  GUIDs aren't sensitive,
+#                            so this lives as a variable, not a secret.
+#
+# Dataset GUIDs are NOT stored anywhere.  The CLI derives the dataset's
+# display name from each matrix entry's `.SemanticModel` directory stem
+# and looks the dataset up in the workspace via REST at run time.
 #
 # Optional secrets:
 #   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, USGovHigh, DOD,
@@ -27,10 +33,6 @@ on:
   workflow_call:
     secrets:
       PQL_TENANT_ID:
-        required: true
-      PQL_WORKSPACE_ID:
-        required: true
-      PQL_DATASET_ID:
         required: true
       PQL_CLIENT_ID:
         required: true
@@ -146,12 +148,25 @@ jobs:
       - name: Install pql-test and dependencies
         shell: bash
         run: |
-          pip install --upgrade pip
+          # pip 26.1+ refuses self-upgrade via `pip install --upgrade pip`
+          # and requires the `python -m pip` form to avoid the Windows
+          # exe-replacement race.  Use that form for forward compatibility.
+          python -m pip install --upgrade pip
           pip install ./python
 
       # -----------------------------------------------------------------------
-      # Optional: install Microsoft.AnalysisServices.AdomdClient via NuGet
-      # so that pyadomd can find the native ADOMD.NET assemblies on the runner
+      # Install Microsoft.AnalysisServices.AdomdClient via NuGet so pyadomd
+      # can find the native ADOMD.NET assemblies on the runner.
+      #
+      # We install the modern, actively-maintained package
+      # `Microsoft.AnalysisServices.AdomdClient` (NOT the legacy
+      # `.retail.amd64` flavour, which stopped at 19.84.1).  Older 19.84.x
+      # releases mishandle the combination of (bearer-token auth + `Roles=`
+      # + a role containing a row-filter expression), which caused the
+      # RLS_Model CI job to fail with "Either the database '<name>' does
+      # not exist..." even though the SPN had Admin on the workspace and
+      # the role's filter was valid.  Verified locally that 19.114.0
+      # resolves the query successfully against the same dataset.
       # -----------------------------------------------------------------------
       - name: Install ADOMD.NET client libraries
         shell: pwsh
@@ -160,7 +175,8 @@ jobs:
           # PowerShell PackageManagement provider, which can fail to locate
           # the NuGet provider on newer runner images.
           $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
-          nuget install Microsoft.AnalysisServices.AdomdClient.retail.amd64 `
+          nuget install Microsoft.AnalysisServices.AdomdClient `
+            -Version 19.114.0 `
             -OutputDirectory $outputDir `
             -NonInteractive
           if ($LASTEXITCODE -eq 0) {
@@ -183,7 +199,12 @@ jobs:
           echo "filename=dax-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # Run pql-test
+      # Run pql-test.
+      #
+      # The CLI derives the dataset's display name from the matrix entry's
+      # `.SemanticModel` directory stem (e.g. `examples/RLS_Model.SemanticModel`
+      # → "RLS_Model") and looks it up in the workspace via the Power BI
+      # REST API at run time.  No dataset GUIDs are stored as secrets.
       # -----------------------------------------------------------------------
       - name: Run DAX tests for ${{ matrix.model }}
         id: run-tests
@@ -204,11 +225,54 @@ jobs:
           fi
 
           echo "Running: pql-test run-tests ${ARGS[*]}"
+          set +e
           pql-test run-tests "${ARGS[@]}"
+          rc=$?
+          set -e
+
+          # SampleModel.SemanticModel intentionally fails 15 assertions
+          # (47 passed / 15 failed is the documented expected outcome —
+          # the failures demo the framework catching real model-quality
+          # issues).  Pin that matrix entry to the exact baseline: a
+          # match treats pql-test's non-zero exit as success; any drift
+          # (fewer failures, more failures, different pass count, missing
+          # results file) gates CI so the baseline can't silently shift.
+          # Every other model propagates pql-test's exit code verbatim.
+          case "${{ matrix.model }}" in
+            *SampleModel.SemanticModel*)
+              python - <<'PYEOF'
+          import json, pathlib, sys
+          expected_passed, expected_failed = 47, 15
+          results = pathlib.Path("${{ steps.result-name.outputs.filename }}")
+          if not results.exists():
+              print("::error::SampleModel results file missing — cannot verify baseline.")
+              sys.exit(1)
+          data = json.loads(results.read_text(encoding="utf-8"))
+          actual_passed = int(data.get("passed", 0))
+          actual_failed = int(data.get("failed", 0))
+          if actual_passed == expected_passed and actual_failed == expected_failed:
+              print(
+                  f"::warning::SampleModel matches documented baseline "
+                  f"({expected_passed} passed / {expected_failed} failed) — "
+                  "failures are intentional. Treating as success."
+              )
+              sys.exit(0)
+          print(
+              f"::error::SampleModel result drift: expected "
+              f"{expected_passed} passed / {expected_failed} failed, got "
+              f"{actual_passed} passed / {actual_failed} failed. "
+              "Update the baseline in run-tests-remote.yml if this drift is intentional."
+          )
+          sys.exit(1)
+          PYEOF
+              ;;
+            *)
+              exit $rc
+              ;;
+          esac
         env:
           PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
-          PQL_WORKSPACE_ID:  ${{ secrets.PQL_WORKSPACE_ID }}
-          PQL_DATASET_ID:    ${{ secrets.PQL_DATASET_ID }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
           PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
           PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
           # Use the secret if set; fall back to the input (or default Public)
@@ -233,6 +297,11 @@ jobs:
         shell: python
         run: |
           import json, pathlib, sys, os
+
+          
+          # Force UTF-8 on stdout so Unicode glyphs (e.g. ✗) don't crash the
+          # step on Windows runners, where stdout defaults to cp1252.
+          sys.stdout.reconfigure(encoding="utf-8")
 
           results_path = r"${{ steps.result-name.outputs.filename }}"
           if not results_path:

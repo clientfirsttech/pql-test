@@ -102,7 +102,7 @@ class TestFindPbiAncestorPid:
 
     def _make_psutil_process(self, pid: int, ppid: int) -> MagicMock:
         """Minimal mock that supports .ppid() and psutil exceptions."""
-        import pql_test_runner as runner
+        from pql_test import runner
         proc = MagicMock()
         proc.ppid.return_value = ppid
         proc.pid = pid
@@ -112,7 +112,7 @@ class TestFindPbiAncestorPid:
         """msmdsrv.exe is a direct child of PBIDesktop.exe."""
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         pbi_pid = 100
         msmdsrv_proc = self._make_psutil_process(pid=999, ppid=pbi_pid)
@@ -138,7 +138,7 @@ class TestFindPbiAncestorPid:
         # intermediate's parent is PBIDesktop
         intermediate_proc = self._make_psutil_process(pid=intermediate_pid, ppid=pbi_pid)
 
-        import pql_test_runner as runner
+        from pql_test import runner
 
         def _process_factory(pid: int) -> MagicMock:
             if pid == intermediate_pid:
@@ -174,7 +174,7 @@ class TestFindPbiAncestorPid:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         proc = self._make_psutil_process(pid=999, ppid=50)
         proc.ppid.side_effect = runner._psutil.NoSuchProcess(pid=999)
@@ -241,6 +241,27 @@ class TestFindPbipFile:
         semantic_dir.mkdir()
         result = _find_pbip_file(str(semantic_dir))
         assert result == str(pbip)
+
+    def test_matches_pbip_stem_when_multiple_pbips_share_parent(self, tmp_path):
+        """Flat layout with multiple PBIP models in one folder must pick the matching one.
+
+        Reproduces a real-world bug: ``examples/`` contains three .pbip files
+        side-by-side (SampleModel.pbip, RLS_Model.pbip, OLS_Model.pbip).  When
+        the caller passes ``examples/SampleModel.SemanticModel`` the function
+        previously returned ``examples/OLS_Model.pbip`` (first .pbip
+        alphabetically) and downstream code derived the wrong model_name for
+        Power BI Desktop matching.
+        """
+        for name in ("OLS_Model.pbip", "RLS_Model.pbip", "SampleModel.pbip"):
+            (tmp_path / name).write_text("{}")
+        for name in ("OLS_Model.SemanticModel", "RLS_Model.SemanticModel", "SampleModel.SemanticModel"):
+            (tmp_path / name).mkdir()
+
+        for stem in ("SampleModel", "RLS_Model", "OLS_Model"):
+            result = _find_pbip_file(str(tmp_path / f"{stem}.SemanticModel"))
+            assert result == str(tmp_path / f"{stem}.pbip"), (
+                f"For {stem}.SemanticModel expected {stem}.pbip, got {result}"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -492,6 +513,30 @@ class TestResolveXmlaConnection:
             conn = resolve_xmla_connection(str(tmp_path), opts)
         assert conn is None
 
+    def test_local_identifier_does_not_fall_through_to_service(self):
+        # A `local/<name>` request must never silently redirect to the
+        # deployed dataset, even when full service-principal credentials
+        # are available in the environment.  When the named PBI Desktop
+        # instance isn't open, resolution must return None so the caller
+        # can surface a clear error.
+        opts = XmlaConnectionOptions(
+            tenant_id="t",
+            workspace_id="w",
+            dataset_id="d",
+            client_id="c",
+            client_secret="s",
+        )
+        with (
+            patch("pql_test.runner.resolve_local_xmla_connection_by_name", return_value=None) as by_name,
+            patch("pql_test.runner._acquire_service_principal_token") as token_call,
+            patch("pql_test.runner._resolve_service_xmla_connection") as service_call,
+        ):
+            conn = resolve_xmla_connection("local/MissingModel", opts)
+        assert conn is None
+        by_name.assert_called_once_with("MissingModel")
+        token_call.assert_not_called()
+        service_call.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # run_test — no connection
@@ -681,10 +726,17 @@ class TestRunTestWithMockedXmla:
         assert captured[0].roles == "West"
         assert captured[0].effective_user_name is None
 
-    def test_impersonated_user_applied_as_effective_user_name_for_service_connection(self):
+    def test_role_name_preferred_over_effective_user_name_on_service_connection(self):
         """
-        Service connection + PqlTest.impersonated_user_name → EffectiveUserName=
-        in the connection string (AAD UPN works against XMLA endpoints).
+        Service connection + both annotations → Roles= wins.
+
+        Service principals categorically cannot use EffectiveUserName= against
+        the Power BI XMLA endpoint (Microsoft surfaces this as a misleading
+        "not a workspace administrator" error even when the SPN is an admin).
+        Roles= works because the SPN can be granted role membership in the
+        dataset.  When both PQLAssert_RoleName and PQLAssert_ImpersonatedUserName
+        annotations are present, the runner must pick the one that actually
+        works in CI.
         """
         test = PqlTest(
             name="RLS.ANY.Tests",
@@ -709,6 +761,37 @@ class TestRunTestWithMockedXmla:
             result = run_test(test, service_conn)
 
         assert result[0].passed is True
+        assert captured[0].roles == "West"
+        assert captured[0].effective_user_name is None
+
+    def test_effective_user_name_used_on_service_connection_when_role_name_absent(self):
+        """
+        Service connection + only impersonated_user_name (no role_name) →
+        EffectiveUserName= still used.  This preserves the workspace-admin
+        impersonation flow for tests that don't carry a role annotation.
+        """
+        test = PqlTest(
+            name="RLS.ANY.Tests",
+            file_path="",
+            source="EVALUATE RLS.ANY.Tests()",
+            impersonated_user_name="west@contoso.com",
+            role_name=None,
+        )
+        rows = [{"TestName": "t", "Expected": "0", "Actual": "0", "Passed": "true"}]
+        service_conn = ResolvedXmlaConnection(
+            server="powerbi://api.powerbi.com/v1.0/myorg/MyWorkspace",
+            catalog="RLS_Model",
+        )
+
+        captured: list[ResolvedXmlaConnection] = []
+
+        def _capture_conn(conn, _query):
+            captured.append(conn)
+            return rows
+
+        with patch("pql_test.runner._execute_dax_query", side_effect=_capture_conn):
+            run_test(test, service_conn)
+
         assert captured[0].effective_user_name == "west@contoso.com"
         assert captured[0].roles is None
 
@@ -790,7 +873,7 @@ class TestBuildConnectionStringEffectiveUserName:
     """Unit tests for the EffectiveUserName connection string path."""
 
     def test_effective_user_name_appended_to_connection_string(self):
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="powerbi://api.powerbi.com/v1.0/myorg/WS",
             catalog="RLS_Model",
@@ -800,14 +883,14 @@ class TestBuildConnectionStringEffectiveUserName:
         assert "EffectiveUserName=west@contoso.com;" in cs
 
     def test_no_effective_user_name_field_absent(self):
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(server="localhost:50001", catalog="RLS_Model")
         cs = _build_connection_string(conn)
         assert "EffectiveUserName" not in cs
 
-    def test_effective_user_name_not_added_when_token_auth(self):
-        """Bearer token auth takes priority; EffectiveUserName is not added."""
-        from pql_test_runner import _build_connection_string
+    def test_effective_user_name_composes_with_token_auth(self):
+        """Bearer token auth and EffectiveUserName must coexist so AS impersonates the user."""
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="powerbi://api.powerbi.com/v1.0/myorg/WS",
             catalog="RLS_Model",
@@ -815,12 +898,12 @@ class TestBuildConnectionStringEffectiveUserName:
             effective_user_name="west@contoso.com",
         )
         cs = _build_connection_string(conn)
-        assert "EffectiveUserName" not in cs
+        assert "EffectiveUserName=west@contoso.com;" in cs
         assert "Password=tok123;" in cs
 
     def test_roles_appended_to_connection_string(self):
         """Roles= property is added for local connections using named-role RLS."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -832,7 +915,7 @@ class TestBuildConnectionStringEffectiveUserName:
 
     def test_roles_takes_priority_over_effective_user_name(self):
         """When both Roles and EffectiveUserName are set, Roles= wins."""
-        from pql_test_runner import _build_connection_string
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -843,9 +926,9 @@ class TestBuildConnectionStringEffectiveUserName:
         assert "Roles=West;" in cs
         assert "EffectiveUserName" not in cs
 
-    def test_roles_not_added_when_token_auth(self):
-        """Bearer token auth takes priority; Roles= is not added."""
-        from pql_test_runner import _build_connection_string
+    def test_roles_composes_with_token_auth(self):
+        """Bearer token auth and Roles= must coexist so AS applies the role's rules."""
+        from pql_test.runner import _build_connection_string
         conn = ResolvedXmlaConnection(
             server="localhost:50001",
             catalog="RLS_Model",
@@ -853,7 +936,7 @@ class TestBuildConnectionStringEffectiveUserName:
             roles="West",
         )
         cs = _build_connection_string(conn)
-        assert "Roles" not in cs
+        assert "Roles=West;" in cs
         assert "Password=tok123;" in cs
 
 
@@ -963,7 +1046,7 @@ class TestGetPbiFilesOpened:
 
     def test_raises_import_error_when_psutil_unavailable(self):
         """Mirrors Pester: meaningful error when prerequisite is missing."""
-        import pql_test_runner as runner
+        from pql_test import runner
         original = runner.HAS_PSUTIL
         try:
             runner.HAS_PSUTIL = False
@@ -1082,7 +1165,7 @@ class TestGetPbiFilesOpened:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
         bad_proc = MagicMock()
         bad_proc.info = {"pid": 99, "name": "msmdsrv.exe", "ppid": 1234}
         bad_proc.net_connections.side_effect = runner._psutil.AccessDenied(pid=99)
@@ -1160,7 +1243,7 @@ class TestGetPbiFilesOpened:
         """
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
-        import pql_test_runner as runner
+        from pql_test import runner
 
         port = _MOCK_AS_PORT_A
         pbi_pid = 1000
@@ -1902,6 +1985,71 @@ class TestRetrieveTestsViaDax:
         assert result is None
 
     # ------------------------------------------------------------------
+    # Discovery errors must surface on stderr instead of being silently
+    # swallowed (see tasks/surface-silent-test-discovery-failures-epic.md).
+    # ------------------------------------------------------------------
+
+    def test_emits_stderr_warning_when_both_dax_queries_fail(self, capsys):
+        """When both V2 and V1 raise, the verbatim exception type+message
+        must appear on stderr so users can distinguish "PQL.Assert not
+        installed" from "auth/permission/connectivity error"."""
+        conn = MagicMock()
+        conn.server = "powerbi://fake/server"
+        conn.catalog = "FakeModel"
+        with patch(
+            "pql_test.runner._execute_dax_query",
+            side_effect=RuntimeError("Authentication failed for all authenticators"),
+        ):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is None
+        captured = capsys.readouterr()
+        # The warning must reach stderr
+        assert "Authentication failed" in captured.err
+        # And include the verbatim exception type so the reader knows it
+        # was a real error, not a 'PQL.Assert not installed' fallback.
+        assert "RuntimeError" in captured.err
+        # And mention which target we were querying
+        assert "FakeModel" in captured.err or "fake/server" in captured.err
+        # No stderr pollution into stdout
+        assert "Authentication failed" not in captured.out
+
+    def test_emits_no_warning_when_v2_succeeds(self, capsys):
+        """The happy path must remain silent on stderr."""
+        v2_rows = [
+            {
+                "PQL.Assert.RetrieveTestsV2()[Name]": "Calcs.DEV.Tests",
+                "PQL.Assert.RetrieveTestsV2()[Description]": "x",
+                "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": "",
+            }
+        ]
+        conn = MagicMock()
+        with patch("pql_test.runner._execute_dax_query", return_value=v2_rows):
+            _retrieve_tests_via_dax(conn)
+
+        captured = capsys.readouterr()
+        assert "Warning" not in captured.err
+        assert "fail" not in captured.err.lower()
+
+    def test_emits_no_warning_when_v1_succeeds_after_v2_fails(self, capsys):
+        """V2-fails-but-V1-succeeds is a legitimate older-model fallback —
+        must remain silent on stderr."""
+        v1_rows = [{"PQL.Assert.RetrieveTests()[Name]": "Suite.A.Tests"}]
+
+        def _fake_execute(_conn, query):
+            if "V2" in query:
+                raise Exception("V2 not installed")
+            return v1_rows
+
+        conn = MagicMock()
+        with patch("pql_test.runner._execute_dax_query", side_effect=_fake_execute):
+            _retrieve_tests_via_dax(conn)
+
+        captured = capsys.readouterr()
+        assert "Warning" not in captured.err
+        assert "fail" not in captured.err.lower()
+
+    # ------------------------------------------------------------------
     # retrieve_tests() integration: connection threading
     # ------------------------------------------------------------------
 
@@ -1914,8 +2062,10 @@ class TestRetrieveTestsViaDax:
                 "PQL.Assert.RetrieveTestsV2()[PQLAssert_ImpersonatedUserName]": None,
             }
         ]
+        # Local file stem must match the live name so the model-ownership
+        # filter keeps it (see _discover_local_test_names).
         model_dir = tmp_model(
-            [{"suite_name": "Calculations.DEV", "source": make_dax_source("Calcs")}]
+            [{"suite_name": "Calcs.DEV", "source": make_dax_source("Calcs.DEV.Tests")}]
         )
         conn = MagicMock()
         with patch("pql_test.runner._execute_dax_query", return_value=rows):
@@ -1969,6 +2119,27 @@ class TestParseModelIdentifier:
         assert ident.kind == "local"
         assert ident.model_name == "My Model"
 
+    def test_local_prefix_with_spaces_and_parentheses(self):
+        """A quoted name with spaces AND parentheses (e.g. a '(1)' copy
+        suffix) survives intact: 'local/OLS_Model (1)' →
+        model_name='OLS_Model (1)'.  This is the documented form for names
+        the shell would otherwise split — see the quoting note in the CLI
+        docstrings and README."""
+        ident = parse_model_identifier("local/OLS_Model (1)")
+        assert ident.kind == "local"
+        assert ident.model_name == "OLS_Model (1)"
+        assert ident.raw == "local/OLS_Model (1)"
+
+    def test_fabric_service_path_with_spaces_in_names(self):
+        """Workspace/model display names with spaces parse correctly when the
+        whole MODEL_PATH is passed as one (quoted) argument."""
+        ident = parse_model_identifier(
+            "My Workspace.Workspace/Sales Model.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My Workspace"
+        assert ident.model_name == "Sales Model"
+
     def test_local_prefix_existing_path_uses_path_kind(self, tmp_path):
         """If 'local/<name>' exists on disk, treat it as a filesystem path."""
         local_dir = tmp_path / "local" / "Model"
@@ -2018,6 +2189,100 @@ class TestParseModelIdentifier:
         """Windows-style path → kind='path'."""
         ident = parse_model_identifier("\\\\server\\share\\model.sm")
         assert ident.kind == "path"
+
+    # ------------------------------------------------------------------
+    # Fabric-style canonical service path:
+    #     <workspace>.Workspace/<model>.SemanticModel
+    # See tasks/fabric-style-model-path-epic.md.
+    # ------------------------------------------------------------------
+
+    def test_fabric_style_path_returns_service_kind(self):
+        """'MyWorkspace.Workspace/MyModel.SemanticModel' parses as service
+        with workspace='MyWorkspace' and model='MyModel'."""
+        ident = parse_model_identifier(
+            "MyWorkspace.Workspace/MyModel.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+        assert ident.raw == "MyWorkspace.Workspace/MyModel.SemanticModel"
+
+    def test_fabric_style_path_accepts_backslash_separator(self):
+        """Windows backslash form must work equivalently."""
+        ident = parse_model_identifier(
+            "MyWorkspace.Workspace\\MyModel.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+
+    def test_fabric_style_path_workspace_name_can_contain_dots(self):
+        """A workspace name with dots (e.g. 'My.Demo.Tenant') is unambiguous
+        in the new format because the suffix anchors the split."""
+        ident = parse_model_identifier(
+            "My.Demo.Tenant.Workspace/Some.Dotted.Model.SemanticModel"
+        )
+        assert ident.kind == "service"
+        assert ident.workspace_name == "My.Demo.Tenant"
+        assert ident.model_name == "Some.Dotted.Model"
+
+    def test_fabric_style_path_falls_back_to_path_kind_when_existing(self, tmp_path):
+        """If the Fabric-style string exists as an on-disk directory, treat
+        it as a filesystem path — preserves the current 'real path wins'
+        invariant."""
+        ws_dir = tmp_path / "MyWorkspace.Workspace" / "MyModel.SemanticModel"
+        ws_dir.mkdir(parents=True)
+        ident = parse_model_identifier(str(ws_dir))
+        assert ident.kind == "path"
+
+    def test_fabric_style_path_does_not_match_partial_suffix(self):
+        """'.Workspace' on the workspace side AND '.SemanticModel' on the
+        model side must BOTH be present.  Just one of them isn't enough."""
+        # Only .Workspace, no .SemanticModel
+        ident = parse_model_identifier("MyWs.Workspace/MyModel")
+        assert ident.kind != "service" or ident.workspace_name != "MyWs"
+        # Only .SemanticModel, no .Workspace
+        ident2 = parse_model_identifier("MyWs/MyModel.SemanticModel")
+        assert ident2.kind == "path"  # falls through to path
+
+    def test_fabric_style_path_suffixes_are_case_insensitive(self):
+        """Suffix casing is forgiven: '.workspace' / '.semanticmodel' in any
+        case still parse as the canonical service path, and the stripped
+        workspace/model names are preserved verbatim (only the suffix is
+        case-insensitive, not the names)."""
+        for raw in (
+            "MyWorkspace.workspace/MyModel.semanticmodel",
+            "MyWorkspace.WORKSPACE/MyModel.SEMANTICMODEL",
+            "MyWorkspace.Workspace/MyModel.semanticModel",
+        ):
+            ident = parse_model_identifier(raw)
+            assert ident.kind == "service", raw
+            assert ident.workspace_name == "MyWorkspace", raw
+            assert ident.model_name == "MyModel", raw
+
+    # ------------------------------------------------------------------
+    # Legacy <workspace>.<model> form: still accepted, but warns once.
+    # ------------------------------------------------------------------
+
+    def test_legacy_dotted_name_emits_deprecation_warning(self, capsys):
+        """The old dot notation must keep working but emit a stderr warning."""
+        ident = parse_model_identifier("MyWorkspace.MyModel")
+        assert ident.kind == "service"
+        assert ident.workspace_name == "MyWorkspace"
+        assert ident.model_name == "MyModel"
+
+        captured = capsys.readouterr()
+        assert "deprecated" in captured.err.lower()
+        assert ".workspace/" in captured.err.lower() or ".Workspace/" in captured.err
+        # The warning must NOT touch stdout (JSON-output scripts parse stdout).
+        assert "deprecated" not in captured.out.lower()
+
+    def test_fabric_style_path_emits_no_deprecation_warning(self, capsys):
+        """The canonical form must be warning-free."""
+        parse_model_identifier("MyWorkspace.Workspace/MyModel.SemanticModel")
+        captured = capsys.readouterr()
+        assert "deprecated" not in captured.err.lower()
+        assert "deprecated" not in captured.out.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -2131,8 +2396,17 @@ class TestResolveLocalXmlaConnectionByName:
         assert conn is not None
         assert conn.server == fallback_server
 
-    def test_returns_single_unnamed_instance(self):
-        """Single unnamed instance → connection returned."""
+    def test_returns_none_when_only_unnamed_instance_does_not_match_name(self):
+        """When the user types local/<name>, name match must be strict.
+
+        The historical "if exactly one unnamed instance, use it" fallback
+        silently connected the user to whatever PBI Desktop window happened to
+        be open, even when its model was something different from what was
+        requested — producing accurate-looking but misleading results
+        (e.g. local/SampleModel running RLS_Model's tests).  After
+        tasks/surface-silent-test-discovery-failures-epic.md, the resolver
+        returns None in this case so the CLI can print a clear warning.
+        """
         inst = LocalPbiInstance(
             model_name="",
             server=f"localhost:{_MOCK_AS_PORT_A}",
@@ -2140,7 +2414,10 @@ class TestResolveLocalXmlaConnectionByName:
         )
         with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
             conn = resolve_local_xmla_connection_by_name("AnyModel")
-        assert conn is not None
+        assert conn is None, (
+            "local/<name> must be strict — unnamed-instance fallback was "
+            "silently misleading users into running against the wrong model."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2251,3 +2528,75 @@ class TestResolveXmlaConnectionLocalRouting:
         assert all(r.skipped for r in suite.results), (
             "Expected all results to be skipped when the named model is not open"
         )
+
+class TestResolveXmlaConnectionServiceToLocalFallback:
+    """When the service path fails (bad creds, dead workspace, etc.) the
+    resolver must fall back to local Power BI Desktop detection instead of
+    silently returning None.  The silent-None used to make it look like the
+    CLI had "no connection" when actually a stale .env was poisoning the
+    service path.
+    """
+
+    def _service_opts(self) -> XmlaConnectionOptions:
+        return XmlaConnectionOptions(
+            tenant_id="t", workspace_id="w", dataset_id="d",
+            client_id="c", client_secret="s",
+            environment=Environment.PUBLIC,
+        )
+
+    def test_falls_back_to_local_when_service_auth_fails(self):
+        """Service path raising → local path is tried with the supplied model_path."""
+        inst = LocalPbiInstance(
+            model_name="SampleModel",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="SampleModel-GUID",
+        )
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                side_effect=RuntimeError("Failed to acquire access token: AADSTS7000215"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]),
+            patch("pql_test.runner._find_pbip_file", return_value=None),
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is not None, "expected local fallback connection"
+        assert conn.server == inst.server
+
+    def test_returns_none_when_both_service_and_local_fail(self):
+        """Service raises AND local has no PBI Desktop instance → None."""
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                side_effect=RuntimeError("Failed to acquire access token"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened", return_value=[]),
+            patch("pql_test.runner._detect_local_pbi_desktop_port", return_value=None),
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is None
+
+    def test_local_fallback_not_invoked_when_service_succeeds(self):
+        """Successful service path should NOT touch the local detection helpers."""
+        with (
+            patch(
+                "pql_test.runner._acquire_service_principal_token",
+                return_value="bearer-tok",
+            ),
+            patch(
+                "pql_test.runner._resolve_pbi_workspace_and_dataset_names",
+                return_value=("WS", "DS"),
+            ),
+            patch("pql_test.runner.get_pbi_files_opened") as get_pbi,
+        ):
+            conn = resolve_xmla_connection(
+                "/some/path/SampleModel.SemanticModel", self._service_opts(),
+            )
+        assert conn is not None
+        assert conn.catalog == "DS"
+        assert conn.access_token == "bearer-tok"
+        get_pbi.assert_not_called()

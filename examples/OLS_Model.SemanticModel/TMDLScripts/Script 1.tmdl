@@ -9,3 +9,4 @@ createOrReplace
 		lineageTag: ddaecaf7-43b9-4c74-a8ad-6a22c617ff83
 
 		annotation PQLAssert_ImpersonatedUserName = atlas.kerski@cftechnologiesllc.com
+		annotation PQLAssert_RoleName = West

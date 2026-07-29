@@ -1,0 +1,18 @@
+createOrReplace
+
+	/// Runs all performance best practice checks.
+	/// This function executes all performance validation rules and returns combined results.
+	function 'PQL.Assert.BP.CheckPerformance' =
+			() =>
+			    UNION(
+			        PQL.Assert.BP.ShouldAvoidBiDirectionalOnHighCardinalityColumn(),
+			        PQL.Assert.BP.ShouldRemoveAutoDateTable(),
+			        PQL.Assert.BP.ShouldAvoidFloatingPointDataTypes(),
+			        PQL.Assert.BP.ShouldSetIsAvailableInMdxFalseOnNonAttributeColumns()
+			    )
+		lineageTag: b9b63522-1d53-4d30-b57d-bcfe7b578f81
+
+		annotation DAXLIB_PackageId = PQL.Assert
+
+		annotation DAXLIB_PackageVersion = 0.2.0
+

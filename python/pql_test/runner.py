@@ -43,6 +43,16 @@ from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
 
+# Force UTF-8 on stdout/stderr so Unicode glyphs (e.g. ✗, ✓) and any non-ASCII
+# data in DAX results don't crash on Windows, where stdout defaults to cp1252.
+# Wrapped in try/except because in pytest capture and some embedded contexts
+# stdout/stderr can be a buffer object that doesn't expose .reconfigure().
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+    except (AttributeError, ValueError):
+        pass
+
 # ---------------------------------------------------------------------------
 # ADOMD.NET loading
 #
@@ -62,15 +72,226 @@ from typing import ClassVar, Optional
 HAS_PYADOMD = False
 _AdomdConnection = None  # set to AdomdConnection class after successful load
 
-_ADOMD_SEARCH_DIRS = [
-    # Power BI Desktop — always present on a developer machine
-    r"C:\Program Files\Microsoft Power BI Desktop\bin",
-    r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
-    # Standalone ADOMD.NET client (various versions)
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
-    r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
-]
+
+def _discover_adomd_search_dirs() -> list[str]:
+    import glob
+
+    # ORDER MATTERS: pythonnet's clr.AddReference resolves by name against
+    # whatever's first on sys.path.  We put NuGet ahead of system-wide
+    # Microsoft.NET\ADOMD.NET paths because GitHub windows-latest runners
+    # ship with an old AS client under C:\Program Files\Microsoft.NET\
+    # ADOMD.NET\160 that mishandles bearer-token + Roles= + RLS-filter
+    # roles (causes "Either the database '<name>' does not exist..." even
+    # when the SPN is a workspace admin).  The actively-maintained NuGet
+    # package fixes the bug.
+    dirs: list[str] = []
+
+    # 1. NuGet-installed AdomdClient — preferred.  Two package ids supported:
+    #   • Microsoft.AnalysisServices.AdomdClient (modern, actively
+    #     maintained, lib/net472 — required for the bearer + Roles= +
+    #     RLS-filter combination)
+    #   • Microsoft.AnalysisServices.AdomdClient.retail.amd64 (legacy,
+    #     lib/net45 — capped at 19.84.1, contains the RLS bug)
+    user_profile = os.environ.get("USERPROFILE", "")
+    if user_profile:
+        for pkg_id, lib_dir in (
+            ("microsoft.analysisservices.adomdclient", "net472"),
+            ("microsoft.analysisservices.adomdclient.retail.amd64", "net45"),
+        ):
+            nuget_glob = os.path.join(
+                user_profile,
+                ".nuget",
+                "packages",
+                pkg_id,
+                "*",
+                "lib",
+                lib_dir,
+            )
+            # Newest version first
+            dirs.extend(sorted(glob.glob(nuget_glob), reverse=True))
+
+    # 2. Power BI Desktop installer version (.exe download).  Its bundled
+    #    DLL is typically newer than the standalone ADOMD.NET releases.
+    dirs.extend(
+        [
+            r"C:\Program Files\Microsoft Power BI Desktop\bin",
+            r"C:\Program Files (x86)\Microsoft Power BI Desktop\bin",
+        ]
+    )
+
+    # 3. Last resort: standalone Microsoft.NET ADOMD client paths.  Older
+    #    builds here are the source of the CI RLS bug — keep them at the
+    #    end so they're only used when nothing better is on the box.
+    dirs.extend(
+        [
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\160",
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\150",
+            r"C:\Program Files\Microsoft.NET\ADOMD.NET\140",
+        ]
+    )
+    return dirs
+
+
+_ADOMD_SEARCH_DIRS = _discover_adomd_search_dirs()
+
+
+# ---------------------------------------------------------------------------
+# ADOMD.NET auto-install (NuGet bootstrap)
+# ---------------------------------------------------------------------------
+#
+# When ADOMD.NET assemblies aren't already installed in any of the standard
+# locations, we download the official Microsoft NuGet package
+# (Microsoft.AnalysisServices.AdomdClient) and unpack its lib/net472/ DLLs
+# into a user-local cache directory.  The next import (or this one, after
+# the fetch) finds them via clr.AddReference exactly as if they'd been
+# installed manually.
+#
+# This turns the brand-new-user install story from
+#   1. install Python  2. install ADOMD.NET MSI  3. pip install pql-test
+# into just
+#   1. install Python  2. pip install pql-test         (auto-fetch on first use)
+#
+# Opt-outs:
+#   * PQL_TEST_HERMETIC=1        — used by the test suite; skips everything.
+#   * PQL_TEST_NO_AUTO_INSTALL_ADOMD=1  — for users who manage ADOMD.NET
+#                                  themselves (corporate-managed machines,
+#                                  air-gapped envs, custom NuGet feeds).
+
+_ADOMD_AUTO_INSTALL_VERSION = "19.114.0"
+_ADOMD_AUTO_INSTALL_PKG_ID = "microsoft.analysisservices.adomdclient"
+_ADOMD_AUTO_INSTALL_LIB_FOLDER = "lib/net472"
+
+
+def _adomd_assemblies_present(search_dirs: list[str]) -> bool:
+    """Return True when any *search_dirs* entry contains an ADOMD.NET DLL.
+
+    We accept either the standalone client (`Microsoft.AnalysisServices.
+    AdomdClient.dll`, NuGet / installer redist) or the Power BI Desktop
+    flavour (`Microsoft.PowerBI.AdomdClient.dll`) — the .NET namespace
+    inside is the same.
+    """
+    candidate_files = (
+        "Microsoft.AnalysisServices.AdomdClient.dll",
+        "Microsoft.PowerBI.AdomdClient.dll",
+    )
+    for d in search_dirs:
+        if not os.path.isdir(d):
+            continue
+        for name in candidate_files:
+            if os.path.isfile(os.path.join(d, name)):
+                return True
+    return False
+
+
+def _adomd_auto_install_cache_dir() -> Optional[str]:
+    """Return the user-local cache path the auto-installer extracts to."""
+    home = os.path.expanduser("~")
+    if not home or home == "~":
+        return None
+    return os.path.join(
+        home,
+        ".pql-test",
+        "adomd",
+        _ADOMD_AUTO_INSTALL_PKG_ID,
+        _ADOMD_AUTO_INSTALL_VERSION,
+        *_ADOMD_AUTO_INSTALL_LIB_FOLDER.split("/"),
+    )
+
+
+def _auto_install_adomd_from_nuget() -> Optional[str]:
+    """Download the Microsoft.AnalysisServices.AdomdClient NuGet package and
+    extract its `lib/net472/` contents to the user cache.
+
+    Returns the directory holding the extracted DLLs on success, or None on
+    any failure (network error, opt-out, missing home directory, …).  This
+    function is intentionally tolerant: callers fall back to the standard
+    "ADOMD.NET not loaded" path when it returns None.
+    """
+    if os.environ.get("PQL_TEST_HERMETIC") or os.environ.get(
+        "PQL_TEST_NO_AUTO_INSTALL_ADOMD"
+    ):
+        return None
+
+    cache_dir = _adomd_auto_install_cache_dir()
+    if cache_dir is None:
+        return None
+
+    # Already cached from a prior run — fast path.
+    if os.path.isdir(cache_dir) and any(
+        f.lower().endswith(".dll") for f in os.listdir(cache_dir)
+    ):
+        return cache_dir
+
+    pkg = _ADOMD_AUTO_INSTALL_PKG_ID
+    version = _ADOMD_AUTO_INSTALL_VERSION
+    # NuGet flat-container public endpoint — no auth required.
+    nupkg_url = (
+        f"https://api.nuget.org/v3-flatcontainer/{pkg}/{version}/{pkg}.{version}.nupkg"
+    )
+
+    print(
+        f"ADOMD.NET assemblies not detected. Downloading "
+        f"{pkg} {version} from nuget.org to {cache_dir} (one-time, ~5 MB)...",
+        file=sys.stderr,
+    )
+
+    import tempfile  # noqa: PLC0415 — avoid the cost on the fast path
+    import urllib.request  # noqa: PLC0415
+    import zipfile  # noqa: PLC0415
+
+    tmp_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".nupkg", delete=False) as f:
+            tmp_path = f.name
+        urllib.request.urlretrieve(nupkg_url, tmp_path)
+        os.makedirs(cache_dir, exist_ok=True)
+        member_prefix = _ADOMD_AUTO_INSTALL_LIB_FOLDER + "/"
+        with zipfile.ZipFile(tmp_path) as z:
+            for member in z.namelist():
+                if not member.startswith(member_prefix) or member.endswith("/"):
+                    continue
+                # Preserve subdirectory structure under lib/net472/ — the
+                # NuGet package ships satellite-resource DLLs in culture
+                # subdirs (de/, es/, zh-Hans/, …) and the .NET assembly
+                # loader expects them in those subdirs to localise error
+                # messages.  Flattening would collide every culture's
+                # `*.resources.dll` to the same path.
+                rel = member[len(member_prefix):]
+                dest = os.path.join(cache_dir, *rel.split("/"))
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                with z.open(member) as src, open(dest, "wb") as out:
+                    out.write(src.read())
+        print(
+            f"ADOMD.NET assemblies installed to {cache_dir}.  Subsequent runs "
+            "use the cached install.",
+            file=sys.stderr,
+        )
+        return cache_dir
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"Warning: failed to auto-install ADOMD.NET ({type(exc).__name__}: "
+            f"{exc}). Install manually from https://learn.microsoft.com/en-us/"
+            f"analysis-services/client-libraries and retry, or run with "
+            f"PQL_TEST_NO_AUTO_INSTALL_ADOMD=1 to silence this attempt.",
+            file=sys.stderr,
+        )
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+# Bootstrap: when none of the discovered directories already carry ADOMD
+# assemblies, attempt a one-time fetch into the user-local cache.  No-op
+# when assemblies are already present anywhere on the search path.
+if not _adomd_assemblies_present(_ADOMD_SEARCH_DIRS):
+    _auto_dir = _auto_install_adomd_from_nuget()
+    if _auto_dir:
+        _ADOMD_SEARCH_DIRS.append(_auto_dir)
+
 
 try:
     import clr  # type: ignore[import-untyped]  # pythonnet
@@ -79,24 +300,53 @@ try:
         if os.path.isdir(_d) and _d not in sys.path:
             sys.path.append(_d)
 
-    # The DLL shipped with PBI Desktop is named Microsoft.PowerBI.AdomdClient.dll
-    # and its embedded assembly name is also Microsoft.PowerBI.AdomdClient — that
-    # is what clr.AddReference must match.  The .NET *namespace* inside the DLL
-    # is still Microsoft.AnalysisServices.AdomdClient, so the from-import stays.
-    clr.AddReference("Microsoft.PowerBI.AdomdClient")
-    from Microsoft.AnalysisServices.AdomdClient import AdomdConnection as _AdomdConnection  # type: ignore[import]
+    # PBI Desktop ships Microsoft.PowerBI.AdomdClient.dll; the NuGet package and
+    # standalone ADOMD.NET ship Microsoft.AnalysisServices.AdomdClient.dll. The
+    # embedded .NET namespace is Microsoft.AnalysisServices.AdomdClient in both,
+    # so the from-import stays the same — only the assembly name differs.
+    for _assembly_name in (
+        "Microsoft.PowerBI.AdomdClient",
+        "Microsoft.AnalysisServices.AdomdClient",
+    ):
+        try:
+            clr.AddReference(_assembly_name)
+            break
+        except Exception:
+            continue
+    from Microsoft.AnalysisServices.AdomdClient import (
+        AdomdConnection as _AdomdConnection,
+    )  # type: ignore[import]
+
     HAS_PYADOMD = True
+
+    # One-line diagnostic so CI logs (and any local debugging) show exactly
+    # which ADOMD.NET assembly pythonnet resolved — this caught a CI bug
+    # where the older AS-shipped client on the runner shadowed our NuGet
+    # install and triggered the bearer + Roles + RLS-filter failure.
+    try:
+        from System.Reflection import Assembly as _Assembly  # type: ignore[import]
+
+        _asm = _Assembly.GetAssembly(_AdomdConnection)
+        if _asm is not None:
+            print(
+                f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
+                file=sys.stderr,
+            )
+    except Exception:
+        pass
 except Exception:
     pass
 
 try:
     import msal  # type: ignore[import-untyped]
+
     HAS_MSAL = True
 except ImportError:
     HAS_MSAL = False
 
 try:
     import psutil as _psutil  # type: ignore[import-untyped]
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -105,6 +355,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Cloud environment support
 # ---------------------------------------------------------------------------
+
 
 class Environment(str, Enum):
     """Supported Power BI cloud environments."""
@@ -170,6 +421,7 @@ def get_api_endpoints(environment: Environment = Environment.PUBLIC) -> Endpoint
 # Model identifier parsing
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ModelIdentifier:
     """Parsed model identifier from the CLI model_path argument.
@@ -203,26 +455,68 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
 
     1. Starts with ``local/`` **and** the path does not exist on the local
        filesystem → ``kind='local'``, *model_name* is the remainder.
-    2. Does **not** start with ``./``, ``/``, or ``\\``; contains at least
-       one ``.``; the value does not exist on the filesystem → ``kind='service'``,
-       split on the **last** dot into *workspace_name* and *model_name*.
-    3. Otherwise → ``kind='path'`` (traditional filesystem path).
+    2. Matches the canonical Fabric-style service path
+       ``<workspace>.Workspace/<model>.SemanticModel`` (forward- or
+       back-slash separator) and does not exist on the filesystem →
+       ``kind='service'``, suffixes are stripped from each part.
+    3. Contains at least one ``.``, does not look like a path, and does not
+       exist on the filesystem → legacy dot notation ``<workspace>.<model>``
+       → ``kind='service'``.  Emits a one-line deprecation warning on stderr.
+    4. Otherwise → ``kind='path'`` (traditional filesystem path).
     """
     # 1. local/<model_name>
     if model_path.startswith("local/") and not Path(model_path).exists():
-        name = model_path[len("local/"):]
+        name = model_path[len("local/") :]
         return ModelIdentifier(kind="local", model_name=name, raw=model_path)
 
-    # 2. workspace.semanticmodel (Fabric CLI dot notation)
+    # 2. Canonical Fabric-style: <workspace>.Workspace/<model>.SemanticModel
+    # (or backslash form). Anchored on the suffixes so workspaces with dots
+    # in their names parse unambiguously.  Suffix matching is
+    # case-insensitive — give the user the benefit of the doubt if they type
+    # ``.workspace`` / ``.semanticmodel`` in a different case.  We still
+    # require BOTH suffixes: ``.SemanticModel`` alone is also the local PBIP
+    # directory convention, so demanding both keeps service paths
+    # distinguishable from a filesystem path like ``dir/Model.SemanticModel``.
+    if not Path(model_path).exists():
+        # Try both '/' and '\\' as separators — Fabric exports use '/', but
+        # users on Windows may type the path with '\\'.
+        for sep in ("/", "\\"):
+            if sep in model_path:
+                ws_part, _, model_part = model_path.partition(sep)
+                if ws_part.lower().endswith(".workspace") and model_part.lower().endswith(
+                    ".semanticmodel"
+                ):
+                    ws = ws_part[: -len(".Workspace")]
+                    sm = model_part[: -len(".SemanticModel")]
+                    if ws and sm:
+                        return ModelIdentifier(
+                            kind="service",
+                            workspace_name=ws,
+                            model_name=sm,
+                            raw=model_path,
+                        )
+
+    # 3. Legacy <workspace>.<model> dot notation — deprecated but still
+    # supported.  Reject any path containing a separator: those are either
+    # filesystem paths (handled in step 4) or malformed Fabric-style paths
+    # that we don't want to silently coerce into a dot split.
     if (
         not model_path.startswith(("./", "/", "\\"))
+        and "/" not in model_path
+        and "\\" not in model_path
         and "." in model_path
         and not Path(model_path).exists()
     ):
         dot_idx = model_path.rfind(".")
         ws = model_path[:dot_idx]
-        sm = model_path[dot_idx + 1:]
+        sm = model_path[dot_idx + 1 :]
         if ws and sm:
+            print(
+                f"Note: '<workspace>.<model>' dot notation is deprecated. "
+                f"Use the canonical Fabric form instead: "
+                f"'{ws}.Workspace/{sm}.SemanticModel'.",
+                file=sys.stderr,
+            )
             return ModelIdentifier(
                 kind="service",
                 workspace_name=ws,
@@ -230,13 +524,14 @@ def parse_model_identifier(model_path: str) -> ModelIdentifier:
                 raw=model_path,
             )
 
-    # 3. Filesystem path (default)
+    # 4. Filesystem path (default)
     return ModelIdentifier(kind="path", raw=model_path)
 
 
 # ---------------------------------------------------------------------------
 # Public data types
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PqlTest:
@@ -292,21 +587,32 @@ class XmlaConnectionOptions:
     """
     Connection parameters for XMLA execution.
 
-    For remote Power BI Premium / Fabric connections all three of
-    tenant_id, workspace_id, and dataset_id are required.
+    For remote Power BI Premium / Fabric connections, tenant_id and
+    workspace_id are required, plus EITHER dataset_id OR dataset_name
+    (the dataset's display name as it appears in the workspace).  When
+    only dataset_name is supplied the resolver looks up the dataset via
+    REST so the caller doesn't need to store GUIDs anywhere.
 
     client_id + client_secret are used to acquire an OAuth2 bearer
     token via the MSAL service-principal (client-credentials) flow.
     This is the same authentication pattern used by Invoke-DQVTesting
     when running in CI/CD pipelines against cloud-hosted models.
+
+    access_token is an optional pre-acquired bearer token.  When set, the
+    downstream resolver skips MSAL and uses this token directly.  Populated
+    by ``_resolve_authentication_with_stored_credentials`` when a non-secret
+    stored credential (interactive, certificate, federated, managed identity)
+    is found — see tasks/unified-auth-runtime-epic.md.
     """
 
     tenant_id: Optional[str] = None
     workspace_id: Optional[str] = None
     dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     environment: Environment = Environment.PUBLIC
+    access_token: Optional[str] = None
 
 
 @dataclass
@@ -346,13 +652,16 @@ class LocalPbiInstance:
 # Model discovery helpers
 # ---------------------------------------------------------------------------
 
+
 def _find_semantic_model_dir(model_path: str) -> Optional[str]:
     """Return the .SemanticModel directory for a PBIP model.
 
     Accepts any of:
     - The PBIP root directory (parent of the .SemanticModel folder)  <- canonical
     - The .SemanticModel directory itself
-    - A .pbip file (parent directory is used)
+    - A .pbip file (the .SemanticModel whose stem matches the .pbip's stem
+      is preferred so flat layouts with multiple models in one folder
+      resolve to the correct model)
     """
     p = Path(model_path)
     if not p.exists():
@@ -360,9 +669,18 @@ def _find_semantic_model_dir(model_path: str) -> Optional[str]:
     # Passed the .SemanticModel directory directly
     if p.is_dir() and p.name.endswith(".SemanticModel"):
         return str(p)
-    # Passed a .pbip file — use its parent
+    # Passed a .pbip file — prefer the .SemanticModel whose stem matches the
+    # .pbip's stem.  This mirrors the logic in _find_pbip_file and keeps
+    # flat layouts (e.g. examples/ with three side-by-side .pbip files)
+    # resolving to the correct model instead of whichever .SemanticModel
+    # iterdir() happens to yield first.
     if p.is_file() and p.suffix == ".pbip":
-        p = p.parent
+        pbip_stem = p.stem
+        parent = p.parent
+        sibling = parent / f"{pbip_stem}.SemanticModel"
+        if sibling.is_dir():
+            return str(sibling)
+        p = parent
     # Standard: scan the directory for a .SemanticModel subdirectory
     if p.is_dir():
         for entry in p.iterdir():
@@ -376,13 +694,24 @@ def _find_pbip_file(model_path: str) -> Optional[str]:
 
     Accepts:
     - The PBIP root directory (scanned directly)
-    - The .SemanticModel directory (parent is scanned)
+    - The .SemanticModel directory (parent is scanned, but the .pbip
+      whose stem matches the .SemanticModel directory's stem is preferred
+      so flat layouts with multiple models in one folder still resolve
+      to the correct .pbip)
     """
     p = Path(model_path)
     if not p.exists():
         return None
-    # If given the .SemanticModel dir, look in the parent for the .pbip
+    # If given the .SemanticModel dir, prefer the .pbip whose stem matches
+    # the directory's stem.  This makes ``examples/`` (which holds
+    # SampleModel.pbip, RLS_Model.pbip, OLS_Model.pbip side-by-side)
+    # resolve correctly instead of picking whichever .pbip iterdir() yields
+    # first.
     if p.is_dir() and p.name.endswith(".SemanticModel"):
+        stem = p.name[: -len(".SemanticModel")]
+        sibling = p.parent / f"{stem}.pbip"
+        if sibling.is_file():
+            return str(sibling)
         p = p.parent
     for entry in p.iterdir():
         if entry.name.endswith(".pbip") and entry.is_file():
@@ -395,9 +724,7 @@ def _collect_dax_test_files(semantic_model_dir: str) -> list[str]:
     dax_dir = Path(semantic_model_dir) / "DAXQueries"
     if not dax_dir.exists():
         return []
-    return sorted(
-        str(f) for f in dax_dir.iterdir() if f.name.endswith(".Tests.dax")
-    )
+    return sorted(str(f) for f in dax_dir.iterdir() if f.name.endswith(".Tests.dax"))
 
 
 def _parse_dax_test_file(file_path: str) -> PqlTest:
@@ -406,20 +733,90 @@ def _parse_dax_test_file(file_path: str) -> PqlTest:
     name = Path(file_path).stem  # basename without .dax extension
     func_match = re.search(r"FUNCTION\s+([\w.]+)\s*=", source, re.IGNORECASE)
     description = f"DAX function: {func_match.group(1)}" if func_match else None
-    return PqlTest(name=name, file_path=file_path, source=source, description=description)
+    return PqlTest(
+        name=name, file_path=file_path, source=source, description=description
+    )
+
+
+_LOCAL_TEST_FUNCTION_RE = re.compile(
+    r"function\s+'([^']+\.(?:Test|Tests))'\s*=", re.IGNORECASE | re.MULTILINE
+)
+
+
+def _discover_local_test_names(model_path: str) -> set[str]:
+    """Return the set of test names declared locally in *model_path*.
+
+    A name is "local" if it appears either as a
+    ``function '<Name>.Test(s)' = ...`` declaration in
+    ``definition/functions.tmdl`` or as the stem of a
+    ``DAXQueries/<Name>.Tests.dax`` file.
+
+    Returns an empty set when the path is not a recognisable PBIP model
+    directory (``local/<name>`` or Fabric ``workspace.semantic_model``)
+    or when the model lacks any ownership-declaring artifact.  Use
+    :func:`_has_local_ownership_sources` to disambiguate these cases.
+    """
+    names: set[str] = set()
+    semantic_model_dir = _find_semantic_model_dir(model_path)
+    if not semantic_model_dir:
+        return names
+
+    for f in _collect_dax_test_files(semantic_model_dir):
+        names.add(Path(f).stem)
+
+    functions_tmdl = Path(semantic_model_dir) / "definition" / "functions.tmdl"
+    if functions_tmdl.is_file():
+        try:
+            text = functions_tmdl.read_text(encoding="utf-8")
+        except OSError:
+            text = ""
+        for match in _LOCAL_TEST_FUNCTION_RE.finditer(text):
+            names.add(match.group(1))
+
+    return names
+
+
+def _has_local_ownership_sources(model_path: str) -> bool:
+    """Return True when *model_path* declares ownership-tracking artifacts.
+
+    A filesystem PBIP "owns" the tests it declares when its SemanticModel
+    has a ``DAXQueries/`` directory (the canonical location for
+    ``*.Tests.dax`` files) or a ``definition/functions.tmdl`` file.
+    Returning True means an empty local test set is meaningful ("this
+    model genuinely has no tests") and live discovery should be filtered
+    strictly against it.  Returning False means the path either isn't a
+    filesystem PBIP (``local/<name>``, Fabric ``workspace.model``) or is
+    a bare PBIP skeleton with no declaration locations — in either case,
+    live discovery is passed through unfiltered.
+    """
+    semantic_model_dir = _find_semantic_model_dir(model_path)
+    if not semantic_model_dir:
+        return False
+    base = Path(semantic_model_dir)
+    return (base / "DAXQueries").is_dir() or (base / "definition" / "functions.tmdl").is_file()
 
 
 # ---------------------------------------------------------------------------
 # Local Power BI Desktop detection — process-based (mirrors Invoke-DQVTesting)
 # ---------------------------------------------------------------------------
 
-def _get_pbi_process_window_titles() -> dict[int, str]:
+
+def _get_pbi_process_window_titles(
+    known_pbi_pids: Optional[set] = None,
+) -> dict[int, str]:
     """
     Return {pid: window_title} for all visible Power BI Desktop windows.
 
     Mirrors the ``GetWindowText`` + ``EnumWindows`` approach used in
     Invoke-DQVTesting's Get-PowerBIFilesOpened to identify which
     PBIDesktop.exe processes are open and their model names.
+
+    A window is included when EITHER its title contains the legacy
+    ``" - Power BI Desktop"`` substring OR its PID belongs to
+    *known_pbi_pids* (typically the set of running PBIDesktop.exe PIDs
+    discovered via psutil).  The second path catches newer / Store
+    builds whose window title is just the model name (e.g. ``OLS_Model``)
+    with no app-name suffix.
 
     Windows only; returns an empty dict on other platforms.
     """
@@ -431,6 +828,7 @@ def _get_pbi_process_window_titles() -> dict[int, str]:
 
     user32 = ctypes.windll.user32
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+    known_pids = known_pbi_pids or set()
 
     def _callback(hwnd: int, _: int) -> bool:
         if not user32.IsWindowVisible(hwnd):
@@ -441,11 +839,12 @@ def _get_pbi_process_window_titles() -> dict[int, str]:
         buf = ctypes.create_unicode_buffer(length)
         user32.GetWindowTextW(hwnd, buf, length)
         title: str = buf.value
-        if "Power BI Desktop" in title:
-            pid = ctypes.c_ulong(0)
-            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-            if pid.value and pid.value not in titles:
-                titles[pid.value] = title
+        pid = ctypes.c_ulong(0)
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not pid.value or pid.value in titles:
+            return True
+        if "Power BI Desktop" in title or pid.value in known_pids:
+            titles[pid.value] = title
         return True
 
     user32.EnumWindows(WNDENUMPROC(_callback), 0)
@@ -535,43 +934,45 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
             "Install with: pip install psutil"
         )
 
-    # Step 1 — PID → window title mapping
-    # This may return an empty dict (e.g. Store app, UAC elevation, hidden
-    # window) — we do NOT return early; msmdsrv scanning always continues.
-    pid_to_raw_title = _get_pbi_process_window_titles()
+    # Step 1a — discover the set of running PBIDesktop.exe PIDs and their
+    # cmdline-derived model names (when the .pbip path is present).  We
+    # do this BEFORE window enumeration so the EnumWindows pass can
+    # accept any visible window owned by a known PBI pid — newer/Store
+    # builds drop the legacy " - Power BI Desktop" suffix and would
+    # otherwise be filtered out by the title-substring check.
     pbi_pid_to_model: dict[int, str] = {}
+    for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            _pname = (_fp.info.get("name") or "").lower()
+            if _pname != "pbidesktop.exe":
+                continue
+            _pid = int(_fp.info.get("pid") or 0)
+            if not _pid:
+                continue
+            _model = ""
+            for _arg in (_fp.info.get("cmdline") or [])[1:]:
+                _p = Path(_arg)
+                if _p.suffix.lower() in (".pbix", ".pbip"):
+                    _model = _p.stem
+                    break
+            pbi_pid_to_model[_pid] = _model
+        except (_psutil.NoSuchProcess, _psutil.AccessDenied):
+            continue
+    pbi_pids = set(pbi_pid_to_model.keys())
+
+    # Step 1b — PID → window title mapping.  Pass the known PBI pids so
+    # newer-build windows (just the model name, no app suffix) are also
+    # captured.  Title trumps cmdline because the title reflects the
+    # currently-loaded model after Save As / rename, whereas the cmdline
+    # is frozen at process start.  A title-derived name only OVERWRITES
+    # the cmdline name when it's non-empty after suffix-stripping.
+    pid_to_raw_title = _get_pbi_process_window_titles(known_pbi_pids=pbi_pids)
     for pid, title in pid_to_raw_title.items():
         idx = title.rfind(" - ")
-        model_name = title[:idx].strip() if idx > 0 else title
-        pbi_pid_to_model[pid] = model_name
-
-    # Step 1b — command-line fallback.
-    # When window enumeration returns nothing (UAC elevation mismatch or
-    # Microsoft Store isolation), scan PBIDesktop.exe processes and extract
-    # the model name from the file-path argument:
-    #   PBIDesktop.exe "C:\...\RLS_Model.pbip"  →  "RLS_Model"
-    # This is more reliable than EnumWindows in those scenarios because
-    # psutil can access the process list even across elevation boundaries.
-    if not pbi_pid_to_model:
-        for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
-            try:
-                _pname = (_fp.info.get("name") or "").lower()
-                if _pname != "pbidesktop.exe":
-                    continue
-                _pid = int(_fp.info.get("pid") or 0)
-                if not _pid:
-                    continue
-                _model = ""
-                for _arg in (_fp.info.get("cmdline") or [])[1:]:
-                    _p = Path(_arg)
-                    if _p.suffix.lower() in (".pbix", ".pbip"):
-                        _model = _p.stem
-                        break
-                pbi_pid_to_model[_pid] = _model
-            except (_psutil.NoSuchProcess, _psutil.AccessDenied):
-                continue
-
-    pbi_pids = set(pbi_pid_to_model.keys())
+        model_name = title[:idx].strip() if idx > 0 else title.strip()
+        if model_name:
+            pbi_pid_to_model[pid] = model_name
+            pbi_pids.add(pid)
 
     # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
     # the plain string "LISTEN".  Accept both so the code works on any version.
@@ -724,6 +1125,7 @@ def resolve_local_xmla_connection(
 # Local Power BI Desktop detection — port-file fallback
 # ---------------------------------------------------------------------------
 
+
 def _detect_local_pbi_desktop_port() -> Optional[str]:
     """
     Detect the Analysis Services port used by an open Power BI Desktop instance.
@@ -741,7 +1143,10 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
 
     # Candidate base paths — standard installer and Microsoft Store package
     _ws_candidates = [
-        Path(local_app_data) / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces",
+        Path(local_app_data)
+        / "Microsoft"
+        / "Power BI Desktop"
+        / "AnalysisServicesWorkspaces",
     ]
     # Microsoft Store version stores data under the package's LocalState
     _packages_root = Path(local_app_data) / "Packages"
@@ -749,7 +1154,11 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
         for _pkg in _packages_root.iterdir():
             if _pkg.name.startswith("Microsoft.MicrosoftPowerBIDesktop"):
                 _ws_candidates.append(
-                    _pkg / "LocalState" / "Microsoft" / "Power BI Desktop" / "AnalysisServicesWorkspaces"
+                    _pkg
+                    / "LocalState"
+                    / "Microsoft"
+                    / "Power BI Desktop"
+                    / "AnalysisServicesWorkspaces"
                 )
                 break  # only one PBI Desktop Store package expected
 
@@ -770,6 +1179,7 @@ def _detect_local_pbi_desktop_port() -> Optional[str]:
 # XMLA connection resolution
 # ---------------------------------------------------------------------------
 
+
 def _resolve_authentication_with_stored_credentials(
     opts: XmlaConnectionOptions,
 ) -> XmlaConnectionOptions:
@@ -779,21 +1189,37 @@ def _resolve_authentication_with_stored_credentials(
     Priority:
       1. CLI flags (opts.tenant_id, opts.client_id, opts.client_secret)
       2. Environment variables (PQL_TENANT_ID, PQL_CLIENT_ID, PQL_CLIENT_SECRET)
-      3. Stored credentials (from pql-test auth login)
+      3. Stored credentials (from ``pql-test auth login``)
 
-    Returns:
-        Updated XmlaConnectionOptions with credentials from stored config if needed
-        
-    Note: Only applies stored credentials when NO credentials are provided at all.
-          Partial credentials are left as-is to preserve validation behavior.
+    For stored credentials the behavior depends on the chosen auth method:
+
+    * ``SERVICE_PRINCIPAL_SECRET`` — the secret is forwarded as
+      ``client_secret`` so the downstream resolver runs MSAL's
+      client-credentials flow (legacy code path, preserved bit-for-bit).
+    * ``INTERACTIVE`` / ``SERVICE_PRINCIPAL_CERT`` /
+      ``SERVICE_PRINCIPAL_FEDERATED`` / ``MANAGED_IDENTITY`` — a bearer token
+      is acquired via ``AuthenticationManager.get_access_token`` (which uses
+      the appropriate ``azure-identity`` credential class under the hood) and
+      attached to ``opts.access_token``. The downstream resolver then hands
+      that bearer to ADOMD via the existing MSOLAP ``Password=<bearer>;``
+      connection-string segment.
+
+    See tasks/unified-auth-runtime-epic.md.
     """
+    # Hermetic test mode skips all developer-machine state: no .env, no
+    # stored credentials, no token acquisition.  Tests that need a
+    # connection mock it explicitly.
+    import os
+    if os.environ.get("PQL_TEST_HERMETIC"):
+        return opts
+
     # If any credentials are already provided (even partial), return as-is
     # This preserves the existing validation behavior where partial credentials fail
     if opts.tenant_id or opts.client_id or opts.client_secret:
         return opts
 
     # Check if credentials are in environment variables
-    import os
+
     env_tenant = os.getenv("PQL_TENANT_ID")
     env_client = os.getenv("PQL_CLIENT_ID")
     env_secret = os.getenv("PQL_CLIENT_SECRET")
@@ -819,26 +1245,92 @@ def _resolve_authentication_with_stored_credentials(
         if not status.authenticated:
             return opts  # No stored credentials
 
-        # For service principal with secret, extract the credentials
         config = manager._store.load()
-        if config and config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
+        if config is None:
+            return opts
+
+        # The stored credential records which cloud it was created for
+        # (`pql-test auth login --environment`), so the credential and its
+        # cloud travel together — a USGov login should never be aimed at
+        # the Public endpoints.  Fall back to opts.environment when the
+        # stored value doesn't parse.
+        stored_env = opts.environment
+        for e in Environment:
+            if e.value.lower() == (config.environment or "").strip().lower():
+                stored_env = e
+                break
+
+        # SPN-with-secret: forward the secret so MSAL acquires the token
+        # downstream.  Keeps the legacy code path intact for the SPN happy
+        # path (env-based CI workflows).
+        if config.method == AuthMethod.SERVICE_PRINCIPAL_SECRET:
             return XmlaConnectionOptions(
                 tenant_id=config.tenant_id or opts.tenant_id,
                 workspace_id=opts.workspace_id,
                 dataset_id=opts.dataset_id,
                 client_id=config.client_id or opts.client_id,
                 client_secret=config.client_secret or opts.client_secret,
-                environment=config.environment,
+                environment=stored_env,
             )
 
-        # For other auth methods, we can't extract credentials
-        return opts
+        # INTERACTIVE: refuse to launch the browser in non-interactive
+        # environments (CI runners) where no one is there to complete the
+        # OAuth dance.  We warn + return opts unchanged so the caller can
+        # still fall back to local detection — and so generic runner-level
+        # callers don't crash just because the user happens to have stored
+        # interactive creds on their dev box.  CLI commands that NEED a
+        # service connection (e.g. ``run-tests workspace.model``) surface a
+        # dedicated error to the user; see cli.py.
+        if config.method == AuthMethod.INTERACTIVE:
+            import sys
+
+            in_ci = bool(os.getenv("CI"))
+            no_tty = not (hasattr(sys.stdin, "isatty") and sys.stdin.isatty())
+            if in_ci or no_tty:
+                print(
+                    "Warning: stored interactive credentials cannot be used in "
+                    "a non-interactive environment (no TTY or CI=true). "
+                    "Falling back to local detection. For CI, log in with "
+                    "`pql-test auth login` using a service principal or "
+                    "managed identity, or supply --tenant-id / --client-id / "
+                    "--client-secret flags.",
+                    file=sys.stderr,
+                )
+                return opts
+
+        # All other azure-identity-backed methods (interactive in a TTY,
+        # cert, federated, managed identity) — acquire a bearer via the
+        # manager and surface it on opts.access_token.
+        token = manager.get_access_token()
+        if not token:
+            return opts
+        return XmlaConnectionOptions(
+            tenant_id=config.tenant_id or opts.tenant_id,
+            workspace_id=opts.workspace_id,
+            dataset_id=opts.dataset_id,
+            client_id=config.client_id or opts.client_id,
+            client_secret=opts.client_secret,
+            environment=stored_env,
+            access_token=token,
+        )
 
     except ImportError:
         # auth module not available
         return opts
-    except Exception:
-        # Any error in loading stored credentials - return original opts
+    except Exception as exc:  # noqa: BLE001
+        # Surface unexpected errors on stderr so the user can diagnose
+        # why their stored credentials aren't being honored.  The bridge
+        # still returns opts unchanged so the caller can fall back to
+        # other code paths (file-based discovery, local PBI Desktop, etc.).
+        # Without this, the run silently fails with the generic "Service
+        # connection requires --tenant-id..." error, masking the real
+        # cause (corrupt AuthenticationRecord, expired token, MSAL cache
+        # access failure, etc.).
+        print(
+            f"Warning: failed to acquire token from stored credentials: "
+            f"{type(exc).__name__}: {str(exc)[:300]}",
+            file=sys.stderr,
+        )
         return opts
 
 
@@ -850,11 +1342,15 @@ def resolve_xmla_connection(
     Resolve which XMLA endpoint to use for test execution.
 
     Priority:
-      1. Remote Power BI Premium / Fabric workspace (when tenant_id,
+      1. ``local/<model_name>`` identifier — strict name-based local
+         detection.  Never falls back to a remote service connection
+         (even if PQL_* credentials are present in the environment) and
+         never falls back to an arbitrary running PBI Desktop instance.
+         When the named instance isn't open, returns None so the caller
+         can surface a clear "instance not found" error instead of
+         silently running tests against the deployed dataset.
+      2. Remote Power BI Premium / Fabric workspace (when tenant_id,
          workspace_id, dataset_id are all provided), matching Invoke-DQVTesting.
-      2. ``local/<model_name>`` identifier — name-based local detection via
-         ``resolve_local_xmla_connection_by_name``.  Never falls back to an
-         arbitrary running PBI Desktop instance.
       3. Filesystem path — process-based local detection via
          ``resolve_local_xmla_connection``.
 
@@ -863,12 +1359,80 @@ def resolve_xmla_connection(
     # Try to resolve credentials from stored config if not provided
     opts = _resolve_authentication_with_stored_credentials(opts)
 
-    # Option 1 — remote workspace (service principal)
-    if opts.tenant_id and opts.workspace_id and opts.dataset_id:
-        # The XMLA endpoint requires the workspace display name and dataset
-        # display name — not GUIDs.  Resolve both via the Power BI REST API
-        # using the service-principal token we're about to acquire anyway.
-        endpoints = get_api_endpoints(opts.environment)
+    # Hermetic test mode disables auto-detection paths (stored
+    # credentials, local PBI Desktop) so tests don't pick up developer-
+    # machine state.  Explicit credentials passed on the command line
+    # are still honored — tests that exercise the remote path supply
+    # --tenant-id / --workspace-id / --dataset-id directly.
+    import os
+    hermetic = bool(os.environ.get("PQL_TEST_HERMETIC"))
+
+    # Option 1 — local/<model_name> identifier (strict).
+    # Short-circuit before any remote-service path so credentials in the
+    # environment can't silently redirect a user's "run against my open
+    # PBI Desktop instance" request to the deployed dataset.
+    ident = parse_model_identifier(model_path)
+    if ident.kind == "local":
+        if hermetic:
+            return None
+        return resolve_local_xmla_connection_by_name(ident.model_name)
+
+    # Option 2 — remote workspace (service principal).
+    # If the service path raises (bad creds, dead workspace, unreachable
+    # endpoint, etc.) we fall through to local detection instead of letting
+    # the exception propagate or returning None silently.  Stale `.env`
+    # files would otherwise mask "no connection" when a perfectly good
+    # local Power BI Desktop session was sitting right there.
+    #
+    # The dataset can be identified either by GUID (opts.dataset_id) or by
+    # display name (opts.dataset_name).  Name-based resolution lets callers
+    # avoid storing dataset GUIDs as secrets — the CLI derives the name
+    # from the `.SemanticModel` directory stem and the resolver verifies
+    # the dataset exists in the workspace via REST.
+    if opts.tenant_id and opts.workspace_id and (opts.dataset_id or opts.dataset_name):
+        try:
+            return _resolve_service_xmla_connection(opts)
+        except Exception as exc:  # noqa: BLE001 — log + fall through to local
+            print(
+                f"Warning: remote XMLA connection failed ({type(exc).__name__}: "
+                f"{exc}). Falling back to local Power BI Desktop detection.",
+                file=sys.stderr,
+            )
+            # Fall through to local detection below.
+
+    # Option 3 — local Power BI Desktop (filesystem path).  Skipped in
+    # hermetic test mode so a running PBI Desktop instance on the
+    # developer's machine doesn't leak into test subprocess results.
+    if hermetic:
+        return None
+    return resolve_local_xmla_connection(model_path)
+
+
+def _resolve_service_xmla_connection(
+    opts: XmlaConnectionOptions,
+) -> ResolvedXmlaConnection:
+    """Build a service-XMLA connection from *opts*; raises on any failure.
+
+    Extracted from ``resolve_xmla_connection`` so the caller can wrap the
+    whole service path in a single try/except and fall back to local
+    detection when something goes wrong.
+
+    The dataset can be identified by either:
+      * ``opts.dataset_id`` — GUID.  Both workspace and dataset display
+        names are resolved via REST (the legacy ``Invoke-DQVTesting`` flow).
+      * ``opts.dataset_name`` — display name.  Only the workspace display
+        name is resolved via REST; the dataset name is used directly and
+        merely verified to exist in the workspace.  This lets callers stop
+        storing dataset GUIDs as secrets.
+    """
+    endpoints = get_api_endpoints(opts.environment)
+
+    # If a bearer has already been acquired by the auth subsystem (interactive
+    # / cert / federated / managed identity flows), use it directly.  Only
+    # call MSAL when we genuinely have an SPN-secret triple.
+    if opts.access_token:
+        token = opts.access_token
+    else:
         token = _acquire_service_principal_token(
             opts.tenant_id,
             opts.client_id,
@@ -876,36 +1440,40 @@ def resolve_xmla_connection(
             login_url=endpoints.login_url,
             resource_url=endpoints.resource_url,
         )
+
+    if opts.dataset_id:
         workspace_name, dataset_name = _resolve_pbi_workspace_and_dataset_names(
             workspace_id=opts.workspace_id,
             dataset_id=opts.dataset_id,
             access_token=token,
             api_prefix=endpoints.api_prefix,
         )
-        # Derive the XMLA scheme prefix from the REST API prefix.
-        # e.g. https://api.powerbi.com → powerbi://api.powerbi.com
-        xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
-        server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
-        return ResolvedXmlaConnection(
-            server=server,
-            catalog=dataset_name,
-            tenant_id=opts.tenant_id,
-            client_id=opts.client_id,
-            client_secret=opts.client_secret,
+    else:
+        workspace_name = _resolve_pbi_workspace_name(
+            workspace_id=opts.workspace_id,
             access_token=token,
+            api_prefix=endpoints.api_prefix,
+        )
+        dataset_name = opts.dataset_name
+        _verify_dataset_exists_in_workspace(
+            workspace_id=opts.workspace_id,
+            dataset_name=dataset_name,
+            access_token=token,
+            api_prefix=endpoints.api_prefix,
         )
 
-    # Option 2 — local/<model_name> identifier
-    # When model_path uses the local/<model_name> format, use name-based
-    # matching so we never fall back to an arbitrary running PBI instance.
-    ident = parse_model_identifier(model_path)
-    if ident.kind == "local":
-        return resolve_local_xmla_connection_by_name(ident.model_name)
-
-    # Option 3 — local Power BI Desktop (filesystem path)
-    # Use process-based detection first (mirrors Get-PowerBIFilesOpened), which
-    # also resolves the correct catalog GUID via $SYSTEM.DBSCHEMA_CATALOGS.
-    return resolve_local_xmla_connection(model_path)
+    # Derive the XMLA scheme prefix from the REST API prefix.
+    # e.g. https://api.powerbi.com → powerbi://api.powerbi.com
+    xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
+    server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
+    return ResolvedXmlaConnection(
+        server=server,
+        catalog=dataset_name,
+        tenant_id=opts.tenant_id,
+        client_id=opts.client_id,
+        client_secret=opts.client_secret,
+        access_token=token,
+    )
 
 
 def resolve_service_xmla_connection_by_name(
@@ -920,23 +1488,36 @@ def resolve_service_xmla_connection_by_name(
     This mirrors the Fabric CLI ``fab run <workspace>.<semantic_model>`` flow
     where display names are supplied by the caller instead of GUIDs.
 
-    *tenant_id*, *client_id*, and *client_secret* must still be provided
-    inside *opts* for service-principal authentication.
+    Authentication is resolved from (in priority order): explicit *opts*
+    fields, ``PQL_*`` environment variables, or a stored credential from
+    ``pql-test auth login`` (any method — interactive, SPN-secret,
+    SPN-cert, federated, or managed identity).  When the stored method is
+    non-secret-based, the bearer token is acquired via ``azure-identity``
+    and surfaced on ``opts.access_token``; this function passes it through
+    to ADOMD via the existing MSOLAP ``Password=<bearer>;`` segment.
     """
-    # Try to resolve credentials from stored config if not provided
+    # Resolve credentials from CLI flags / env vars / stored config.
     opts = _resolve_authentication_with_stored_credentials(opts)
 
-    if not opts.tenant_id or not opts.client_id or not opts.client_secret:
+    endpoints = get_api_endpoints(opts.environment)
+
+    if opts.access_token:
+        # Pre-acquired bearer from a non-secret auth flow (interactive /
+        # cert / federated / managed identity).
+        token = opts.access_token
+    elif opts.tenant_id and opts.client_id and opts.client_secret:
+        # Legacy SPN-secret path — acquire via MSAL client-credentials.
+        token = _acquire_service_principal_token(
+            opts.tenant_id,
+            opts.client_id,
+            opts.client_secret,
+            login_url=endpoints.login_url,
+            resource_url=endpoints.resource_url,
+        )
+    else:
+        # No usable credentials.
         return None
 
-    endpoints = get_api_endpoints(opts.environment)
-    token = _acquire_service_principal_token(
-        opts.tenant_id,
-        opts.client_id,
-        opts.client_secret,
-        login_url=endpoints.login_url,
-        resource_url=endpoints.resource_url,
-    )
     xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")
     server = f"{xmla_prefix}/v1.0/myorg/{workspace_name}"
     return ResolvedXmlaConnection(
@@ -973,28 +1554,38 @@ def resolve_local_xmla_connection_by_name(
             return ResolvedXmlaConnection(server=port_str, catalog="")
         return None
 
+    needle = model_name.lower()
     for inst in instances:
-        if inst.model_name.lower() == model_name.lower():
+        # Use a substring (``in``) match against the detected name so this
+        # works for both window-title formats: newer builds show just the
+        # model name (``OLS_Model``) while older builds appended a suffix
+        # (``OLS_Model - Power BI Desktop``).  We keep suffix-stripping in
+        # the title parser so the displayed name stays clean, but a fall-
+        # back substring check here means callers also resolve correctly
+        # if the suffix-strip ever misses an unusual variant.
+        if needle and needle in inst.model_name.lower():
             return ResolvedXmlaConnection(
                 server=inst.server,
                 catalog=inst.catalog,
             )
 
-    # No exact name match — if there is exactly one unnamed instance, use it
-    unnamed = [i for i in instances if not i.model_name]
-    named = [i for i in instances if i.model_name]
-    if unnamed and not named and len(instances) == 1:
-        return ResolvedXmlaConnection(
-            server=instances[0].server,
-            catalog=instances[0].catalog,
-        )
-
+    # No name match.  The user typed a specific model name via
+    # ``local/<name>`` — we MUST honor it strictly.  The previous
+    # unnamed-instance fallback (when window-title detection failed) caused
+    # silent connections to the wrong model — e.g. ``local/SampleModel``
+    # silently connecting to an open RLS_Model and running its tests under
+    # SampleModel's name.  See tasks/surface-silent-test-discovery-failures-epic.md.
+    #
+    # If window-title detection is unreliable on your machine (Microsoft Store
+    # packaging, UAC mismatch), open Power BI Desktop from an elevated
+    # terminal or use the filesystem-path form instead.
     return None
 
 
 # ---------------------------------------------------------------------------
 # Power BI REST API helpers
 # ---------------------------------------------------------------------------
+
 
 def _resolve_pbi_workspace_and_dataset_names(
     workspace_id: str,
@@ -1033,9 +1624,52 @@ def _resolve_pbi_workspace_and_dataset_names(
     return workspace_name, dataset_name
 
 
+def _resolve_pbi_workspace_name(
+    workspace_id: str,
+    access_token: str,
+    *,
+    api_prefix: str = "https://api.powerbi.com",
+) -> str:
+    """Look up a Power BI workspace's display name from its GUID."""
+    req = urllib.request.Request(
+        f"{api_prefix}/v1.0/myorg/groups/{workspace_id}",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read().decode())["name"]
+
+
+def _verify_dataset_exists_in_workspace(
+    workspace_id: str,
+    dataset_name: str,
+    access_token: str,
+    *,
+    api_prefix: str = "https://api.powerbi.com",
+) -> None:
+    """
+    Raise a clear ``ValueError`` if *dataset_name* is not present in the
+    workspace's dataset list.  Lets the caller skip storing a GUID secret
+    and rely on the deployed dataset's display name (case-insensitive)
+    matching the local ``.SemanticModel`` directory stem.
+    """
+    req = urllib.request.Request(
+        f"{api_prefix}/v1.0/myorg/groups/{workspace_id}/datasets",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        datasets = json.loads(resp.read().decode()).get("value", [])
+    available = [d.get("name") for d in datasets]
+    if not any((n or "").lower() == dataset_name.lower() for n in available):
+        raise ValueError(
+            f"Dataset {dataset_name!r} not found in workspace {workspace_id}. "
+            f"Available datasets: {', '.join(repr(n) for n in available) or '<none>'}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # MSAL token acquisition (service principal / client-credentials flow)
 # ---------------------------------------------------------------------------
+
 
 def _acquire_service_principal_token(
     tenant_id: str,
@@ -1063,9 +1697,7 @@ def _acquire_service_principal_token(
         client_credential=client_secret,
         authority=f"{login_url}/{tenant_id}",
     )
-    result = app.acquire_token_for_client(
-        scopes=[f"{resource_url}/.default"]
-    )
+    result = app.acquire_token_for_client(scopes=[f"{resource_url}/.default"])
     if "access_token" in result:
         return result["access_token"]
     raise RuntimeError(
@@ -1078,31 +1710,48 @@ def _acquire_service_principal_token(
 # XMLA query execution via pyadomd (ADOMD.NET)
 # ---------------------------------------------------------------------------
 
+
 def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
     """
     Build an ADOMD.NET connection string for the given resolved connection.
 
-    Auth priority:
+    The auth segment and the impersonation segment compose: e.g. a
+    service-principal bearer token MUST coexist with ``Roles=`` /
+    ``EffectiveUserName=`` so OLS/RLS rules are evaluated against the
+    impersonated identity in CI.  Earlier the function returned at the
+    first auth branch and silently dropped impersonation, which caused
+    ``PQL.Assert.OLS.*`` tests to report ``Actual: VISIBLE (OLS not working)``
+    against deployed datasets even when the test functions carried
+    ``PQLAssert_RoleName`` / ``PQLAssert_ImpersonatedUserName`` annotations.
+
+    Auth priority (highest to lowest):
       1. Bearer token (access_token) — preferred, acquired via MSAL.
       2. Service principal direct credentials (app:{clientId}@{tenantId}).
       3. Local / integrated auth — no extra parameters.
+
+    Impersonation priority when both are set:
+      1. Roles= (named role).  AS applies that role's rules directly.
+      2. EffectiveUserName= (AAD UPN).  AS applies whatever roles the
+         user is a member of.
     """
     catalog_part = f";Initial Catalog={conn.catalog}" if conn.catalog else ""
-    base = f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"
+    parts: list[str] = [f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"]
+
     if conn.access_token:
-        return base + f"Password={conn.access_token};"
-    if conn.client_id and conn.client_secret and conn.tenant_id:
-        return (
-            base
-            + f"User ID=app:{conn.client_id}@{conn.tenant_id};"
-            + f"Password={conn.client_secret};"
-            + "Integrated Security=ClaimsToken;"
+        parts.append(f"Password={conn.access_token};")
+    elif conn.client_id and conn.client_secret and conn.tenant_id:
+        parts.append(
+            f"User ID=app:{conn.client_id}@{conn.tenant_id};"
+            f"Password={conn.client_secret};"
+            "Integrated Security=ClaimsToken;"
         )
+
     if conn.roles:
-        return base + f"Roles={conn.roles};"
-    if conn.effective_user_name:
-        return base + f"EffectiveUserName={conn.effective_user_name};"
-    return base
+        parts.append(f"Roles={conn.roles};")
+    elif conn.effective_user_name:
+        parts.append(f"EffectiveUserName={conn.effective_user_name};")
+
+    return "".join(parts)
 
 
 def _get_col(row: dict[str, object], key: str) -> str:
@@ -1166,9 +1815,7 @@ def _execute_dax_query(
             columns = [reader.GetName(i) for i in range(field_count)]
             rows: list[dict[str, object]] = []
             while reader.Read():
-                rows.append(
-                    {col: reader[i] for i, col in enumerate(columns)}
-                )
+                rows.append({col: reader[i] for i, col in enumerate(columns)})
             return rows
         finally:
             reader.Close()
@@ -1180,8 +1827,27 @@ def _execute_dax_query(
 # Public API — discovery
 # ---------------------------------------------------------------------------
 
+
+def _test_matches_environment(test_name: str, environment: str) -> bool:
+    """Return True when *test_name* targets *environment* by naming convention.
+
+    Test suites encode their target environment as the second-to-last
+    dot-separated segment: ``<Suite>.<ENV>.Tests`` (or ``.Test``), e.g.
+    ``Calculations.DEV.Tests``, ``BestPractices.ANY.Tests``,
+    ``ColumnTests.BKUP.Test``.  Matching is case-insensitive and exact —
+    ``--env DEV`` selects only ``*.DEV.Tests`` suites; ``ANY`` is an ordinary
+    environment token, not a wildcard.  Names without an environment segment
+    (e.g. ``Calcs.Tests``) never match an environment filter.
+    """
+    parts = test_name.split(".")
+    if len(parts) < 3 or parts[-1].lower() not in ("test", "tests"):
+        return False
+    return parts[-2].lower() == environment.lower()
+
+
 def _retrieve_tests_via_dax(
     connection: "ResolvedXmlaConnection",
+    environment: Optional[str] = None,
 ) -> Optional[list["PqlTest"]]:
     """
     Discover test functions from a live model using XMLA.
@@ -1190,24 +1856,64 @@ def _retrieve_tests_via_dax(
     PQLAssert_ImpersonatedUserName).  Falls back to ``PQL.Assert.RetrieveTests()``
     (returns Name only) when V2 is absent from the model.
 
+    When *environment* is supplied, ``PQL.Assert.RetrieveTestsV2("<env>")``
+    is tried first so the model's own UDF does the environment filtering
+    server-side.  If that call fails (e.g. the installed V2 takes no
+    arguments) discovery falls back to the parameterless queries and the
+    environment filter is applied client-side against the
+    ``<Suite>.<ENV>.Tests`` naming convention instead.
+
     Returns a (possibly empty) list of PqlTest objects when either query
     succeeds, or ``None`` when both queries fail (e.g. PQL.Assert is not
-    installed in this model), signalling the caller to fall back to the
-    file-based scan.
+    installed in this model, OR an auth/permission/connectivity error
+    occurred), signalling the caller to fall back to the file-based scan.
+
+    When both queries fail, emits a one-line stderr warning with the verbatim
+    exception so the user can distinguish "PQL.Assert isn't installed in
+    this model" (legitimate fallback) from "I don't have access" /
+    "authentication failed" (real problem).  See
+    tasks/surface-silent-test-discovery-failures-epic.md.
     """
     rows: list[dict] | None = None
     has_v2_columns = False
+    server_filtered = False
 
-    try:
-        rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTestsV2()")
-        has_v2_columns = True
-    except Exception:  # noqa: BLE001
-        pass
+    if environment:
+        env_literal = environment.replace('"', '""')
+        try:
+            rows = _execute_dax_query(
+                connection,
+                f'EVALUATE PQL.Assert.RetrieveTestsV2("{env_literal}")',
+            )
+            has_v2_columns = True
+            server_filtered = True
+        except Exception:  # noqa: BLE001
+            pass
+
+    if rows is None:
+        try:
+            rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTestsV2()")
+            has_v2_columns = True
+        except Exception:  # noqa: BLE001
+            pass
 
     if rows is None:
         try:
             rows = _execute_dax_query(connection, "EVALUATE PQL.Assert.RetrieveTests()")
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            # Both discovery queries failed — surface the verbatim error so
+            # the user knows whether it's "PQL.Assert not installed" or a
+            # real auth/permissions/connectivity problem.
+            target = (
+                f"{connection.server} / {connection.catalog}"
+                if connection
+                else "<unknown>"
+            )
+            print(
+                f"Warning: live test discovery failed against {target}: "
+                f"{type(exc).__name__}: {str(exc)[:300]}",
+                file=sys.stderr,
+            )
             return None  # neither function available — fall back to file scan
 
     tests: list[PqlTest] = []
@@ -1217,11 +1923,13 @@ def _retrieve_tests_via_dax(
             continue
         description = (_get_col(row, "Description") or None) if has_v2_columns else None
         impersonated_user = (
-            _get_col(row, "PQLAssert_ImpersonatedUserName") or None
-        ) if has_v2_columns else None
+            (_get_col(row, "PQLAssert_ImpersonatedUserName") or None)
+            if has_v2_columns
+            else None
+        )
         role_name = (
-            _get_col(row, "PQLAssert_RoleName") or None
-        ) if has_v2_columns else None
+            (_get_col(row, "PQLAssert_RoleName") or None) if has_v2_columns else None
+        )
         tests.append(
             PqlTest(
                 name=name,
@@ -1232,12 +1940,15 @@ def _retrieve_tests_via_dax(
                 role_name=role_name,
             )
         )
+    if environment and not server_filtered:
+        tests = [t for t in tests if _test_matches_environment(t.name, environment)]
     return tests
 
 
 def retrieve_tests(
     model_path: str,
     connection: Optional["ResolvedXmlaConnection"] = None,
+    environment: Optional[str] = None,
 ) -> list[PqlTest]:
     """
     Retrieve all DAX test suites for a PBIP model.
@@ -1259,36 +1970,97 @@ def retrieve_tests(
         Root directory of the PBIP model (contains the .pbip file).
     connection:
         Optional live XMLA connection.  Pass to enable live discovery.
+    environment:
+        Optional environment name (e.g. ``DEV``, ``PROD``, ``ANY``, ``BKUP``).
+        When supplied, only suites targeting that environment are returned:
+        live discovery passes it to ``PQL.Assert.RetrieveTestsV2("<env>")``,
+        and file-scan / fallback paths match the ``<Suite>.<ENV>.Tests``
+        naming convention (case-insensitive, exact).
 
     Returns
     -------
     List of PqlTest descriptors; empty list when none are found.
     """
     if connection is not None:
-        live = _retrieve_tests_via_dax(connection)
+        live = _retrieve_tests_via_dax(connection, environment=environment)
         if live is not None:  # None means both queries failed
+            # When model_path declares ownership-tracking artifacts (a
+            # DAXQueries/ folder or a functions.tmdl), the local repo is the
+            # source of truth — even an empty ownership set is meaningful (the
+            # model declares no tests), so live discovery is filtered strictly.
+            # Otherwise an auto-detected local Power BI Desktop instance
+            # unrelated to this model would silently leak its tests into the
+            # result.  For local/<name>, Fabric workspace.model paths, and bare
+            # PBIP skeletons with no declaration location, we pass live
+            # discovery through unfiltered.
+            if _has_local_ownership_sources(model_path):
+                local_names = _discover_local_test_names(model_path)
+                # Scope the ownership comparison to the requested environment
+                # so suites for other environments don't trigger spurious
+                # "missing on server" warnings or leak past the filter.
+                if environment:
+                    local_names = {
+                        n for n in local_names
+                        if _test_matches_environment(n, environment)
+                    }
+                live_names = {t.name for t in live}
+                if local_names:
+                    extras_on_server = sorted(live_names - local_names)
+                    missing_on_server = sorted(local_names - live_names)
+                    if extras_on_server:
+                        print(
+                            "Warning: deployed dataset contains "
+                            f"{len(extras_on_server)} test function(s) not declared "
+                            f"locally — skipping: {', '.join(extras_on_server)}",
+                            file=sys.stderr,
+                        )
+                    if missing_on_server:
+                        print(
+                            "Warning: "
+                            f"{len(missing_on_server)} local test function(s) "
+                            "are not registered in the deployed dataset — "
+                            f"deployment may be out of date: "
+                            f"{', '.join(missing_on_server)}",
+                            file=sys.stderr,
+                        )
+                elif live_names:
+                    print(
+                        f"Warning: model at {model_path} declares no tests "
+                        f"locally; ignoring {len(live_names)} test function(s) "
+                        "found on the auto-detected XMLA connection (likely "
+                        "an unrelated Power BI Desktop instance).",
+                        file=sys.stderr,
+                    )
+                return [t for t in live if t.name in local_names]
             return live
 
     # Offline fallback: scan DAXQueries/ folder for *.Tests.dax files
     semantic_model_dir = _find_semantic_model_dir(model_path)
     if not semantic_model_dir:
         return []
-    return [_parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)]
+    tests = [
+        _parse_dax_test_file(f) for f in _collect_dax_test_files(semantic_model_dir)
+    ]
+    if environment:
+        tests = [t for t in tests if _test_matches_environment(t.name, environment)]
+    return tests
 
 
 def retrieve_test_by_name(
     model_path: str,
     test_name: str,
     connection: Optional["ResolvedXmlaConnection"] = None,
+    environment: Optional[str] = None,
 ) -> Optional[PqlTest]:
     """
     Retrieve a single DAX test suite by name (case-insensitive).
 
     The name is matched against the function name (e.g. "Calcs.DEV.Tests").
     When *connection* is supplied live discovery is used; otherwise the
-    DAXQueries/ folder is scanned.
+    DAXQueries/ folder is scanned.  When *environment* is supplied the name
+    must also belong to that environment's suite set.
     """
-    for t in retrieve_tests(model_path, connection=connection):
+    for t in retrieve_tests(model_path, connection=connection, environment=environment):
         if t.name.lower() == test_name.lower():
             return t
     return None
@@ -1331,15 +2103,25 @@ def run_test(
             )
         ]
 
-    # When the test declares RLS metadata (from RetrieveTestsV2), create a
-    # per-test connection that applies the correct impersonation:
-    #   • Local connections (localhost:…): use Roles=<role_name> — local AS
-    #     does not accept AAD UPNs for EffectiveUserName.
-    #   • Service connections (XMLA endpoint): use EffectiveUserName=<UPN>.
+    # When the test declares RLS/OLS metadata (from RetrieveTestsV2), create
+    # a per-test connection that applies the correct impersonation.
+    #
+    # Roles= is preferred over EffectiveUserName= whenever a role_name is
+    # available, regardless of whether the connection is local or service:
+    #   • Local AS doesn't accept AAD UPNs for EffectiveUserName.
+    #   • Service principals can NEVER use EffectiveUserName= against the
+    #     Power BI XMLA endpoint (Microsoft enforces this even for workspace
+    #     admins — the resulting error message misleadingly says "not a
+    #     workspace administrator").  Roles= works because the SPN can be
+    #     granted role membership in the dataset.
+    # EffectiveUserName= is still used as a fallback for service connections
+    # that only carry an impersonated_user_name annotation — that path
+    # requires the calling identity to be a real user that's a workspace
+    # admin (i.e. not a service principal).
     effective_connection = connection
     if connection:
         _is_local = connection.server.lower().startswith("localhost:")
-        if _is_local and test.role_name:
+        if test.role_name:
             effective_connection = _dc_replace(connection, roles=test.role_name)
         elif not _is_local and test.impersonated_user_name:
             effective_connection = _dc_replace(
@@ -1420,6 +2202,7 @@ def run_tests_from_model(
     conn_opts: Optional[XmlaConnectionOptions] = None,
     connection: Optional[ResolvedXmlaConnection] = None,
     skip_message: str = _DEFAULT_SKIP_MESSAGE,
+    environment: Optional[str] = None,
 ) -> TestSuite:
     """
     High-level helper: discover tests, optionally filter, execute, and summarise.
@@ -1432,6 +2215,10 @@ def run_tests_from_model(
         Optional. When supplied only that test suite is executed.
     conn_opts:
         XMLA connection options. Defaults to local auto-detection only.
+    environment:
+        Optional environment name (e.g. ``DEV``, ``PROD``, ``ANY``, ``BKUP``).
+        When supplied, only suites targeting that environment are discovered
+        and executed (see :func:`retrieve_tests`).
 
     Returns
     -------
@@ -1440,16 +2227,18 @@ def run_tests_from_model(
     if conn_opts is None:
         conn_opts = XmlaConnectionOptions()
 
-    # Use a pre-resolved connection when supplied (e.g. from --local detection),
-    # otherwise resolve from conn_opts as normal.
+    # Use a pre-resolved connection when supplied (e.g. from local/<name>
+    # detection), otherwise resolve from conn_opts as normal.
     if connection is None:
         connection = resolve_xmla_connection(model_path, conn_opts)
 
     if test_name:
-        found = retrieve_test_by_name(model_path, test_name, connection=connection)
+        found = retrieve_test_by_name(
+            model_path, test_name, connection=connection, environment=environment
+        )
         tests: list[PqlTest] = [found] if found else []
     else:
-        tests = retrieve_tests(model_path, connection=connection)
+        tests = retrieve_tests(model_path, connection=connection, environment=environment)
     results = run_tests(tests, connection, skip_message=skip_message)
     passed = sum(1 for r in results if r.passed)
     skipped = sum(1 for r in results if r.skipped)

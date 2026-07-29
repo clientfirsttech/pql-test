@@ -3,8 +3,7 @@
   "tabOrder": [
     "RLS 1",
     "Script 1",
-    "Script 2",
-    "Script 3"
+    "Script 2"
   ],
-  "defaultTab": "Script 3"
+  "defaultTab": "Script 2"
 }

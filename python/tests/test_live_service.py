@@ -140,7 +140,7 @@ class TestLiveService:
         *.Tests.dax files on disk — no files silently skipped.
         """
         _require_credentials()
-        from pql_test_runner import _collect_dax_test_files
+        from pql_test.runner import _collect_dax_test_files
 
         dax_files = _collect_dax_test_files(sample_model_path)
         suite = run_tests_from_model(sample_model_path, conn_opts=_live_opts())

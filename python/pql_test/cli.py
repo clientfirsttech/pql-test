@@ -10,50 +10,69 @@ Invoke-DQVTesting pattern.  Service principal authentication is supported via
 MSAL, enabling row-level security calls from build agents.
 
 Model path formats:
+  - <workspace>.Workspace/<model>.SemanticModel
+                                Canonical Fabric service path — connect to
+                                a remote workspace by display names.
   - <filesystem_path>           Traditional PBIP root directory.
   - local/<model_name>          Connect to a locally-open Power BI
                                 Desktop instance by model name.
-  - <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                a remote workspace by display names.
 
 Connection resolution:
   - When --tenant-id, --workspace-id, and --dataset-id are all provided (or
     set via PQL_* environment variables) the CLI connects to the remote
     Power BI Premium / Fabric XMLA endpoint using a service-principal
     bearer token acquired from Azure AD via MSAL.
-  - When using workspace.model Fabric CLI dot notation, the CLI connects
-    directly using workspace and model display names without GUIDs.
+  - When using the Fabric-style service path, the CLI connects directly
+    using workspace and model display names without GUIDs.
   - Otherwise the CLI auto-detects a locally-open Power BI Desktop instance
     using the local Analysis Services port file.
 
 Usage:
   pql-test check-prereqs
-  pql-test retrieve-tests <modelPath> [--test <name>] [--verbose]
+  pql-test retrieve-tests <modelPath> [--test <name>] [--env <environment>]
+                           [--verbose]
   pql-test retrieve-test  <modelPath> <name> [--verbose]
   pql-test run-tests      <modelPath> [--test <name>] [--verbose]
+                           [--env <environment>]
                            [--output <file>]
                            [--log-format {azuredevops,github}]
                            [--tenant-id <id>] [--workspace-id <id>]
                            [--dataset-id <id>] [--client-id <id>]
                            [--client-secret <secret>]
 
+Environment-specific test discovery (--env):
+  Test suites follow the <Suite>.<ENV>.Tests naming convention, e.g.
+  Calculations.DEV.Tests, BestPractices.ANY.Tests, ColumnTests.BKUP.Tests.
+  --env DEV runs only the *.DEV.Tests suites: live discovery calls
+  PQL.Assert.RetrieveTestsV2("DEV"); file scans match the naming convention.
+
+Power BI cloud environment (Public, USGov, China, …):
+  Not a per-command flag.  It comes from the credential stored by
+  `pql-test auth login --environment <cloud>`, or from the PQL_ENVIRONMENT
+  env var when explicit service-principal credentials are supplied
+  (e.g. CI pipelines).  Default: Public.
+
 Environment variables (loaded from .env when python-dotenv is installed):
   PQL_TENANT_ID, PQL_WORKSPACE_ID, PQL_DATASET_ID,
-  PQL_CLIENT_ID, PQL_CLIENT_SECRET, PQL_ENVIRONMENT
+  PQL_CLIENT_ID, PQL_CLIENT_SECRET, PQL_ENVIRONMENT, PQL_TEST_ENV
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
-# Load .env automatically when python-dotenv is available
-try:
-    from dotenv import load_dotenv  # type: ignore[import-untyped]
-    load_dotenv()
-except ImportError:
-    pass  # env vars may be set externally (e.g. CI pipeline secrets)
+# Load .env automatically when python-dotenv is available — unless the test
+# suite has asked for hermetic mode (no developer-machine state leaking into
+# subprocess-launched CLI runs).  See run_cli() in tests/test_pql_test_cli.py.
+if not os.environ.get("PQL_TEST_HERMETIC"):
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-untyped]
+        load_dotenv()
+    except ImportError:
+        pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
 import click
 
@@ -68,7 +87,6 @@ from pql_test.runner import (
     XmlaConnectionOptions,
     get_pbi_files_opened,
     parse_model_identifier,
-    resolve_local_xmla_connection,
     resolve_local_xmla_connection_by_name,
     resolve_service_xmla_connection_by_name,
     resolve_xmla_connection,
@@ -129,7 +147,7 @@ def _check_prereqs() -> list[dict]:
             "detail": (
                 "psutil available"
                 if HAS_PSUTIL
-                else "Not installed — pip install psutil  (optional, required for --local)"
+                else "Not installed — pip install psutil  (optional, required for local/<name> discovery)"
             ),
         }
     )
@@ -205,7 +223,12 @@ def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
     click.echo("")
 
 
-def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | None = None) -> None:
+def _print_results(
+    suite: TestSuite,
+    verbose: bool,
+    pre_warnings: list[str] | None = None,
+    environment: str | None = None,
+) -> None:
     """Print test results in a pytest-style format."""
     width = 72
 
@@ -226,58 +249,180 @@ def _print_results(suite: TestSuite, verbose: bool, pre_warnings: list[str] | No
     failures = [r for r in suite.results if not r.passed and not r.skipped]
     skipped_results = [r for r in suite.results if r.skipped]
 
+    # Roll the per-assertion list up by SUITE and render as a table.  A
+    # 60-test run shows ~6 rows (one per suite) with Pass/Fail/Skip counts
+    # broken out into their own columns so the eye snaps straight to any
+    # non-zero Fail/Skip cell.  `--verbose` additionally expands every
+    # suite to show its individual assertions in a Details section below.
+    by_suite: dict[str, list] = {}
+    for r in suite.results:
+        sn = r.suite_name or r.test_name
+        by_suite.setdefault(sn, []).append(r)
+
+    if by_suite:
+        # ---- column geometry ----
+        STATUS_W = 4   # "PASS"/"FAIL"/"SKIP" / header "Stat"
+        COUNT_W = 4    # headers "Pass"/"Fail"/"Skip", up to 4-digit counts
+        SUITE_MAX = 50
+        # Suite column expands to fit the longest name but is capped so
+        # one pathological name can't blow past the terminal.  Longer
+        # names get an ellipsis truncation.
+        suite_width = max(
+            len("Suite"),
+            min(SUITE_MAX, max(len(sn) for sn in by_suite)),
+        )
+
+        def _trunc(s: str, n: int) -> str:
+            return s if len(s) <= n else s[: n - 1] + "…"
+
+        def _pad(text: str, width: int, align: str = "left") -> str:
+            return text.rjust(width) if align == "right" else text.ljust(width)
+
+        def _row(c1: str, c2: str, c3: str, c4: str, c5: str) -> str:
+            # Each cell gets 1 space of inner padding on each side.
+            return f"│ {c1} │ {c2} │ {c3} │ {c4} │ {c5} │"
+
+        def _hline(left: str, mid: str, right: str) -> str:
+            parts = [
+                "─" * (STATUS_W + 2),
+                "─" * (suite_width + 2),
+                "─" * (COUNT_W + 2),
+                "─" * (COUNT_W + 2),
+                "─" * (COUNT_W + 2),
+            ]
+            return left + mid.join(parts) + right
+
+        # ---- top border + header row ----
+        click.echo(_hline("┌", "┬", "┐"))
+        click.echo(
+            _row(
+                _pad("Stat", STATUS_W),
+                _pad("Suite", suite_width),
+                _pad("Pass", COUNT_W),
+                _pad("Fail", COUNT_W),
+                _pad("Skip", COUNT_W),
+            )
+        )
+        click.echo(_hline("├", "┼", "┤"))
+
+        # ---- data rows ----
+        tag_color = {"PASS": "green", "FAIL": "red", "SKIP": "yellow"}
+        for sn, results in by_suite.items():
+            n_pass = sum(1 for r in results if r.passed and not r.skipped)
+            n_fail = sum(1 for r in results if not r.passed and not r.skipped)
+            n_skip = sum(1 for r in results if r.skipped)
+            if n_fail:
+                tag = "FAIL"
+            elif n_skip and not n_pass:
+                tag = "SKIP"
+            else:
+                tag = "PASS"
+            # Pad cells using the raw text length first; THEN colorize so
+            # ANSI escape codes stay outside the visible-width math and
+            # don't break alignment with the borders.
+            stat_cell = click.style(_pad(tag, STATUS_W), fg=tag_color[tag])
+            suite_cell = _pad(_trunc(sn, suite_width), suite_width)
+            pass_str = str(n_pass) if n_pass else "-"
+            fail_str = str(n_fail) if n_fail else "-"
+            skip_str = str(n_skip) if n_skip else "-"
+            pass_cell = _pad(pass_str, COUNT_W, align="right")
+            # Tint Fail red and Skip yellow when non-zero so the eye snaps
+            # to the actionable cells.
+            fail_cell = _pad(fail_str, COUNT_W, align="right")
+            if n_fail:
+                fail_cell = click.style(fail_cell, fg="red")
+            skip_cell = _pad(skip_str, COUNT_W, align="right")
+            if n_skip:
+                skip_cell = click.style(skip_cell, fg="yellow")
+            click.echo(_row(stat_cell, suite_cell, pass_cell, fail_cell, skip_cell))
+
+        click.echo(_hline("└", "┴", "┘"))
+        click.echo("")
+
+        # ---- verbose: per-suite expansion of every assertion ----
+        if verbose:
+            click.echo(_sep("Details", "-"))
+            for sn, results in by_suite.items():
+                click.echo(f"\n  {click.style(sn, bold=True)}")
+                for r in results:
+                    if r.skipped:
+                        rtag = click.style("SKIP", fg="yellow")
+                    elif r.passed:
+                        rtag = click.style("PASS", fg="green")
+                    else:
+                        rtag = click.style("FAIL", fg="red")
+                    rline = f"    {rtag} {r.test_name}"
+                    if r.message:
+                        rline += f" -- {r.message}"
+                    if r.duration_ms is not None:
+                        rline += f" ({r.duration_ms:.0f}ms)"
+                    click.echo(rline)
+            click.echo("")
+
+    # Detail sections (FAILURES + warnings summary) are --verbose only.
+    # The default view is the table + the totals line at the bottom — for
+    # everything else, the user opts in with --verbose.
     if verbose:
-        for r in suite.results:
-            if r.skipped:
-                tag = click.style("SKIP", fg="yellow")
-            elif r.passed:
-                tag = click.style("PASS", fg="green")
-            else:
-                tag = click.style("FAIL", fg="red")
-            line = f"  {tag} {r.test_name}"
-            if r.message:
-                line += f" -- {r.message}"
-            if r.duration_ms is not None:
-                line += f" ({r.duration_ms:.0f}ms)"
-            click.echo(line)
-        if suite.results:
-            click.echo("")
-    else:
-        dots_parts = []
-        for r in suite.results:
-            if r.skipped:
-                dots_parts.append(click.style("s", fg="yellow"))
-            elif r.passed:
-                dots_parts.append(click.style(".", fg="green"))
-            else:
-                dots_parts.append(click.style("F", fg="red"))
-        if dots_parts:
-            click.echo("".join(dots_parts))
+        if failures:
+            click.echo(_sep("FAILURES", "-", fg="red"))
+            # Group failures by suite so related failures cluster together —
+            # much easier to scan than a flat list when several suites fail.
+            failures_by_suite: dict[str, list] = {}
+            for r in failures:
+                sn = r.suite_name or r.test_name
+                failures_by_suite.setdefault(sn, []).append(r)
+            for sn, fs in failures_by_suite.items():
+                click.echo(
+                    f"\n  {click.style(sn, bold=True)}  "
+                    f"({click.style(f'{len(fs)} failed', fg='red')})"
+                )
+                for r in fs:
+                    mark = click.style("✗", fg="red")
+                    msg = r.message or ""
+                    if msg:
+                        click.echo(f"    {mark} {r.test_name} — {msg}")
+                    else:
+                        click.echo(f"    {mark} {r.test_name}")
+                    if r.error:
+                        click.echo(f"        Error: {r.error}")
             click.echo("")
 
-    if failures:
-        click.echo(_sep("FAILURES", "-", fg="red"))
-        for r in failures:
-            click.echo(f"\n  {click.style('FAILED', fg='red')} {r.test_name}")
-            click.echo(f"  {r.message}")
-            if r.error:
-                click.echo(f"  Error: {r.error}")
-        click.echo("")
+        # Collect all warnings: pre-run messages + skipped-test messages
+        # (deduplicated).
+        warn_msgs: list[str] = list(pre_warnings or [])
+        seen: set[str] = set(warn_msgs)
+        for r in skipped_results:
+            msg = r.message or r.test_name
+            if msg not in seen:
+                warn_msgs.append(msg)
+                seen.add(msg)
 
-    # Collect all warnings: pre-run messages + skipped-test messages (deduplicated)
-    warn_msgs: list[str] = list(pre_warnings or [])
-    seen: set[str] = set(warn_msgs)
-    for r in skipped_results:
-        msg = r.message or r.test_name
-        if msg not in seen:
-            warn_msgs.append(msg)
-            seen.add(msg)
+        if warn_msgs:
+            click.echo(_sep("warnings summary", "-", fg="yellow"))
+            for msg in warn_msgs:
+                click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
+            click.echo("")
 
-    if warn_msgs:
-        click.echo(_sep("warnings summary", "-", fg="yellow"))
-        for msg in warn_msgs:
-            click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
-        click.echo("")
+    # When discovery returned nothing, make it obvious instead of producing
+    # a confusing "0 passed, 0 failed, 0 total" line that looks like success.
+    # See tasks/surface-silent-test-discovery-failures-epic.md.
+    if suite.total == 0:
+        click.echo(_sep("No tests found.", fg="yellow"))
+        causes = (
+            "  Possible causes:\n"
+            "    • The model has no PQL.Assert tests defined.\n"
+            "    • Your account doesn't have access to the workspace/model.\n"
+            "    • PQL.Assert isn't installed in this model.\n"
+            "    • The connection failed (check the warning above)."
+        )
+        if environment:
+            causes += (
+                f"\n    • No test suite matches --env {environment} "
+                f"(expected names like <Suite>.{environment}.Tests)."
+            )
+        click.echo(causes)
+        click.echo(_sep("0 passed, 0 failed, 0 total", fg="yellow"))
+        return
 
     summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
     if suite.skipped:
@@ -391,14 +536,6 @@ _conn_options_list = [
         default=None,
         help="Service principal client secret (or set PQL_CLIENT_SECRET env var).",
     ),
-    click.option(
-        "--environment",
-        "environment",
-        envvar="PQL_ENVIRONMENT",
-        default=Environment.PUBLIC.value,
-        type=click.Choice([e.value for e in Environment], case_sensitive=False),
-        help="Power BI cloud environment (or set PQL_ENVIRONMENT env var). Default: Public.",
-    ),
 ]
 
 
@@ -409,15 +546,87 @@ def conn_options(func):
     return func
 
 
+# Test-environment selector (--env).  The Power BI *cloud* environment is
+# not a per-command flag: it comes from the stored `pql-test auth login
+# --environment` credential (or the PQL_ENVIRONMENT env var), so --env here
+# unambiguously means the test-suite environment.
+_env_option = click.option(
+    "--env",
+    "test_environment",
+    envvar="PQL_TEST_ENV",
+    default=None,
+    metavar="ENV",
+    help=(
+        "Only discover/run test suites for this environment (e.g. DEV, PROD, "
+        "ANY, BKUP; or set PQL_TEST_ENV env var). Live discovery calls "
+        'PQL.Assert.RetrieveTestsV2("<ENV>"); file scans match the '
+        "<Suite>.<ENV>.Tests naming convention (case-insensitive, exact — "
+        "ANY is a normal token, not a wildcard)."
+    ),
+)
+
+
+def _format_local_miss_diagnostic(model_name: str) -> str:
+    """Build a multi-line diagnostic when local/<model_name> doesn't resolve.
+
+    Shows every Power BI Desktop instance the CLI could detect (with
+    ``<unnamed>`` for instances whose window title couldn't be read — that
+    happens with the Microsoft Store build whose process tree is ACL-locked).
+    Also lists the common reasons a name lookup misses so the user can
+    self-diagnose without having to re-run with --verbose.
+    """
+    lines: list[str] = [
+        f"No matching Power BI Desktop instance found for model '{model_name}'.",
+        "",
+    ]
+    try:
+        instances = get_pbi_files_opened()
+    except ImportError:
+        lines.append(
+            "  (psutil not installed — local detection limited to port-file fallback.)"
+        )
+        instances = []
+    if instances:
+        lines.append("Detected Power BI Desktop instances:")
+        for inst in instances:
+            name = inst.model_name or "<unnamed>"
+            lines.append(f"  • '{name}'  →  {inst.server} / {inst.catalog}")
+    else:
+        lines.append("No Power BI Desktop instances detected on this machine.")
+    lines.extend(
+        [
+            "",
+            "Common causes:",
+            f"  • The model isn't open yet — open '{model_name}' in Power BI Desktop and retry.",
+            "  • Typo or case mismatch in the model name (matching is case-insensitive but exact otherwise).",
+            "  • Spaces or parentheses in the name without quotes — wrap the whole argument in",
+            '    double quotes, e.g. "local/OLS_Model (1)", so the shell passes it as one argument.',
+            "  • Microsoft Store build of Power BI Desktop — its process tree runs under an",
+            "    AppContainer ACL that blocks window-title detection, so the instance shows as",
+            "    <unnamed>. Use the installer build, or switch to a filesystem path argument.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def _make_conn_opts(
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str | None = None,
 ) -> XmlaConnectionOptions:
-    env = Environment(environment) if environment else Environment.PUBLIC
+    # The Power BI cloud environment is not a per-command flag.  It defaults
+    # to PQL_ENVIRONMENT (kept for CI pipelines that pass explicit
+    # service-principal env vars), and the runner's stored-credential bridge
+    # overrides it with the cloud recorded by `pql-test auth login`.
+    raw_env = os.environ.get("PQL_ENVIRONMENT", "").strip()
+    env = Environment.PUBLIC
+    if raw_env:
+        for e in Environment:
+            if e.value.lower() == raw_env.lower():
+                env = e
+                break
     return XmlaConnectionOptions(
         tenant_id=tenant_id,
         workspace_id=workspace_id,
@@ -465,58 +674,55 @@ def cmd_check_prereqs() -> None:
 )
 @click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
 @click.option("--verbose", "-v", is_flag=True, help="With --human: show file paths and connection info.")
-@click.option(
-    "--local",
-    "local_mode",
-    is_flag=True,
-    help=(
-        "Detect and connect to a locally open Power BI Desktop instance "
-        "to query PQL.Assert.RetrieveTestsV2 / RetrieveTests for live discovery."
-    ),
-)
+@_env_option
 @conn_options
 def cmd_retrieve_tests(
     model_path: str,
     test_name: str | None,
     human: bool,
     verbose: bool,
-    local_mode: bool,
+    test_environment: str | None,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """List DAX test suites in MODEL_PATH.
 
     Outputs a JSON array by default. Use --human for formatted text.
 
     By default, test suites are discovered by scanning the SemanticModel's
-    DAXQueries/ folder for *.Tests.dax files.  When --local (or XMLA options)
-    are supplied the live model is queried instead via
-    PQL.Assert.RetrieveTestsV2() (falling back to PQL.Assert.RetrieveTests()),
-    which returns ALL test functions registered in the model including those
-    defined directly in functions.tmdl.
+    DAXQueries/ folder for *.Tests.dax files.  When XMLA options or the
+    local/<model_name> identifier are supplied the live model is queried
+    instead via PQL.Assert.RetrieveTestsV2() (falling back to
+    PQL.Assert.RetrieveTests()), which returns ALL test functions registered
+    in the model including those defined directly in functions.tmdl.
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
 
     \b
     Examples:
       pql-test retrieve-tests ../examples
       pql-test retrieve-tests local/SampleModel
-      pql-test retrieve-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
-      pql-test retrieve-tests ../examples/SampleModel.SemanticModel --local
+      pql-test retrieve-tests ../examples --env DEV
+      pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
+      pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
     abs_path: str = ""
@@ -526,14 +732,14 @@ def cmd_retrieve_tests(
         conn = resolve_local_xmla_connection_by_name(ident.model_name)
         if conn is None:
             click.echo(
-                f"Warning: No matching Power BI Desktop instance found for model '{ident.model_name}'. "
-                "Make sure the model is open in Power BI Desktop.",
+                "Warning: " + _format_local_miss_diagnostic(ident.model_name),
                 err=True,
             )
         abs_path = f"local/{ident.model_name}"
 
     elif ident.kind == "service":
-        # workspace.semanticmodel — Fabric CLI dot notation
+        # Fabric service path (canonical .Workspace/.SemanticModel form
+        # or legacy <workspace>.<model> dot notation)
         conn = resolve_service_xmla_connection_by_name(
             ident.workspace_name, ident.model_name, opts,
         )
@@ -552,19 +758,25 @@ def cmd_retrieve_tests(
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
 
-        if local_mode:
-            conn = resolve_local_xmla_connection(abs_path)
-            if conn is None:
-                click.echo(
-                    "Warning: --local specified but no matching Power BI Desktop instance found. "
-                    "Falling back to file-based discovery.",
-                    err=True,
-                )
-        elif any([tenant_id, workspace_id, dataset_id]):
-            conn = resolve_xmla_connection(abs_path, opts)
+        # Derive dataset display name from the .SemanticModel directory so
+        # the service path can look it up by name when no --dataset-id is
+        # supplied (see cmd_run_tests for the rationale).
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+
+        # Always attempt connection resolution so local Power BI Desktop is
+        # auto-detected even when no flags are supplied — matches cmd_run_tests
+        # behavior and the README's "Local Power BI Desktop (auto-detected)"
+        # section.  Returns None when nothing is available, in which case the
+        # caller falls back to the offline DAXQueries/ file scan.
+        conn = resolve_xmla_connection(abs_path, opts)
 
     if test_name:
-        test = retrieve_test_by_name(abs_path, test_name, connection=conn)
+        test = retrieve_test_by_name(
+            abs_path, test_name, connection=conn, environment=test_environment
+        )
         if not test:
             if human:
                 click.echo(f'No test found with name: "{test_name}"')
@@ -573,7 +785,7 @@ def cmd_retrieve_tests(
             sys.exit(1)
         results = [test]
     else:
-        results = retrieve_tests(abs_path, connection=conn)
+        results = retrieve_tests(abs_path, connection=conn, environment=test_environment)
 
     if human:
         _print_tests(results, verbose)
@@ -609,23 +821,27 @@ def cmd_retrieve_test(
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """Show a specific DAX test suite by name.
 
     Outputs a JSON object by default. Use --human for formatted text.
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
     abs_path: str = ""
@@ -649,6 +865,17 @@ def cmd_retrieve_test(
         if not Path(abs_path).exists():
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
+
+        # Mirror cmd_retrieve_tests / cmd_run_tests: derive dataset name
+        # from the .SemanticModel directory stem so a service-principal
+        # connection can be built without --dataset-id, and attempt
+        # connection resolution so tests declared only in functions.tmdl
+        # (no *.Tests.dax file) are still discoverable via live XMLA.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        conn = resolve_xmla_connection(abs_path, opts)
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
     if not test:
@@ -701,16 +928,7 @@ def cmd_retrieve_test(
         "github: ::group::/::error::/::notice:: commands."
     ),
 )
-@click.option(
-    "--local",
-    "local_mode",
-    is_flag=True,
-    help=(
-        "Detect and connect to a locally open Power BI Desktop instance, "
-        "mirroring Invoke-DQVTesting -Local. "
-        "Model must be open in Power BI Desktop before running."
-    ),
-)
+@_env_option
 @conn_options
 def cmd_run_tests(
     model_path: str,
@@ -718,13 +936,12 @@ def cmd_run_tests(
     verbose: bool,
     output: str | None,
     log_format: str | None,
-    local_mode: bool,
+    test_environment: str | None,
     tenant_id: str | None,
     workspace_id: str | None,
     dataset_id: str | None,
     client_id: str | None,
     client_secret: str | None,
-    environment: str,
 ) -> None:
     """Run all DAX test suites in a PBIP model via XMLA.
 
@@ -732,26 +949,37 @@ def cmd_run_tests(
     Use --output to also save full JSON results to a file.
     Use --log-format to emit CI-native annotations for Azure DevOps or
     GitHub Actions pipelines.
+    Use --env to run only the test suites targeting one environment
+    (suites follow the <Suite>.<ENV>.Tests naming convention, e.g.
+    Calculations.DEV.Tests, BestPractices.ANY.Tests).
 
-    MODEL_PATH accepts three formats:
+    MODEL_PATH accepts these formats:
 
     \b
+      <workspace>.Workspace/<model>.SemanticModel
+                                  Canonical Fabric service path — connect to
+                                  a remote workspace by display names.
       local/<model_name>          Connect to a locally-open Power BI
                                   Desktop instance by model name.
-      <workspace>.<semantic_model> Fabric CLI dot notation — connect to
-                                  a remote workspace by display names.
       <filesystem_path>           Traditional PBIP root directory.
+
+    Wrap MODEL_PATH in double quotes when the workspace or model name contains
+    spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
+    splits it into multiple arguments and the CLI never sees the full name.
 
     \b
     Examples:
       pql-test run-tests ../examples
       pql-test run-tests local/SampleModel
-      pql-test run-tests "MyWorkspace.MySemanticModel" --tenant-id ... --client-id ... --client-secret ...
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
+      pql-test run-tests ../examples/SampleModel.SemanticModel --env DEV
+      pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --env PROD
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
-      pql-test run-tests ../examples/SampleModel.SemanticModel --log-format github
+      pql-test run-tests local/SampleModel --log-format github
     """
     ident = parse_model_identifier(model_path)
-    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret, environment)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     pre_warnings: list[str] = []
     conn = None
@@ -767,7 +995,8 @@ def cmd_run_tests(
                 if instances:
                     click.echo("\nDetected Power BI Desktop instances:")
                     for inst in instances:
-                        click.echo(f"  \u2022 '{inst.model_name}'  \u2192  {inst.server} / {inst.catalog}")
+                        name = inst.model_name or "<unnamed>"
+                        click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
                 else:
                     click.echo("\nNo Power BI Desktop instances detected.")
             except ImportError:
@@ -777,19 +1006,13 @@ def cmd_run_tests(
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            pre_warnings.append(
-                f"No matching Power BI Desktop instance found for model '{ident.model_name}'. "
-                "Make sure the model is open in Power BI Desktop."
-            )
-            click.echo(
-                f"\nWarning: No matching Power BI Desktop instance found for model '{ident.model_name}'.\n"
-                f"Make sure '{ident.model_name}' is open in Power BI Desktop.\n"
-                f"Tip: run with --verbose to see all detected instances.",
-                err=True,
-            )
+            diagnostic = _format_local_miss_diagnostic(ident.model_name)
+            pre_warnings.append(diagnostic)
+            click.echo("\nWarning: " + diagnostic, err=True)
 
     elif ident.kind == "service":
-        # workspace.semanticmodel — Fabric CLI dot notation
+        # Fabric service path (canonical .Workspace/.SemanticModel form
+        # or legacy <workspace>.<model> dot notation)
         conn = resolve_service_xmla_connection_by_name(
             ident.workspace_name, ident.model_name, opts,
         )
@@ -810,88 +1033,79 @@ def cmd_run_tests(
             click.echo(f"Error: Model path not found: {abs_path}", err=True)
             sys.exit(1)
 
-        if local_mode:
-            if verbose:
-                try:
-                    instances = get_pbi_files_opened()
-                    if instances:
-                        click.echo("\nDetected Power BI Desktop instances:")
-                        for inst in instances:
-                            click.echo(f"  \u2022 {inst.model_name}  \u2192  {inst.server} / {inst.catalog}")
-                    else:
-                        click.echo("\nNo Power BI Desktop instances detected.")
-                except ImportError:
-                    click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+        # Derive the dataset display name from the .SemanticModel directory
+        # stem so the resolver can look it up by name when no --dataset-id
+        # is provided.  Keeps callers from having to store dataset GUIDs as
+        # secrets when the deployed dataset's display name matches the
+        # local directory.  dataset_id (if supplied) still takes precedence
+        # inside the resolver.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
 
-            conn = resolve_local_xmla_connection(abs_path)
-            if conn:
-                click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
-            else:
-                from pql_test_runner import _find_pbip_file as _fpf
-                from pathlib import Path as _Path
-                _pbip = _fpf(abs_path)
-                _searched_name = _Path(_pbip).stem if _pbip else _Path(abs_path).name.removesuffix(".SemanticModel")
-                pre_warnings.append(
-                    "--local specified but no matching Power BI Desktop instance found. "
-                    "Make sure the model is open in Power BI Desktop."
-                )
-                click.echo(
-                    f"\nWarning: --local specified but no matching Power BI Desktop instance found.\n"
-                    f"Looking for model: '{_searched_name}'\n"
-                    f"Make sure '{_searched_name}' is open in Power BI Desktop.\n"
-                    f"Tip: run with --verbose to see all detected instances.",
-                    err=True,
-                )
+        conn = resolve_xmla_connection(abs_path, opts)
+        if conn:
+            click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            conn = resolve_xmla_connection(abs_path, opts)
-            if conn:
-                click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
-            else:
-                pre_warnings.append(
-                    "No XMLA connection detected. Tests will be reported as skipped. "
-                    "Open the model in Power BI Desktop (--local) or supply "
-                    "--tenant-id, --workspace-id, --dataset-id."
-                )
-                click.echo(
-                    "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
-                    "Options:\n"
-                    "  \u2022 Open the model in Power BI Desktop and use --local\n"
-                    "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
-                    "    (and --client-id, --client-secret for service-principal auth)\n",
-                    err=True,
-                )
-
-    skip_message = (
-        f"No matching Power BI Desktop instance found for model '{ident.model_name or ''}'. "
-        "Make sure the model is open in Power BI Desktop."
-        if ident.kind == "local" and not conn
-        else (
-            "No matching Power BI Desktop instance found. "
-            "Make sure the model is open in Power BI Desktop."
-            if local_mode and not conn
-            else (
-                "No XMLA connection available. "
-                "Open the model in Power BI Desktop or supply "
-                "--tenant-id, --workspace-id, and --dataset-id."
+            pre_warnings.append(
+                "No XMLA connection detected. Tests will be reported as skipped. "
+                "Pass local/<model_name> to target an open Power BI Desktop instance, "
+                "or supply --tenant-id, --workspace-id, --dataset-id."
             )
-        )
-    )
+            click.echo(
+                "\nWarning: No XMLA connection detected. Tests will be reported as skipped.\n"
+                "Options:\n"
+                "  \u2022 Pass local/<model_name> with the model open in Power BI Desktop\n"
+                "  \u2022 Supply --tenant-id, --workspace-id, --dataset-id\n"
+                "    (and --client-id, --client-secret for service-principal auth)\n",
+                err=True,
+            )
 
-    suite = run_tests_from_model(abs_path, test_name, opts, connection=conn, skip_message=skip_message)
+    if ident.kind == "local" and not conn:
+        skip_message = (
+            f"No matching Power BI Desktop instance found for model "
+            f"'{ident.model_name or ''}'. "
+            "Make sure the model is open in Power BI Desktop."
+        )
+    else:
+        skip_message = (
+            "No XMLA connection available. "
+            "Pass local/<model_name> with the model open in Power BI Desktop, "
+            "or supply --tenant-id, --workspace-id, and --dataset-id."
+        )
+
+    suite = run_tests_from_model(
+        abs_path,
+        test_name,
+        opts,
+        connection=conn,
+        skip_message=skip_message,
+        environment=test_environment,
+    )
 
     if log_format == "azuredevops":
         _print_results_azuredevops(suite, pre_warnings=pre_warnings)
     elif log_format == "github":
         _print_results_github(suite, pre_warnings=pre_warnings)
     else:
-        _print_results(suite, verbose, pre_warnings=pre_warnings)
+        _print_results(suite, verbose, pre_warnings=pre_warnings, environment=test_environment)
 
     if output:
         out_path = Path(output)
         out_path.write_text(json.dumps(_suite_to_dict(suite), indent=2), encoding="utf-8")
         click.echo(f"\nJSON results written to: {output}")
 
-    sys.exit(1 if suite.failed > 0 else 0)
+    # Exit non-zero on hard test failures OR when tests were discovered but
+    # none actually ran (every result was skipped because no XMLA connection
+    # could be established).  The latter catches CI misconfigurations like a
+    # matrix entry whose `.SemanticModel` directory has no matching deployed
+    # dataset — without this guard the workflow silently reports the job as
+    # passing.  Empty models (zero tests discovered) are still exit 0; that
+    # is a legitimate "nothing to do" outcome, not a failure.
+    has_failures = suite.failed > 0
+    all_skipped = suite.total > 0 and suite.skipped == suite.total
+    sys.exit(1 if has_failures or all_skipped else 0)
 
 
 # ---------------------------------------------------------------------------
@@ -1052,18 +1266,18 @@ def cmd_auth_login(
             click.echo()
             click.echo("  1. Interactive with a web browser (recommended)")
             click.echo("  2. Service principal with secret")
-            click.echo("  3. Service principal with certificate")
-            click.echo("  4. Managed identity")
             click.echo()
-            
+
             choice = click.prompt(
                 "Select authentication method",
-                type=click.IntRange(1, 4),
+                type=click.IntRange(1, 2),
                 default=1,
             )
-            
+
             if choice == 1:
-                # Interactive browser - no tenant ID needed
+                # Interactive browser - no tenant ID needed.  client_id is
+                # left at None so the factory uses the bundled pql-test
+                # multi-tenant app id (see auth/factory.py).
                 config = CredentialConfig(
                     method=AuthMethod.INTERACTIVE,
                     tenant_id=None,  # Let Azure Identity discover from login
@@ -1071,13 +1285,13 @@ def cmd_auth_login(
                     account_name="Interactive User",
                 )
                 click.echo("\nLaunching browser for interactive authentication...")
-            
-            elif choice == 2:
+
+            else:  # choice == 2
                 # Service principal with secret
                 tenant_id = click.prompt("Azure AD tenant ID", type=str)
                 client_id = click.prompt("Client ID", type=str)
                 client_secret = click.prompt("Client secret", hide_input=True)
-                
+
                 config = CredentialConfig(
                     method=AuthMethod.SERVICE_PRINCIPAL_SECRET,
                     client_id=client_id,
@@ -1087,60 +1301,13 @@ def cmd_auth_login(
                     account_name=f"SP {client_id}",
                 )
                 click.echo("\nAuthenticating with service principal...")
-            
-            elif choice == 3:
-                # Service principal with certificate
-                tenant_id = click.prompt("Azure AD tenant ID", type=str)
-                client_id = click.prompt("Client ID", type=str)
-                cert_path = click.prompt("Certificate path", type=str)
-                cert_password = click.prompt(
-                    "Certificate password (optional, press Enter to skip)",
-                    default="",
-                    hide_input=True,
-                    show_default=False,
-                )
-                
-                config = CredentialConfig(
-                    method=AuthMethod.SERVICE_PRINCIPAL_CERT,
-                    client_id=client_id,
-                    tenant_id=tenant_id,
-                    certificate_path=cert_path,
-                    certificate_password=cert_password if cert_password else None,
-                    environment=environment,
-                    account_name=f"SP {client_id}",
-                )
-                click.echo("\nAuthenticating with certificate...")
-            
-            else:  # choice == 4
-                # Managed identity
-                use_user_assigned = click.confirm(
-                    "Use user-assigned managed identity? (no = system-assigned)",
-                    default=False,
-                )
-                
-                if use_user_assigned:
-                    client_id = click.prompt("Client ID for user-assigned MI", type=str)
-                    config = CredentialConfig(
-                        method=AuthMethod.MANAGED_IDENTITY,
-                        client_id=client_id,
-                        use_system_assigned_identity=False,
-                        environment=environment,
-                        account_name="Managed Identity (User-Assigned)",
-                    )
-                else:
-                    config = CredentialConfig(
-                        method=AuthMethod.MANAGED_IDENTITY,
-                        use_system_assigned_identity=True,
-                        environment=environment,
-                        account_name="Managed Identity (System-Assigned)",
-                    )
-                click.echo("\nAuthenticating with managed identity...")
         else:
-            # Partial flags provided but not enough - default to interactive
-            # Interactive browser login - no tenant ID needed
+            # Partial flags provided but not enough for SPN-secret — interactive.
+            # Interactive browser login — no tenant ID needed (Azure Identity
+            # discovers it from the sign-in).
             config = CredentialConfig(
                 method=AuthMethod.INTERACTIVE,
-                tenant_id=None,  # Let Azure Identity discover from login
+                tenant_id=None,
                 environment=environment,
                 account_name="Interactive User",
             )
@@ -1150,15 +1317,31 @@ def cmd_auth_login(
         # Create the credential and test it by acquiring a token
         # This triggers the actual authentication flow (browser for interactive, etc.)
         credential = manager._factory.create(config, manager._cloud_config)
-        
+
         # Get scope for Power BI service
         scope = manager._cloud_config.get_resource_scope(environment)
-        
-        # Trigger authentication by getting a token
+
+        # Trigger authentication.  For INTERACTIVE we use authenticate(scopes=...)
+        # so we can capture the AuthenticationRecord and store it — future runs
+        # then use the persistent MSAL cache silently instead of opening a new
+        # browser tab on every CLI invocation.
         click.echo()
-        token = credential.get_token(scope)
-        
-        # Save the configuration after successful authentication
+        if config.method == AuthMethod.INTERACTIVE and hasattr(credential, "authenticate"):
+            record = credential.authenticate(scopes=[scope])
+            try:
+                config.authentication_record_json = record.serialize()
+            except Exception:  # noqa: BLE001
+                # If serialization fails the credential still works for this
+                # invocation; we just lose the silent-replay optimization.
+                pass
+            # Account name from the record's username is more accurate than
+            # our generic "Interactive User" placeholder.
+            if getattr(record, "username", None):
+                config.account_name = record.username
+        else:
+            credential.get_token(scope)
+
+        # Save the configuration after successful authentication.
         manager.save_credential(config)
 
         click.echo()
@@ -1221,6 +1404,13 @@ def cmd_auth_status() -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    # Windows default codepage (cp1252) can't encode the ✅ / ❌ status markers
+    # we emit. Force UTF-8 so the CLI works in a default PowerShell session.
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(encoding="utf-8", errors="replace")
     cli()
 
 

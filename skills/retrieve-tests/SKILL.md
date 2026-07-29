@@ -8,7 +8,7 @@ Run `pql-test retrieve-tests MODEL_PATH` to discover all DAX test suites stored 
 MODEL_PATH accepts three formats:
 - **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory / `.pbip` file directly).
 - **`local/<model_name>`** — connect to a locally-open Power BI Desktop instance by model name, without requiring a local file path.
-- **`<workspace>.<semantic_model>`** — Fabric CLI dot notation. Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`).
+- **`<workspace>.Workspace/<semantic_model>.SemanticModel`** — canonical Fabric service path (matches Fabric's own filesystem layout). Connect to a remote workspace by display names (requires `--tenant-id`, `--client-id`, `--client-secret`, or a stored interactive login via `pql-test auth login`).
 
 Options:
 - `--test NAME` — Show only the named test suite.
@@ -19,7 +19,9 @@ Options:
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
 - `--client-id ID` — Service principal client ID (or set `PQL_CLIENT_ID` env var).
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
-- `--environment ENV` — Cloud environment: `Public` (default), `Germany`, `China`, `USGov`, `USGovHigh`, or `DOD` (or set `PQL_ENVIRONMENT` env var).
+- `--env ENV` — List only test suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`), matching the `<Suite>.<ENV>.Tests` naming convention (or set `PQL_TEST_ENV` env var).
+
+The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --environment`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
 
 Usage:
 ```

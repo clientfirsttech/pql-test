@@ -22,11 +22,51 @@ from tests.conftest import make_dax_source
 _CLI_MODULE = "pql_test.cli"
 
 
-def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
-    """Run the CLI in a subprocess and return (stdout, stderr, returncode)."""
-    # Strip PQL_* vars so that credentials loaded by test_live_service.py at
-    # collection time do not bleed into subprocesses that don't expect them.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+def run_cli(
+    args: list[str],
+    cwd: str | None = None,
+    *,
+    live: bool = False,
+) -> tuple[str, str, int]:
+    """Run the CLI in a subprocess and return (stdout, stderr, returncode).
+
+    By default the subprocess runs in *hermetic* mode: no .env loading, no
+    stored interactive credentials, no auto-detection of a running PBI
+    Desktop instance.  This keeps unit tests deterministic regardless of
+    developer-machine state.
+
+    Pass ``live=True`` for tests that need a real XMLA connection (typically
+    ``@pytest.mark.live``).  In live mode the subprocess inherits the
+    parent's ``PQL_*`` environment variables and loads ``.env`` normally,
+    so a service principal configured via ``python/.env`` or
+    ``python/tests/.env`` is honored.
+    """
+    if live:
+        # Inherit tenant/workspace/client/secret from .env so the CLI can
+        # build a service-principal connection.  Strip any PQL_DATASET_ID
+        # variants — those would override the matrix-style path-based
+        # dataset-name derivation the CLI uses (and that the production
+        # CI workflow relies on), causing the subprocess to connect to
+        # whichever single dataset .env happens to point at instead of
+        # the model under test.
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if not k.startswith("PQL_DATASET")
+        }
+        # Set hermetic so the subprocess doesn't reload .env itself —
+        # if it did, PQL_DATASET_ID would come straight back.  We pass
+        # the SP credentials via env explicitly above; hermetic mode
+        # leaves the service-resolution path intact when explicit creds
+        # are present.
+        env["PQL_TEST_HERMETIC"] = "1"
+    else:
+        # Strip PQL_* vars so that credentials loaded by test_live_service.py
+        # at collection time do not bleed into hermetic subprocesses.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+        # Tell the CLI to skip .env loading, stored-credential lookups
+        # (would prompt a browser), and PBI Desktop auto-detection.
+        env["PQL_TEST_HERMETIC"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     result = subprocess.run(
         [sys.executable, "-m", _CLI_MODULE, *args],
@@ -34,10 +74,44 @@ def run_cli(args: list[str], cwd: str | None = None) -> tuple[str, str, int]:
         text=True,
         encoding="utf-8",
         cwd=cwd,
-        timeout=30,
+        timeout=60 if live else 30,
         env=env,
     )
     return result.stdout, result.stderr, result.returncode
+
+
+def _live_creds_available() -> bool:
+    """Return True when PQL_* service-principal vars are populated.
+
+    Loads ``.env`` from a few well-known locations before checking, since
+    a parent pytest process doesn't auto-load it.
+    """
+    try:
+        from dotenv import load_dotenv  # type: ignore[import-untyped]
+    except ImportError:
+        load_dotenv = None  # noqa: N806
+
+    if load_dotenv is not None:
+        here = Path(__file__).resolve()
+        for candidate in (
+            here.parent / ".env",                        # python/tests/.env
+            here.parent.parent / ".env",                 # python/.env
+            here.parent.parent.parent / ".env",          # repo root .env
+        ):
+            if candidate.is_file():
+                load_dotenv(candidate, override=False)
+
+    required = ("PQL_TENANT_ID", "PQL_WORKSPACE_ID", "PQL_CLIENT_ID", "PQL_CLIENT_SECRET")
+    return all(os.environ.get(k, "").strip() for k in required)
+
+
+# Eagerly load .env so live tests can decide to skip at collection time.
+_HAS_LIVE_CREDS = _live_creds_available()
+_requires_live_creds = pytest.mark.skipif(
+    not _HAS_LIVE_CREDS,
+    reason="live test: PQL_TENANT_ID/WORKSPACE_ID/CLIENT_ID/CLIENT_SECRET not configured. "
+    "Add a service principal to python/.env or python/tests/.env.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -340,85 +414,113 @@ class TestRunTests:
         stdout, _, _ = run_cli(["run-tests", str(tmp_path)])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
-    # ------------------------------------------------------------------
-    # --local flag tests (mirrors Pester '-Tag "Local"' tests)
-    # ------------------------------------------------------------------
+    def test_zero_total_shows_no_tests_found_message(self, tmp_path):
+        """When discovery finds nothing, output must say 'No tests found.'
+        instead of just rendering the bare '0 passed, 0 failed, 0 total' line —
+        users couldn't tell whether the model was legitimately empty or whether
+        an access/permission/connectivity error was silently swallowed.
+        See tasks/surface-silent-test-discovery-failures-epic.md.
 
-    def test_local_flag_is_accepted_by_parser(self, tmp_path):
+        Skipped on dev machines that have any PBI Desktop instance open,
+        because resolve_local_xmla_connection silently grabs it and runs
+        against whichever model is loaded.
         """
-        Mirrors Pester 'Should run tests locally': --local is a valid flag.
-        Ensures no 'Error: No such option' parse error.
-        """
+        try:
+            from pql_test.runner import get_pbi_files_opened
+            if get_pbi_files_opened():
+                pytest.skip(
+                    "PBI Desktop running; test only meaningful when no "
+                    "local instances are detected"
+                )
+        except ImportError:
+            pass
+
         dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
         dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path)])
+        combined = stdout + stderr
+        assert "No tests found" in combined, (
+            "Expected an explicit 'No tests found.' line; got just:\n"
+            + combined[:600]
+        )
+
+    # ------------------------------------------------------------------
+    # local/<name> model-path syntax replaces the removed --local flag
+    # (see tasks/remove-local-cli-flag-epic.md).
+    # ------------------------------------------------------------------
+
+    def test_local_flag_is_rejected(self, tmp_path):
+        """Given --local is passed, the CLI should reject it as unknown."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, code = run_cli(["run-tests", str(tmp_path), "--local"])
+        combined = stdout + stderr
+        assert "No such option" in combined
+        assert code != 0
+
+    def test_retrieve_tests_local_flag_is_rejected(self, tmp_path):
+        """Given --local is passed to retrieve-tests, also reject."""
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        stdout, stderr, code = run_cli(["retrieve-tests", str(tmp_path), "--local"])
+        combined = stdout + stderr
+        assert "No such option" in combined
+        assert code != 0
+
+    def test_local_identifier_is_accepted_by_parser(self):
+        """`local/<name>` is a valid MODEL_PATH (no parse error)."""
+        stdout, stderr, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "No such option" not in stderr
         assert "No such option" not in stdout
 
-    def test_local_flag_does_not_require_remote_connection_flags(self, tmp_path):
-        """
-        Mirrors Pester 'Should throw error is missing tenant id when not local':
-        with --local, no --tenant-id / --workspace-id are needed.
-        The CLI must not reject the invocation for missing connection options.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        _, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+    def test_local_identifier_does_not_require_remote_connection_flags(self):
+        """`local/<name>` works without --tenant-id / --workspace-id."""
+        _, stderr, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "Missing option" not in stderr
 
-    def test_local_flag_shows_warning_when_no_pbi_desktop_open(self, tmp_path):
-        """
-        Mirrors Pester 'Should warn about no test because path does not have tests
-        for currently opened file': when --local is used but no model is open,
-        a warning is printed (warnings.Length > 0 equivalent).
-        """
-        (tmp_path / "SampleModel.pbip").write_text("{}")
-        dax_dir = tmp_path / "SampleModel.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local"])
-        combined = stdout + stderr
-        # Either "no matching" or "not found" or "no power bi desktop" or similar
+    def test_local_identifier_shows_warning_when_no_pbi_desktop_open(self):
+        """When local/<name> is used but no matching PBI Desktop is open,
+        a warning is printed.  Skipped on dev machines where any PBI Desktop
+        instance is running, because resolve_local_xmla_connection_by_name
+        has a permissive single-unnamed-instance fallback that would connect
+        anyway and produce no warning."""
+        try:
+            from pql_test.runner import get_pbi_files_opened  # type: ignore
+            if get_pbi_files_opened():
+                pytest.skip("PBI Desktop instance(s) detected; test only meaningful in CI")
+        except ImportError:
+            pass  # psutil not installed → no detection → warning path will fire
+        stdout, stderr, _ = run_cli(["run-tests", "local/DefinitelyNotOpen"])
+        combined = (stdout + stderr).lower()
         assert any(
-            phrase in combined.lower()
+            phrase in combined
             for phrase in ("no matching", "not found", "no power bi", "warning")
         )
 
-    def test_local_flag_shows_summary_line(self, tmp_path):
-        """
-        Mirrors Pester 'Should run tests locally' output format check:
-        even with --local, a summary line with passed/failed/total is printed.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, _, _ = run_cli(["run-tests", str(tmp_path), "--local"])
+    def test_local_identifier_shows_summary_line(self):
+        """`local/<name>` still prints a passed/failed/total summary."""
+        stdout, _, _ = run_cli(["run-tests", "local/SomeModel"])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
-    def test_local_flag_with_verbose_does_not_crash(self, tmp_path):
-        """
-        Mirrors Pester 'Should run tests for a subset based on folder path':
-        --local --verbose is a valid combination and should not error.
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        stdout, stderr, _ = run_cli(["run-tests", str(tmp_path), "--local", "--verbose"])
+    def test_local_identifier_with_verbose_does_not_crash(self):
+        """`local/<name> --verbose` is a valid combination and should not error."""
+        stdout, stderr, _ = run_cli(["run-tests", "local/SomeModel", "--verbose"])
         assert "Error:" not in stderr or "not found" not in stderr
 
-    def test_local_flag_exits_0_for_empty_model(self, tmp_path):
-        """
-        Mirrors Pester: when no *.Tests.dax files exist the runner exits 0
-        (no failures — equivalent to $warnings check passing because there
-        are no test results to evaluate).
-        """
-        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
-        dax_dir.mkdir(parents=True)
-        _, _, code = run_cli(["run-tests", str(tmp_path), "--local"])
-        assert code == 0
-
-    def test_run_tests_help_mentions_local_flag(self):
-        """Mirrors 'Module should exist': --local is documented in help text."""
+    def test_run_tests_help_does_not_mention_local_flag(self):
+        """Help text must no longer advertise --local."""
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
-        assert "--local" in stdout
+        assert "--local" not in stdout
+        # but local/<model_name> should still be documented as a path format
+        assert "local/<model_name>" in stdout
+
+    def test_retrieve_tests_help_does_not_mention_local_flag(self):
+        """retrieve-tests help text must no longer advertise --local."""
+        stdout, _, code = run_cli(["retrieve-tests", "--help"])
+        assert code == 0
+        assert "--local" not in stdout
+        assert "local/<model_name>" in stdout
 
 
 # ---------------------------------------------------------------------------
@@ -618,10 +720,14 @@ class TestModelIdentifierFormats:
         assert "local/" in stdout
 
     def test_run_tests_help_mentions_service_format(self):
-        """run-tests help text mentions the workspace.model format."""
+        """run-tests help text mentions the canonical Fabric service path."""
         stdout, _, code = run_cli(["run-tests", "--help"])
         assert code == 0
-        assert "Fabric CLI" in stdout or "dot notation" in stdout
+        # Canonical Fabric service path is the only documented service form
+        # (legacy dot notation is still accepted at runtime but no longer
+        # advertised — see the docs-cleanup pass on 2026-06-01).
+        assert ".Workspace/" in stdout and ".SemanticModel" in stdout
+        assert "Fabric" in stdout
 
     def test_retrieve_tests_help_mentions_local_model_format(self):
         """retrieve-tests help text mentions the local/<model_name> format."""
@@ -634,29 +740,83 @@ class TestModelIdentifierFormats:
         stdout, _, _ = run_cli(["run-tests", "local/AnyModel"])
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
 
+    def test_retrieve_tests_resolves_xmla_for_filesystem_path(self, tmp_path, monkeypatch):
+        """retrieve-tests <path> must call resolve_xmla_connection so local PBI
+        Desktop auto-detection works the same way it does for run-tests.
+
+        Captures the parity requirement from
+        tasks/readme-drift-cleanup-epic.md.
+        """
+        from unittest.mock import MagicMock
+        from click.testing import CliRunner
+
+        # Import cli_module FIRST so its top-level dotenv.load_dotenv() runs
+        # (which would otherwise re-populate the env vars we're about to
+        # strip).  Only after the module is fully loaded do we delete the
+        # PQL_* vars from the process env, ensuring click sees an empty
+        # connection context.
+        from pql_test import cli as cli_module
+
+        for key in list(os.environ):
+            if key.startswith("PQL_"):
+                monkeypatch.delenv(key, raising=False)
+
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        (dax_dir / "Sample.Tests.dax").write_text(
+            make_dax_source("Sample"), encoding="utf-8"
+        )
+
+        mock_resolve = MagicMock(return_value=None)
+        monkeypatch.setattr(cli_module, "resolve_xmla_connection", mock_resolve)
+
+        runner = CliRunner()
+        result = runner.invoke(cli_module.cli, ["retrieve-tests", str(tmp_path)])
+
+        assert mock_resolve.called, (
+            f"retrieve-tests with a filesystem path must call "
+            f"resolve_xmla_connection so local PBI Desktop is auto-detected, "
+            f"matching run-tests behavior. See "
+            f"tasks/readme-drift-cleanup-epic.md.\n"
+            f"exit_code={result.exit_code} output={result.output[:200]!r}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # RLS_Model real-model tests
 # ---------------------------------------------------------------------------
 
+@pytest.mark.live
+@_requires_live_creds
 class TestRlsModel:
-    """CLI tests against the real RLS_Model example in examples/."""
+    """CLI tests against the real RLS_Model example in examples/.
+
+    Marked ``live`` because RLS_Model declares its test suite only in
+    ``definition/functions.tmdl`` (no ``*.Tests.dax`` file in DAXQueries/),
+    so the offline file-scan fallback finds nothing — these tests
+    inherently require a real XMLA connection to discover the suite via
+    ``PQL.Assert.RetrieveTestsV2``.  Each invocation passes ``live=True``
+    so the subprocess inherits the parent's ``PQL_*`` env vars and uses
+    the service-principal credentials from ``.env``.
+
+    Auto-skipped when those env vars aren't configured.
+    """
 
     def test_retrieve_tests_finds_rls_suite(self, rls_model_path):
         """retrieve-tests discovers the RLS.ANY.Tests suite in the RLS model."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         assert "RLS.ANY.Tests" in stdout
 
     def test_retrieve_tests_returns_non_empty_list(self, rls_model_path):
         """retrieve-tests returns a non-empty JSON array for the RLS model."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         assert stdout.strip() != "[]"
 
     def test_retrieve_tests_has_single_suite(self, rls_model_path):
         """The RLS model contains exactly one test suite."""
-        stdout, _, code = run_cli(["retrieve-tests", rls_model_path])
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
         assert code == 0
         suites = json.loads(stdout)
         assert len(suites) == 1
@@ -664,17 +824,93 @@ class TestRlsModel:
 
     def test_retrieve_test_returns_rls_suite(self, rls_model_path):
         """retrieve-test returns the RLS.ANY.Tests suite when requested by name."""
-        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "RLS.ANY.Tests"])
+        stdout, _, code = run_cli(
+            ["retrieve-test", rls_model_path, "RLS.ANY.Tests"], live=True
+        )
         assert code == 0
         assert "RLS.ANY.Tests" in stdout
 
     def test_retrieve_test_exits_1_for_missing_suite(self, rls_model_path):
         """retrieve-test exits 1 when the requested suite does not exist."""
-        stdout, _, code = run_cli(["retrieve-test", rls_model_path, "Missing.Tests"])
+        stdout, _, code = run_cli(
+            ["retrieve-test", rls_model_path, "Missing.Tests"], live=True
+        )
         assert code == 1
         assert stdout.strip() == "null"
 
     def test_run_tests_shows_summary_line(self, rls_model_path):
         """run-tests always prints a passed/failed/total summary for the RLS model."""
-        stdout, _, _ = run_cli(["run-tests", rls_model_path])
+        stdout, _, _ = run_cli(["run-tests", rls_model_path], live=True)
         assert "passed" in stdout and "failed" in stdout and "total" in stdout
+
+
+# ---------------------------------------------------------------------------
+# --env (environment-specific test discovery)
+# ---------------------------------------------------------------------------
+
+class TestEnvOption:
+    """--env filters discovery/execution to one environment's test suites
+    (<Suite>.<ENV>.Tests naming convention)."""
+
+    def _make_multi_env_model(self, tmp_path) -> str:
+        dax_dir = tmp_path / "model.SemanticModel" / "DAXQueries"
+        dax_dir.mkdir(parents=True)
+        for suite in ("Calculations.DEV", "Schema.PROD", "BestPractices.ANY"):
+            (dax_dir / f"{suite}.Tests.dax").write_text(
+                make_dax_source(f"{suite}.Tests"), encoding="utf-8"
+            )
+        return str(tmp_path)
+
+    def test_retrieve_tests_env_filters_suites(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "DEV"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["Calculations.DEV.Tests"]
+
+    def test_retrieve_tests_env_any_is_not_a_wildcard(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "ANY"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["BestPractices.ANY.Tests"]
+
+    def test_retrieve_tests_env_is_case_insensitive(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "prod"])
+        assert code == 0
+        names = [t["name"] for t in json.loads(stdout)]
+        assert names == ["Schema.PROD.Tests"]
+
+    def test_retrieve_tests_env_without_match_returns_empty(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["retrieve-tests", model, "--env", "UAT"])
+        assert code == 0
+        assert json.loads(stdout) == []
+
+    def test_run_tests_env_runs_only_matching_suites(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        # No XMLA connection in hermetic mode → the matching suite is
+        # reported as skipped (exit 1); the point is discovery scoping.
+        stdout, _, _ = run_cli(["run-tests", model, "--env", "DEV"])
+        assert "Calculations.DEV.Tests" in stdout
+        assert "Schema.PROD.Tests" not in stdout
+        assert "BestPractices.ANY.Tests" not in stdout
+        assert "1 total" in stdout
+
+    def test_run_tests_env_no_match_shows_env_hint(self, tmp_path):
+        model = self._make_multi_env_model(tmp_path)
+        stdout, _, code = run_cli(["run-tests", model, "--env", "UAT"])
+        assert code == 0  # zero discovered tests is a legitimate outcome
+        assert "No tests found." in stdout
+        assert "--env UAT" in stdout
+
+    def test_run_tests_help_documents_env(self):
+        stdout, _, code = run_cli(["run-tests", "--help"])
+        assert code == 0
+        assert "--env" in stdout
+
+    def test_retrieve_tests_help_documents_env(self):
+        stdout, _, code = run_cli(["retrieve-tests", "--help"])
+        assert code == 0
+        assert "--env" in stdout

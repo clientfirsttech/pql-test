@@ -163,7 +163,7 @@ pql-test supports three `MODEL_PATH` formats throughout the CLI:
 
 1. **Filesystem path** — PBIP root directory or `.SemanticModel` directory.
 2. **`local/<model_name>`** — Connect to a locally-open Power BI Desktop instance.
-3. **`<workspace>.<semantic_model>`** — Fabric CLI dot notation for remote workspace connections.
+3. **`<workspace>.Workspace/<semantic_model>.SemanticModel`** — canonical Fabric service path for remote workspace connections (matches Fabric's own filesystem layout).
 
 ### Environment Variables
 

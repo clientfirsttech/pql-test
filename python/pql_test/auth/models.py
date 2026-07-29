@@ -49,6 +49,11 @@ class CredentialConfig:
     use_system_assigned_identity: bool = False
     environment: str = "Public"
     account_name: Optional[str] = None
+    # Serialized azure-identity AuthenticationRecord (JSON) — captured on
+    # interactive sign-in and replayed on subsequent runs so the persistent
+    # MSAL token cache can be looked up silently instead of triggering a
+    # fresh browser flow. Only populated for AuthMethod.INTERACTIVE.
+    authentication_record_json: Optional[str] = None
 
     def to_dict(self) -> dict:
         """

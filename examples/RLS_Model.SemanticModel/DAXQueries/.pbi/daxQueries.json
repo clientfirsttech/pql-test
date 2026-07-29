@@ -1,8 +1,7 @@
 {
   "version": "1.0.0",
   "tabOrder": [
-    "RLS.ANY.Tests",
-    "Query 1"
+    "RLS 1"
   ],
-  "defaultTab": "Query 1"
+  "defaultTab": "RLS 1"
 }
