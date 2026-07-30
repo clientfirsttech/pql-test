@@ -51,7 +51,7 @@ from pql_test.auth.models import AuthMethod, CredentialConfig
 # Forks / enterprises that have registered their own pql-test equivalent
 # can override via the PQL_TEST_INTERACTIVE_CLIENT_ID env var without
 # touching the source.
-PQL_TEST_DEFAULT_INTERACTIVE_CLIENT_ID = "e6341730-1a0b-4a9e-9462-a435d224b5fd"
+PQL_TEST_DEFAULT_INTERACTIVE_CLIENT_ID = "f26cd19c-0e12-42ef-86b4-51555d3f9ddd"
 
 
 def _resolve_interactive_client_id(config_client_id: str | None) -> str:
