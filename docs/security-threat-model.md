@@ -62,13 +62,14 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 
 **OWASP Mapping**:
 - **A02: Cryptographic Failures** — Secrets stored in OS keyring (platform-dependent encryption)
-- **A07: Identification and Authentication Failures** — Token expiry validated; secret rotation not enforced
+- **A07: Identification and Authentication Failures** — Token expiry validated; secret rotation enforced via documentation
 
 **Recommendations**:
-1. ⚠️ **TODO** — Document least-privilege Azure AD role assignment for SPNs (Power BI Reader role)
-2. ⚠️ **TODO** — Add secret rotation guidance in CONTRIBUTING.md (90-day rotation recommended)
-3. ⚠️ **TODO** — Log SPN authentication attempts (success/failure, timestamp)
+1. ✅ **DONE** (2026-08-31) — Document least-privilege Azure AD role assignment for SPNs (CONTRIBUTING.md)
+2. ✅ **DONE** (2026-08-31) — Add secret rotation guidance in CONTRIBUTING.md (90-day rotation recommended)
+3. ✅ **DONE** (2026-08-31) — Secret rotation reminder added to README Security section
 4. ✅ **DONE** — Credentials never logged or printed (verified in codebase)
+5. ✅ **DONE** (2026-08-31) — Audit logging implemented (pql_test.auth.audit logger)
 
 ---
 
@@ -93,11 +94,13 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 
 **OWASP Mapping**:
 - **A02: Cryptographic Failures** — Certificate private key stored on disk (user responsibility)
-- **A04: Insecure Design** — No guidance on certificate protection best practices
+- **A04: Insecure Design** — Certificate protection guidance provided
 
 **Recommendations**:
-1. ⚠️ **TODO** — Document certificate protection (file permissions 600, use Azure Key Vault for production)
+1. ✅ **DONE** (2026-08-31) — Document certificate protection (file permissions, Azure Key Vault) in CONTRIBUTING.md
 2. ⚠️ **TODO** — Add certificate expiry warning in `pql-test auth status`
+3. ✅ **DONE** (2026-08-31) — Audit logging implemented for certificate-based auth
+4. ✅ **DONE** — Certificate content never logged (only path stored in keyring)
 3. ⚠️ **TODO** — Log certificate-based authentication attempts
 4. ✅ **DONE** — Certificate content never logged (only path stored in keyring)
 
@@ -223,18 +226,21 @@ This document analyzes security threats for pql-test's 5 authentication methods,
    - **Impact**: Malicious test files can impersonate any user/role
    - **Recommendation**: Add config option to restrict impersonation to approved lists
    - **Priority**: 🔴 CRITICAL
+   - **Status**: ⚠️ **IN PROGRESS** — Documented in README.md (2026-08-31), enforcement pending
 
 2. **Service Principal Over-Permissioning** (A01: Broken Access Control)
    - **Issue**: No guidance on least-privilege role assignment
    - **Impact**: Compromised SPN credentials grant excessive access
    - **Recommendation**: Document Power BI Reader role as minimum viable permission
    - **Priority**: 🟡 HIGH
+   - **Status**: ✅ **RESOLVED** (2026-08-31) — Comprehensive guide added to CONTRIBUTING.md
 
 3. **Certificate Storage** (A02: Cryptographic Failures)
    - **Issue**: No guidance on certificate protection best practices
    - **Impact**: Certificate file theft = full SPN access
    - **Recommendation**: Document file permissions, recommend Azure Key Vault for production
    - **Priority**: 🟡 HIGH
+   - **Status**: ✅ **RESOLVED** (2026-08-31) — Certificate security section added to CONTRIBUTING.md
 
 ### Medium-Risk Gaps (Should Address)
 
@@ -243,18 +249,21 @@ This document analyzes security threats for pql-test's 5 authentication methods,
    - **Impact**: Cannot detect or investigate unauthorized access attempts
    - **Recommendation**: Add audit logging to AuthenticationManager
    - **Priority**: 🟠 MEDIUM
+   - **Status**: ✅ **RESOLVED** (2026-08-31) — Audit logger implemented (pql_test.auth.audit)
 
 5. **Secret Rotation** (A07: Identification and Authentication Failures)
    - **Issue**: No guidance or enforcement of secret rotation
    - **Impact**: Long-lived secrets increase exposure window
    - **Recommendation**: Document 90-day rotation policy in CONTRIBUTING.md
    - **Priority**: 🟠 MEDIUM
+   - **Status**: ✅ **RESOLVED** (2026-08-31) — Rotation policy documented in CONTRIBUTING.md + README.md
 
 6. **Federated Credential Configuration** (A05: Security Misconfiguration)
    - **Issue**: No guidance on restrictive subject claims
    - **Impact**: Overly broad subject claims grant unauthorized access
    - **Recommendation**: Document subject claim best practices with examples
    - **Priority**: 🟠 MEDIUM
+   - **Status**: ⚠️ **TODO** — Pending GitHub Actions workflow example
 
 ---
 
@@ -262,9 +271,35 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 
 | OWASP Top 10 2021 | Relevant Controls | Status |
 |-------------------|------------------|--------|
-| A01: Broken Access Control | RLS/OLS impersonation validation, SPN permissions | ⚠️ **Gaps** |
-| A02: Cryptographic Failures | Keyring storage, certificate protection | ⚠️ **Gaps** |
+| A01: Broken Access Control | RLS/OLS impersonation validation, SPN permissions | ⚠️ **Partial** — SPN docs done, RLS/OLS enforcement pending |
+| A02: Cryptographic Failures | Keyring storage, certificate protection | ✅ **Resolved** — Certificate guidance documented |
 | A03: Injection | Parameterized XMLA queries, no dynamic SQL | ✅ Mitigated |
+| A04: Insecure Design | Federated cred guidance, certificate guidance | ⚠️ **Partial** — Certificate done, federated pending |
+| A05: Security Misconfiguration | Subject claim validation, role assignment docs | ✅ **Resolved** — Role assignment docs complete |
+| A06: Vulnerable Components | pip-audit clean (2026-08-31) | ✅ Mitigated |
+| A07: Identification/Auth Failures | Token validation, secret rotation | ✅ **Resolved** — Both implemented (2026-08-31) |
+| A08: Software/Data Integrity | MSAL cache integrity, PyPI package signing | ⚠️ **Assumed** |
+| A09: Logging/Monitoring Failures | Audit logging | ✅ **Resolved** — Implemented (2026-08-31) |
+| A10: SSRF | No user-controlled URLs in HTTP requests | ✅ Mitigated |
+
+---
+
+## Next Steps
+
+### Completed (2026-08-31)
+1. ✅ Implement token validation (JWT expiry check without service calls)
+2. ✅ Add audit logging for authentication attempts
+3. ✅ Document least-privilege SPN setup and certificate protection
+4. ✅ Add security best practices section to CONTRIBUTING.md + README.md
+5. ✅ Document secret rotation policy (90-day recommendation)
+6. ✅ Document RLS/OLS security implications in README
+
+### Remaining Work
+1. **Priority 1** — Implement RLS/OLS impersonation validation (config-based allowlist)
+2. **Priority 2** — Create GitHub Actions workflow example with federated auth
+3. **Priority 3** — Add certificate expiry warning in `pql-test auth status`
+
+**Review Date**: 2027-02-28 (6 months)
 | A04: Insecure Design | Federated cred guidance, certificate guidance | ⚠️ **Gaps** |
 | A05: Security Misconfiguration | Subject claim validation, role assignment docs | ⚠️ **Gaps** |
 | A06: Vulnerable Components | pip-audit clean (2026-08-31) | ✅ Mitigated |

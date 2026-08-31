@@ -158,6 +158,160 @@ Desktop before running the suite, or skip them with
 
 ---
 
+## Service Principal Setup (Least-Privilege)
+
+**Security Note**: Service principals with broad permissions (e.g., `Workspace.ReadWrite.All`, tenant-wide admin roles) create security risks if credentials are compromised. Follow least-privilege principles to minimize exposure.
+
+### Recommended Permissions
+
+For DAX test execution, a service principal needs:
+
+#### 1. Azure AD API Permissions (Azure Portal)
+- **Power BI Service → `Dataset.Read.All`** (delegated or application)
+- **NOT required**: `Workspace.ReadWrite.All`, `Tenant.Read.All`, or admin roles
+
+#### 2. Workspace Access (Power BI Service)
+- **Minimum**: **Viewer** role (read-only access to datasets)
+- **Recommended**: **Contributor** role (can refresh datasets, useful for CI/CD)
+- **NOT recommended**: Admin or Member roles (unnecessary elevation)
+
+#### 3. Dataset RLS/OLS Roles (Optional)
+- If testing RLS: Add SPN to dataset roles via `ImpersonateRole:` annotation
+- If testing with `EffectiveUserName`: SPN must be workspace Admin (not recommended)
+
+### Step-by-Step SPN Creation
+
+#### A. Register Application in Azure AD
+
+1. Open [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**
+2. **Name**: `pql-test-ci-<workspace-name>` (descriptive, scoped to purpose)
+3. **Supported account types**: "Accounts in this organizational directory only"
+4. **Redirect URI**: Leave blank (not needed for service principal auth)
+5. Click **Register**
+6. **Copy these values** (you'll need them later):
+   - **Application (client) ID**
+   - **Directory (tenant) ID**
+
+#### B. Create Client Secret
+
+1. In the app registration → **Certificates & secrets** → **Client secrets** → **New client secret**
+2. **Description**: `pql-test-ci-secret` (or descriptive name)
+3. **Expires**: **90 days** (recommended for security)
+   - ⚠️ **Important**: Set a calendar reminder to rotate before expiry
+   - Shorter expiry = better security, but requires more frequent rotation
+4. Click **Add** and **immediately copy the secret value** (shown only once)
+
+**Secret Rotation Policy**:
+- Rotate secrets every 90 days (best practice)
+- Never reuse old secrets
+- Update CI/CD secrets immediately after rotation
+- Revoke old secret only after confirming new secret works
+
+#### C. Grant Power BI API Permissions
+
+1. In the app registration → **API permissions** → **Add a permission**
+2. Select **Power BI Service**
+3. **Delegated permissions** → Check **Dataset.Read.All**
+4. Click **Add permissions**
+5. Click **Grant admin consent for [tenant]** (requires Azure AD admin)
+
+#### D. Add SPN to Power BI Workspace
+
+1. Open [Power BI Service](https://app.powerbi.com)
+2. Navigate to your workspace (must be Premium or Fabric F-SKU)
+3. **Workspace settings** → **Access**
+4. **Add** → Search for your SPN by **Application (client) ID** or **App name**
+5. Select **Contributor** role (allows read + refresh)
+6. Click **Add**
+
+**Role Guidance**:
+| Role | Can read datasets | Can run tests | Can refresh | Can modify | Recommended? |
+|------|-------------------|---------------|-------------|------------|--------------|
+| Viewer | ✅ | ✅ | ❌ | ❌ | ✅ Yes (minimal) |
+| Contributor | ✅ | ✅ | ✅ | ❌ | ✅ Yes (CI/CD) |
+| Member | ✅ | ✅ | ✅ | ✅ | ⚠️ No (too broad) |
+| Admin | ✅ | ✅ | ✅ | ✅ | ❌ No (excessive) |
+
+#### E. Enable XMLA Endpoint (Premium/Fabric Only)
+
+1. **Power BI Admin Portal** → **Tenant settings** → **Integration settings**
+2. **XMLA endpoint** → Set to **Read Only** or **Read Write**
+3. Click **Apply**
+
+**Note**: XMLA endpoints require Premium or Fabric capacity. Standard workspaces do not support XMLA connections.
+
+### Certificate-Based Authentication (Advanced)
+
+For production environments, certificates are more secure than secrets:
+
+#### A. Generate Self-Signed Certificate (Development)
+
+```powershell
+# Generate certificate (valid 2 years)
+$cert = New-SelfSignedCertificate `
+  -Subject "CN=pql-test-ci" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -KeyExportPolicy Exportable `
+  -KeySpec Signature `
+  -KeyLength 2048 `
+  -KeyAlgorithm RSA `
+  -HashAlgorithm SHA256 `
+  -NotAfter (Get-Date).AddYears(2)
+
+# Export certificate (.cer for Azure AD upload)
+$certPath = "C:\temp\pql-test-ci.cer"
+Export-Certificate -Cert $cert -FilePath $certPath
+
+# Export private key (.pfx for pql-test auth)
+$pfxPath = "C:\temp\pql-test-ci.pfx"
+$password = ConvertTo-SecureString -String "your-strong-password" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password
+```
+
+#### B. Upload Certificate to Azure AD
+
+1. App registration → **Certificates & secrets** → **Certificates** → **Upload certificate**
+2. Select the `.cer` file → **Add**
+3. Certificate is now trusted for authentication
+
+#### C. Use Certificate with pql-test
+
+```powershell
+pql-test auth login `
+  --certificate "C:\temp\pql-test-ci.pfx" `
+  --client-id <app-id> `
+  --tenant-id <tenant-id>
+```
+
+**Certificate Protection**:
+- **File permissions**: Set to `600` (owner read/write only)
+  ```powershell
+  icacls "C:\secure\pql-test-ci.pfx" /inheritance:r /grant:r "$env:USERNAME:(R,W)"
+  ```
+- **Production**: Use Azure Key Vault or HSM (Hardware Security Module)
+- **Rotation**: Renew certificates before expiry (2-year max recommended)
+
+### Security Best Practices Summary
+
+✅ **DO**:
+- Use separate SPNs for dev/staging/prod environments
+- Rotate secrets every 90 days
+- Grant minimum required permissions (Viewer or Contributor)
+- Store secrets in Azure Key Vault or CI/CD secret stores
+- Use certificate-based auth for production
+- Set file permissions on certificate files (`600` on Linux/macOS)
+- Monitor SPN usage in Azure AD sign-in logs
+
+❌ **DON'T**:
+- Grant `Workspace.ReadWrite.All` or tenant admin roles
+- Use the same SPN across multiple environments
+- Store secrets in code or version control
+- Share SPN credentials between teams
+- Use secrets longer than 90 days without rotation
+- Grant workspace Admin role (only needed for `EffectiveUserName`)
+
+---
+
 ## Service smoke test (Power BI Premium / Fabric)
 
 1. Copy `python/.env.example` to `python/tests/.env` and fill in:

@@ -573,6 +573,110 @@ Credentials are stored securely using the platform keyring:
 
 ---
 
+## Security Considerations
+
+### Service Principal Permissions
+
+**⚠️ Security Warning**: Over-permissioned service principals create security risks. Follow least-privilege principles.
+
+**Recommended minimum permissions**:
+- **Azure AD API**: `Dataset.Read.All` (application permission)
+- **Workspace Access**: **Viewer** (read-only) or **Contributor** (read + refresh)
+
+❌ **Avoid**: `Workspace.ReadWrite.All`, tenant admin roles, or workspace Admin access unless specifically required.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
+
+### RLS/OLS Security Model
+
+#### Row-Level Security (RLS) Testing
+
+Tests can impersonate users to validate RLS rules using the `ImpersonateUser:` annotation:
+
+```dax
+// File: RLS.ANY.Tests.dax
+// ImpersonateUser: user@example.com
+
+DEFINE
+  FUNCTION RLS.RegionFilter.Test() = ...
+EVALUATE
+  RLS.RegionFilter.Test()
+```
+
+**Security Implications**:
+- **Local connections**: `EffectiveUserName` parameter is ignored (not supported by local Analysis Services)
+- **Service connections**: XMLA connection string includes `EffectiveUserName=<email>`
+- **⚠️ Warning**: The calling identity (your user or service principal) must have **workspace Admin** permissions to use `EffectiveUserName`
+- **Risk**: Malicious test files can impersonate any user email—there is no validation that the email corresponds to a real Azure AD principal
+
+**Recommended Practice**:
+- Use `ImpersonateRole:` instead when possible (see OLS section)
+- Restrict test file authoring to trusted developers
+- Run tests in isolated environments (separate dev/test workspaces)
+- Future enhancement: Configuration-based allowlist for approved impersonation emails
+
+#### Object-Level Security (OLS) Testing
+
+Tests can assume roles to validate OLS rules using the `ImpersonateRole:` annotation:
+
+```dax
+// File: OLS.ANY.Tests.dax
+// ImpersonateRole: RegionalManager
+
+DEFINE
+  FUNCTION OLS.HiddenTables.Test() = ...
+EVALUATE
+  OLS.HiddenTables.Test()
+```
+
+**Security Implications**:
+- **Preferred over `EffectiveUserName`**: Works for both local and service connections
+- **Service principals**: Can be granted role membership (no Admin required)
+- **Validation**: Analysis Services validates that the role exists in the model
+- **⚠️ Risk**: Malicious test files can specify any role name—access is granted if role exists
+
+**Recommended Practice**:
+- Add service principals directly to model roles (no `EffectiveUserName` needed)
+- Document which roles should be tested in your test plan
+- Future enhancement: Configuration-based allowlist for approved role names
+
+#### Security Best Practices for RLS/OLS Testing
+
+✅ **DO**:
+- Use `ImpersonateRole:` instead of `ImpersonateUser:` when possible
+- Test RLS/OLS rules in non-production environments
+- Grant service principals only the roles they need to test
+- Review test files for unexpected impersonation annotations
+- Use separate datasets for RLS/OLS testing (don't test against production)
+
+❌ **DON'T**:
+- Grant workspace Admin to service principals just for testing
+- Use production datasets for RLS/OLS test execution
+- Share RLS test credentials (each developer should use their own identity)
+- Assume `EffectiveUserName` validates email addresses (it doesn't)
+
+**Threat Model**: See [docs/security-threat-model.md](docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
+
+### Secret Rotation
+
+**Best Practice**: Rotate service principal secrets every 90 days.
+
+```powershell
+# When secret approaches expiry:
+# 1. Create new secret in Azure Portal
+# 2. Update stored credential
+pql-test auth login -u <client-id> -p <new-secret> --tenant <tenant-id>
+
+# 3. Verify new secret works
+pql-test auth status
+
+# 4. Revoke old secret in Azure Portal
+```
+
+Set calendar reminders 1 week before expiry to avoid CI/CD outages.
+
+---
+
 ## Commands
 
 All commands are run from within the `python/` directory with the virtual
