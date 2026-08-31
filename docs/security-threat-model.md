@@ -188,9 +188,9 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 - **A01: Broken Access Control** — EffectiveUserName allows impersonation without permission check
 
 **Recommendations**:
-1. ⚠️ **CRITICAL** — Add configuration option to restrict EffectiveUserName to approved user list
-2. ⚠️ **TODO** — Document security implications of RLS testing in README
-3. ⚠️ **TODO** — Add warning when EffectiveUserName is used in test execution
+1. 🗄️ **ARCHIVED** — Add configuration option to restrict EffectiveUserName to approved user list (2026-08-31: Out of scope—users responsible for test file content review)
+2. ✅ **DONE** — Document security implications of RLS testing in README (2026-08-31)
+3. 🗄️ **ARCHIVED** — Add warning when EffectiveUserName is used in test execution (2026-08-31: Documented in README instead)
 4. ✅ **DONE** — Error handling when impersonation fails (Analysis Services validates user exists)
 
 ### Object-Level Security (OLS) Threat Analysis
@@ -210,9 +210,9 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 - **A01: Broken Access Control** — Roles property allows role assumption without permission check
 
 **Recommendations**:
-1. ⚠️ **CRITICAL** — Add configuration to restrict ImpersonateRole to approved role list
-2. ⚠️ **TODO** — Document OLS testing security model in README
-3. ⚠️ **TODO** — Add warning when Roles property is used in XMLA connection
+1. 🗄️ **ARCHIVED** — Add configuration to restrict ImpersonateRole to approved role list (2026-08-31: Out of scope—users responsible for test file content review)
+2. ✅ **DONE** — Document OLS testing security model in README (2026-08-31)
+3. 🗄️ **ARCHIVED** — Add warning when Roles property is used in XMLA connection (2026-08-31: Documented in README instead)
 4. ✅ **DONE** — Error handling when role doesn't exist (Analysis Services validates)
 
 ---
@@ -224,9 +224,9 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 1. **RLS/OLS Impersonation Controls** (A01: Broken Access Control)
    - **Issue**: No validation of `EffectiveUserName` or `Roles` properties
    - **Impact**: Malicious test files can impersonate any user/role
-   - **Recommendation**: Add config option to restrict impersonation to approved lists
-   - **Priority**: 🔴 CRITICAL
-   - **Status**: ⚠️ **IN PROGRESS** — Documented in README.md (2026-08-31), enforcement pending
+   - **Recommendation**: Document security implications and rely on code review
+   - **Priority**: 🟡 MEDIUM (originally CRITICAL)
+   - **Status**: 🗄️ **ARCHIVED** — Security implications documented in README.md (2026-08-31). Runtime enforcement deemed out of scope; users responsible for test file content review.
 
 2. **Service Principal Over-Permissioning** (A01: Broken Access Control)
    - **Issue**: No guidance on least-privilege role assignment
@@ -295,27 +295,12 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 6. ✅ Document RLS/OLS security implications in README
 
 ### Remaining Work
-1. **Priority 1** — Implement RLS/OLS impersonation validation (config-based allowlist)
-2. **Priority 2** — Create GitHub Actions workflow example with federated auth
-3. **Priority 3** — Add certificate expiry warning in `pql-test auth status`
+1. **Priority 1** — Create GitHub Actions workflow example with federated auth
+2. **Priority 2** — Add certificate expiry warning in `pql-test auth status`
+
+### Archived (Out of Scope)
+1. 🗄️ RLS/OLS impersonation validation (config-based allowlist) — Deemed out of scope; security implications documented in README, users responsible for test file review
 
 **Review Date**: 2027-02-28 (6 months)
-| A04: Insecure Design | Federated cred guidance, certificate guidance | ⚠️ **Gaps** |
-| A05: Security Misconfiguration | Subject claim validation, role assignment docs | ⚠️ **Gaps** |
-| A06: Vulnerable Components | pip-audit clean (2026-08-31) | ✅ Mitigated |
-| A07: Identification/Auth Failures | Token validation implemented (2026-08-31) | ✅ Mitigated |
-| A08: Software/Data Integrity | MSAL cache integrity, PyPI package signing | ⚠️ **Assumed** |
-| A09: Logging/Monitoring Failures | No audit logging | ⚠️ **Gap** |
-| A10: SSRF | No user-controlled URLs in HTTP requests | ✅ Mitigated |
-
----
-
-## Next Steps
-
-1. **Priority 1** — Implement RLS/OLS impersonation validation (config-based allowlist)
-2. **Priority 2** — Add audit logging for authentication attempts
-3. **Priority 3** — Document least-privilege SPN setup and certificate protection
-4. **Priority 4** — Add security best practices section to CONTRIBUTING.md
-5. **Priority 5** — Create GitHub Actions workflow example with federated auth
 
 **Review Date**: 2027-02-28 (6 months)
