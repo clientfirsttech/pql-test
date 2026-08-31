@@ -21,6 +21,10 @@ venv/
 # pytest
 .pytest_cache/
 
+# promptfoo eval runtime artifacts
+tests/promptfoo/results.json
+tests/promptfoo/.promptfoo/
+
 # pql-test config
 .pql-test/
 **/cache.abf

@@ -1,0 +1,27 @@
+# Mode B LLM evaluations for the retrieve-test skill.
+
+- description: Fetch a suite by name
+  vars:
+    skill: retrieve-test
+    task: Show the definition of the Calcs.DEV.Tests suite in the SampleModel.
+  assert:
+    - type: contains
+      value: pql-test retrieve-test
+    - type: icontains
+      value: Calcs.DEV.Tests
+
+- description: Include the full DAX source
+  vars:
+    skill: retrieve-test
+    task: Show the Calcs.DEV.Tests suite and include the full DAX source code in the output.
+  assert:
+    - type: contains
+      value: --verbose
+
+- description: Human-readable output for terminal viewing
+  vars:
+    skill: retrieve-test
+    task: Fetch the DataQuality.PROD.Tests suite in human-readable format so I can eyeball it.
+  assert:
+    - type: contains
+      value: --human

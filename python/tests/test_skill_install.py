@@ -64,12 +64,15 @@ def test_skill_install_windsurf_creates_windsurf_directory(runner, temp_workspac
 
 def test_skill_install_adds_marker_comment(runner, temp_workspace):
     """Given installed skill files, should contain marker comment with version."""
+    from importlib.metadata import version as _pkg_version
+
     with runner.isolated_filesystem(temp_dir=temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
         skill_file = Path('.github/skills/pql-test/run-tests/SKILL.md')
         content = skill_file.read_text()
-        assert '<!-- Installed by pql-test skill v0.1.13 -->' in content
+        marker = f'<!-- Installed by pql-test skill v{_pkg_version("pql-test")} -->'
+        assert marker in content
 
 
 def test_skill_install_dry_run_reports_changes_without_writing(runner, temp_workspace):
@@ -159,14 +162,15 @@ def test_skill_install_all_installs_to_all_harnesses(runner, temp_workspace):
 
 def test_skill_show_detects_version_mismatch(runner, temp_workspace):
     """Given installed skill with different version, should report version mismatch."""
+    from importlib.metadata import version as _pkg_version
+
     with runner.isolated_filesystem(temp_dir=temp_workspace):
-        # Install with current version
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
-        # Manually modify version in marker
         skill_file = Path('.github/skills/pql-test/run-tests/SKILL.md')
         content = skill_file.read_text()
-        modified = content.replace('v0.1.13', 'v0.1.0')
+        current = f'v{_pkg_version("pql-test")}'
+        modified = content.replace(current, 'v0.1.0')
         skill_file.write_text(modified)
         
         result = runner.invoke(cli, ['skill', '--show'])

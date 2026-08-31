@@ -1,0 +1,20 @@
+# Mode B LLM evaluations for the check-prereqs skill.
+
+- description: Basic prerequisites verification
+  vars:
+    skill: check-prereqs
+    task: How do I verify that pql-test is set up correctly on my machine?
+  assert:
+    - type: contains
+      value: pql-test check-prereqs
+
+- description: What gets checked (llm-graded)
+  vars:
+    skill: check-prereqs
+    task: What exactly does pql-test check-prereqs verify?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must mention the four things check-prereqs verifies:
+        Python >= 3.9, pyadomd (ADOMD.NET), msal, and psutil. It should also
+        note that psutil is what enables local/<model_name> discovery.

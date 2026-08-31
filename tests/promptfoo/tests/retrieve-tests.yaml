@@ -1,0 +1,45 @@
+# Mode B LLM evaluations for the retrieve-tests skill.
+
+- description: List all suites from a filesystem path
+  vars:
+    skill: retrieve-tests
+    task: List every DAX test suite in the SampleModel PBIP project at ./examples/SampleModel.
+  assert:
+    - type: contains
+      value: pql-test retrieve-tests
+
+- description: JSON output for scripting
+  vars:
+    skill: retrieve-tests
+    task: I want to pipe the list of test suites into jq. What format does retrieve-tests output by default?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must state that pql-test retrieve-tests returns JSON by default,
+        so no additional flag is needed for piping into jq. The response should NOT
+        require adding `--json` or similar (that flag does not exist — `--human` is
+        the opt-in for text output).
+
+- description: Filter to a single environment
+  vars:
+    skill: retrieve-tests
+    task: Only list test suites tagged with the PROD environment.
+  assert:
+    - type: regex
+      value: --env\s+PROD
+
+- description: Human-readable output
+  vars:
+    skill: retrieve-tests
+    task: List test suites in a human-readable format so I can eyeball them in my terminal.
+  assert:
+    - type: contains
+      value: --human
+
+- description: Local Desktop model by name
+  vars:
+    skill: retrieve-tests
+    task: List DAX test suites from a model called RLS_Model that is open in my local Power BI Desktop.
+  assert:
+    - type: icontains
+      value: local/RLS_Model

@@ -455,6 +455,44 @@ version: 0.1.13
 - ✅ All source skills are packaged
 - ✅ `pyproject.toml` includes `skills/**/*.md` in package-data
 
+`test_skill_content.py` enforces skill-to-CLI parity:
+- ✅ Every long-form Click flag on each command appears in the matching `SKILL.md`
+- ✅ All MODEL_PATH formats (filesystem, `local/<name>`, `<workspace>.Workspace/<model>.SemanticModel`) are documented
+- ✅ SudoLang `Interface` and `Constraints` blocks contain required fields
+- ✅ Exit codes, env vars, and log-format values are documented
+- ✅ No skill references removed flags (e.g. `--local`) or non-existent commands
+
+**When you add a CLI flag**, `test_skill_content.py` will fail until the corresponding `SKILL.md` mentions the new flag. Update the skill and re-run:
+
+```bash
+cd python
+pytest tests/test_skill_content.py -v
+```
+
+### LLM-Graded Skill Evaluation (Mode B)
+
+`tests/promptfoo/` contains realistic LLM tests that feed each `SKILL.md` to Claude Sonnet 4 via GitHub Models and assert the model produces correct `pql-test` commands. This catches skills that are technically complete but ambiguous enough to mislead the LLM.
+
+**Run locally** (requires `GITHUB_TOKEN` with `models: read`):
+
+```powershell
+cd tests/promptfoo
+$env:GITHUB_TOKEN = "ghp_..."
+python run_eval.py
+```
+
+**Dry-run** (validate test structure, no API calls):
+
+```powershell
+python run_eval.py --dry-run
+```
+
+**Without `GITHUB_TOKEN`**: the runner warns and exits 0 — never blocks local dev.
+
+**CI**: `.github/workflows/promptfoo-eval.yml` runs on every push touching `skills/**` or `tests/promptfoo/**`. Results are uploaded as the `eval-results` artifact.
+
+See [tests/promptfoo/README.md](tests/promptfoo/README.md) for how to add new test cases.
+
 ### SudoLang Behavioral Contracts
 
 Complex skills like `run-tests` use SudoLang syntax for behavioral contracts:

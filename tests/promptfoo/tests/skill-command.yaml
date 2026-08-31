@@ -1,0 +1,37 @@
+# Mode B LLM evaluations for the skill command itself.
+# The skill command does not have a dedicated SKILL.md, so these tests use
+# the run-tests skill as context to see whether the LLM knows about the
+# `pql-test skill` command from the broader skill ecosystem. If a dedicated
+# skill/SKILL.md is added later, switch the `skill` var to `skill`.
+
+- description: Install skills to Copilot
+  vars:
+    skill: run-tests
+    task: I want to install the pql-test skill files so GitHub Copilot in my repo knows how to use pql-test. What command do I run?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should invoke `pql-test skill --install copilot` (or similar),
+        which installs the skill markdown to .github/copilot-instructions.md.
+        It should NOT invent unrelated flags or point to a manual copy step.
+
+- description: Check which harnesses have the skills installed
+  vars:
+    skill: run-tests
+    task: How do I check which AI assistant harnesses currently have the pql-test skills installed in my project?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should mention `pql-test skill --show` (or refer to it as
+        the way to display installation status across supported harnesses).
+
+- description: Install to every supported harness at once
+  vars:
+    skill: run-tests
+    task: I want to install pql-test skills to every AI assistant my team uses (Claude, Copilot, Cursor, and Windsurf). What is the fastest way?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should mention `pql-test skill --all` (or --install for
+        each harness) as the way to install to all four supported harnesses:
+        claude, copilot, cursor, windsurf.

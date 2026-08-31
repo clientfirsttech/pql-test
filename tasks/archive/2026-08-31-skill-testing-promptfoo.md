@@ -1,6 +1,6 @@
 # Skill Testing with Promptfoo Epic
 
-**Status**: � IN-PROGRESS
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Every pql-test skill is validated by two complementary layers — deterministic pytest content assertions (fast, always-on gate) and LLM-graded promptfoo evaluations (realistic behavior check) — so skill drift, missing flags, and hallucinated commands are caught before shipping.
 
 ## Overview

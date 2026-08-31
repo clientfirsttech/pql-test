@@ -38,12 +38,14 @@ def test_skill_print_single_skill(runner):
 
 def test_skill_print_with_json_format(runner):
     """Given pql-test skill run-tests --format json, should output JSON."""
+    from importlib.metadata import version as _pkg_version
+
     result = runner.invoke(cli, ['skill', 'run-tests', '--format', 'json'])
     
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data['name'] == 'run-tests'
-    assert data['version'] == '0.1.13'
+    assert data['version'] == _pkg_version('pql-test')
     assert 'content' in data
 
 
@@ -70,7 +72,9 @@ def test_skill_nonexistent_fails(runner):
 
 def test_skill_version_flag(runner):
     """Given pql-test skill --version, should print package version."""
+    from importlib.metadata import version as _pkg_version
+
     result = runner.invoke(cli, ['skill', '--version'])
     
     assert result.exit_code == 0
-    assert '0.1.13' in result.output
+    assert _pkg_version('pql-test') in result.output
