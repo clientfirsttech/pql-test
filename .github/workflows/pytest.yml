@@ -98,7 +98,10 @@ jobs:
           }
 
       # ---------------------------------------------------------------------
-      # Run pytest.
+      # Run pytest with coverage.
+      #
+      # Coverage configuration is in pyproject.toml ([tool.coverage.*]).
+      # fail_under = 80 means the job will fail if coverage drops below 80%.
       #
       # PQL_* env vars are exposed so live tests (TestRlsModel and
       # test_live_service.py) can connect with the service principal.
@@ -116,11 +119,11 @@ jobs:
       # dataset-name derivation runs instead — matching the production
       # CI workflow's matrix-style behavior.
       # ---------------------------------------------------------------------
-      - name: Run pytest
+      - name: Run pytest with coverage
         shell: bash
         working-directory: python
         run: |
-          pytest tests/ -v --tb=short
+          pytest tests/ -v --tb=short --cov --cov-report=term-missing --cov-report=json --cov-report=html
         env:
           PQL_TENANT_ID:      ${{ secrets.PQL_TENANT_ID }}
           PQL_WORKSPACE_ID:   ${{ vars.PQL_WORKSPACE_ID }}
@@ -130,3 +133,55 @@ jobs:
           PQL_DATASET_ID_RLS: ${{ secrets.PQL_DATASET_ID_RLS }}
           PQL_DATASET_ID_OLS: ${{ secrets.PQL_DATASET_ID_OLS }}
           PQL_ENVIRONMENT:    ${{ secrets.PQL_ENVIRONMENT || 'Public' }}
+
+      # ---------------------------------------------------------------------
+      # Upload coverage reports as artifacts.
+      #
+      # The coverage.json file is used to extract the coverage percentage
+      # for the badge. The htmlcov/ directory contains a browseable HTML
+      # report that can be downloaded from the workflow run artifacts.
+      # ---------------------------------------------------------------------
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()  # Upload even if tests fail
+        with:
+          name: coverage-reports
+          path: |
+            python/coverage.json
+            python/htmlcov/
+          retention-days: 30
+
+      # ---------------------------------------------------------------------
+      # Extract coverage percentage from coverage.json and display it.
+      # This makes the coverage % visible in the workflow summary.
+      # ---------------------------------------------------------------------
+      - name: Display coverage percentage
+        if: always()
+        shell: python
+        working-directory: python
+        run: |
+          import json
+          import os
+          
+          try:
+              with open('coverage.json', 'r') as f:
+                  data = json.load(f)
+              
+              total_coverage = data['totals']['percent_covered']
+              
+              print(f"✅ Test Coverage: {total_coverage:.1f}%")
+              
+              # Write to GitHub step summary
+              summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+              if summary_file:
+                  with open(summary_file, 'a') as f:
+                      f.write(f"## Test Coverage\n\n")
+                      f.write(f"**{total_coverage:.1f}%** of statements covered\n\n")
+                      if total_coverage >= 80:
+                          f.write(f"✅ Coverage meets threshold (≥80%)\n")
+                      else:
+                          f.write(f"⚠️ Coverage below threshold (need ≥80%)\n")
+          except FileNotFoundError:
+              print("⚠️ coverage.json not found - tests may have failed before coverage report generation")
+          except Exception as e:
+              print(f"❌ Error reading coverage data: {e}")

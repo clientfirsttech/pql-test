@@ -1,5 +1,9 @@
 # pql-test — DAX Test Runner for PBIP Models
 
+[![pytest](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml)
+![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
+[![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
+
 `pql-test` is a command-line tool bundled with the Power Query Lint VS Code
 extension. It discovers and executes DAX unit-test suites stored inside a
 **Power BI Project (PBIP)** semantic model, mirroring the

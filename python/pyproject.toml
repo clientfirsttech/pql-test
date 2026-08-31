@@ -77,3 +77,22 @@ markers = [
 [tool.coverage.run]
 source = ["pql_test"]
 omit = ["tests/*"]
+
+[tool.coverage.report]
+# Fail if overall coverage drops below 80%
+fail_under = 80
+# Show lines that are not covered
+show_missing = true
+# Skip fully covered files from report
+skip_covered = false
+# Exclude specific patterns from coverage
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
