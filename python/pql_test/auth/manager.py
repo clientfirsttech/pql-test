@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,6 +20,12 @@ from pql_test.auth.exceptions import TokenAcquisitionError
 from pql_test.auth.factory import CredentialFactory
 from pql_test.auth.models import AuthStatus, CredentialConfig
 from pql_test.auth.store import CredentialStore
+
+
+# Configure audit logger for authentication events
+# Addresses OWASP A09 (Security Logging and Monitoring Failures)
+_audit_logger = logging.getLogger("pql_test.auth.audit")
+_audit_logger.setLevel(logging.INFO)
 
 
 def _decode_jwt_expiry(token: str) -> Optional[datetime]:
@@ -100,6 +107,15 @@ class AuthenticationManager:
             CredentialStorageError: If credential cannot be stored
         """
         self._store.save(config)
+        
+        # Audit log: credential saved (OWASP A09: Security Logging)
+        _audit_logger.info(
+            "Credential saved: method=%s, tenant_id=%s, client_id=%s, account=%s",
+            config.method.value if config.method else "unknown",
+            config.tenant_id or "N/A",
+            config.client_id or "N/A",
+            config.account_name or "N/A",
+        )
 
     def get_credential(self) -> Optional[TokenCredential]:
         """
@@ -134,12 +150,26 @@ class AuthenticationManager:
         """
         credential = self.get_credential()
         if credential is None:
+            _audit_logger.warning("Token acquisition failed: No credential stored")
             return None
 
         try:
             token_result = credential.get_token(scope)
+            
+            # Audit log: token acquired successfully
+            _audit_logger.info(
+                "Access token acquired: scope=%s",
+                scope,
+            )
+            
             return token_result.token
         except Exception as e:
+            # Audit log: token acquisition failed
+            _audit_logger.error(
+                "Token acquisition failed: scope=%s, error=%s",
+                scope,
+                str(e),
+            )
             raise TokenAcquisitionError(
                 f"Failed to acquire access token: {e}"
             ) from e
@@ -151,7 +181,20 @@ class AuthenticationManager:
         Raises:
             CredentialStorageError: If credential cannot be cleared
         """
+        # Get config before deleting for audit log
+        config = self._store.load()
+        
         self._store.delete()
+        
+        # Audit log: credential cleared
+        if config:
+            _audit_logger.info(
+                "Credential cleared: method=%s, account=%s",
+                config.method.value if config.method else "unknown",
+                config.account_name or "N/A",
+            )
+        else:
+            _audit_logger.info("Credential cleared: No credential was stored")
 
     def get_status(self) -> AuthStatus:
         """
