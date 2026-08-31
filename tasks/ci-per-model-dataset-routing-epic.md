@@ -30,3 +30,26 @@ Update the workflow so each matrix model uses the dataset GUID that corresponds 
 **Requirements**:
 - Given `ci.yml` calls the reusable run-tests-remote workflow, should forward `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` alongside the existing `PQL_DATASET_ID`
 - Given the reusable workflow declares secrets, should mark the per-model dataset secrets as required so a misconfigured repo fails at the `workflow_call` boundary rather than at runtime
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- Matrix routing logic is clear and maintainable
+- Failure modes (unrecognized model) are handled explicitly
+- CI workflow changes preserve existing functionality
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- All existing tests continue to pass
+- CI workflow matrix routes to correct datasets
+
+✅ **Documentation**: 
+- .github/workflows/run-tests-remote.yml includes inline comments explaining routing logic
+- README.md documents per-model dataset requirements
+- CONTRIBUTING.md updated with secret configuration guidance

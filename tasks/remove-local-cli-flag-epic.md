@@ -22,3 +22,28 @@ Both end up at the same Analysis Services server on the local machine. The `loca
 - Given a user runs `pql-test run-tests --help` or `pql-test retrieve-tests --help`, should not list `--local` and should describe `local/<model_name>` as the only documented way to target a local instance
 - Given a user runs `pql-test doctor`, should not mention `--local` in the psutil requirement string
 - Given documentation (`README.md`, `skills/run-tests/SKILL.md`, `skills/check-prereqs/SKILL.md`), should describe `local/<name>` exclusively — no `--local` references anywhere
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- `--local` flag removed cleanly with no orphaned code
+- `local/<model_name>` syntax remains fully functional
+- Help text is clear and unambiguous
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- All `local/<model_name>` scenarios have tests
+- Tests verify `--local` is rejected
+- All existing tests continue to pass
+
+✅ **Documentation**: 
+- README.md uses `local/<name>` exclusively
+- CLI help text updated
+- All skill files updated (run-tests, retrieve-tests, check-prereqs)
+- UPGRADING.md documents removal of `--local` flag

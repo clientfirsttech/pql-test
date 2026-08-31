@@ -32,3 +32,27 @@ The connection string builder is the contract between the runner and ADOMD — b
 - Given a connection with `access_token` and `effective_user_name`, the produced string contains both `Password=` and `EffectiveUserName=`
 - Given a connection with SPN credentials and `roles`, the produced string contains both `User ID=app:` and `Roles=`
 - Given a local connection (no token, no SPN, no impersonation), the produced string contains neither `Roles=` nor `EffectiveUserName=`
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- Connection string builder composes auth and impersonation independently
+- No conditional logic drops impersonation parameters
+- Code is clear and maintainable
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- All auth+impersonation combinations have dedicated unit tests
+- CI OLS/RLS tests pass
+- All existing tests continue to pass
+
+✅ **Documentation**: 
+- Inline code comments explain connection string composition
+- README.md documents OLS/RLS impersonation behavior
+- CONTRIBUTING.md includes connection string testing guidance
