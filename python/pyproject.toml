@@ -64,6 +64,9 @@ dev = [
 [tool.setuptools]
 packages = ["pql_test", "pql_test.auth"]
 
+[tool.setuptools.package-data]
+pql_test = ["skills/**/*.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

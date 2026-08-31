@@ -1400,6 +1400,75 @@ def cmd_auth_status() -> None:
 
 
 # ---------------------------------------------------------------------------
+# skill
+# ---------------------------------------------------------------------------
+
+@cli.command("skill")
+@click.argument("name", required=False)
+@click.option("--format", type=click.Choice(['text', 'json']), default='text', help="Output format (text or json)")
+@click.option("--list", is_flag=True, help="List skill names only (one per line)")
+@click.option("--version", is_flag=True, help="Print package version")
+def cmd_skill(name: str | None, format: str, list: bool, version: bool) -> None:
+    """Manage pql-test skill files.
+    
+    With no arguments, lists all available skills with descriptions.
+    With a NAME argument, prints that skill's content.
+    """
+    from pql_test.skills_resolver import list_available_skills, resolve_skill_dir
+    
+    if version:
+        click.echo(_VERSION)
+        return
+    
+    if list:
+        skills = list_available_skills()
+        for skill in skills:
+            click.echo(skill['name'])
+        return
+    
+    if name is None:
+        # List all skills with descriptions
+        skills = list_available_skills()
+        if not skills:
+            click.echo("No skills found.")
+            return
+        
+        click.echo("Available pql-test skills:\n")
+        for skill in skills:
+            click.echo(f"  {skill['name']:<20} {skill['description']}")
+            if skill['source'] == 'local':
+                click.echo(f"{' ' * 22}(local override)")
+        return
+    
+    # Print specific skill
+    try:
+        skill_dir = resolve_skill_dir(name)
+        skill_md = skill_dir / "SKILL.md"
+        content = skill_md.read_text(encoding='utf-8')
+        
+        if format == 'json':
+            # Extract frontmatter
+            import re
+            frontmatter_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+            metadata = {'name': name, 'version': 'unknown'}
+            if frontmatter_match:
+                frontmatter = frontmatter_match.group(1)
+                ver_match = re.search(r'^version:\s*(.+)$', frontmatter, re.MULTILINE)
+                if ver_match:
+                    metadata['version'] = ver_match.group(1).strip()
+            
+            metadata['content'] = content
+            metadata['source_path'] = str(skill_dir)
+            click.echo(json.dumps(metadata, indent=2))
+        else:
+            click.echo(content)
+            
+    except FileNotFoundError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 

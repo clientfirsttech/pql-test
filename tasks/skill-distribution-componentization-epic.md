@@ -1,6 +1,6 @@
 # pql-test Skill Distribution & Componentization Epic
 
-**Status**: 📋 PLANNED
+**Status**: � IN-PROGRESS
 **Goal**: pql-test ships its own versioned, componentized skills and installs them to whatever harness is running, so skill files can never drift from the installed CLI version, and agents only load the reference sections they need.
 
 ## Overview
