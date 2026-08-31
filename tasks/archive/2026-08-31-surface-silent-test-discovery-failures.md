@@ -1,6 +1,6 @@
 # Surface Silent Test Discovery Failures Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-27)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Eliminate two classes of confusing "0 passed, 0 failed, 0 total" / wrong-results output produced by silent failure paths in the discovery layer:
 
 1. `_retrieve_tests_via_dax` silently swallows every exception from the discovery DAX calls and returns `None`, hiding auth/permission/connectivity errors from the user — so a no-access bearer renders identically to an empty model.

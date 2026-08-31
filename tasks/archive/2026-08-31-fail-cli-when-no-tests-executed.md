@@ -1,6 +1,6 @@
 # Fail CLI When No Tests Executed Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-23)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: `pql-test run-tests` exits non-zero when tests were discovered but none actually ran (all skipped due to a missing/broken connection), so CI catches misconfigured matrix entries instead of reporting them as passing
 
 ## Overview

@@ -1,6 +1,6 @@
 # Remove `--local` CLI Flag Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-26)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Drop the `--local` boolean option from `pql-test run-tests` and `pql-test retrieve-tests`. The `local/<model_name>` model-path syntax already provides local Power BI Desktop discovery — `--local` is redundant and offers a strictly worse UX (it requires both a filesystem path AND the flag, while `local/<name>` needs neither).
 
 ## Overview

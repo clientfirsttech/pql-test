@@ -1,6 +1,6 @@
 # XMLA Connection String Impersonation Composition Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-23)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Ensure XMLA impersonation parameters (`EffectiveUserName`, `Roles`) are appended to the connection string regardless of which authentication mechanism is in use, so OLS/RLS impersonation actually reaches Analysis Services in CI
 
 ## Overview

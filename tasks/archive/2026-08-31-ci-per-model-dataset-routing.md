@@ -1,6 +1,6 @@
 # CI Per-Model Dataset Routing Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-23)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Route each matrix entry in the remote-tests CI workflow to its own dataset GUID so `PQL.Assert.RetrieveTestsV2()` returns the tests defined in *that specific model*
 
 ## Overview

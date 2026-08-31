@@ -1,6 +1,6 @@
 # Fabric-Style Model Path Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-27)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Make the canonical service-path syntax `<workspace>.Workspace/<model>.SemanticModel` so the CLI surface matches Fabric's filesystem-layout convention (workspaces are `.Workspace` directories, semantic models are `.SemanticModel` directories). Keep the legacy `<workspace>.<model>` dot notation working with a deprecation warning so existing pipelines do not break the day users upgrade.
 
 ## Overview

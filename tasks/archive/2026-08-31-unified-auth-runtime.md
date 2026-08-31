@@ -1,6 +1,6 @@
 # Unified Auth Runtime Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-26)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: `pql-test run-tests` and `retrieve-tests` consume whichever authentication method the user chose with `pql-test auth login` — interactive, service principal (secret/cert/federated), or managed identity — so the runtime identity matches the stored choice. The actual XMLA query still runs through ADOMD.NET / pyadomd; only the bearer-token source changes.
 
 ## Overview

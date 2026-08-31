@@ -1,6 +1,6 @@
 # README Drift Cleanup Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-26)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Close every gap between what `README.md` documents and what the CLI actually does, so users running through the docs do not hit silent surprises (especially around auto-detection, exit codes, and `.env` file placement).
 
 ## Overview
