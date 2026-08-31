@@ -21,12 +21,12 @@ from pql_test.runner.model_path import _find_pbip_file
 from pql_test.runner.models import LocalPbiInstance, ResolvedXmlaConnection
 
 __all__ = [
+    "_detect_local_pbi_desktop_port",
+    "_find_pbi_ancestor_pid",
+    "_get_catalog_from_local_port",
+    "_get_pbi_process_window_titles",
     "get_pbi_files_opened",
     "resolve_local_xmla_connection",
-    "_detect_local_pbi_desktop_port",
-    "_get_pbi_process_window_titles",
-    "_get_catalog_from_local_port",
-    "_find_pbi_ancestor_pid",
 ]
 
 # Runtime import handling for optional dependencies
@@ -123,7 +123,7 @@ def _get_catalog_from_local_port(port: int) -> Optional[str]:
 
 
 def _find_pbi_ancestor_pid(
-    proc: "_psutil.Process",  # type: ignore[name-defined]
+    proc: _psutil.Process,  # type: ignore[name-defined]
     pbi_pids: set,
     max_depth: int = 6,
 ) -> Optional[int]:

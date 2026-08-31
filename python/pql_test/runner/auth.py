@@ -15,12 +15,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import TYPE_CHECKING
 
 from pql_test.runner.models import Environment, XmlaConnectionOptions
-
-if TYPE_CHECKING:
-    from pql_test.auth import AuthenticationManager, AuthMethod
 
 __all__ = [
     "_resolve_authentication_with_stored_credentials",

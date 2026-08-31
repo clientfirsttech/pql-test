@@ -21,15 +21,15 @@ from enum import Enum
 from typing import ClassVar, Optional
 
 __all__ = [
-    "Environment",
     "Endpoints",
+    "Environment",
+    "LocalPbiInstance",
     "ModelIdentifier",
     "PqlTest",
+    "ResolvedXmlaConnection",
     "TestResult",
     "TestSuite",
     "XmlaConnectionOptions",
-    "ResolvedXmlaConnection",
-    "LocalPbiInstance",
     "get_api_endpoints",
 ]
 

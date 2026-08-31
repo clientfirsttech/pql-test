@@ -32,51 +32,11 @@ monolithic runner.py.
 
 from __future__ import annotations
 
-# During refactoring: import from appropriate submodules as they're created
-# This maintains backward compatibility while we migrate code module-by-module
-
-# Import data models from models.py
-from pql_test.runner.models import (
-    Environment,
-    Endpoints,
-    ModelIdentifier,
-    PqlTest,
-    TestResult,
-    TestSuite,
-    XmlaConnectionOptions,
-    ResolvedXmlaConnection,
-    LocalPbiInstance,
-    get_api_endpoints,
-)
-
 # Import ADOMD.NET loading from adomd.py
 from pql_test.runner.adomd import (
     HAS_PYADOMD,
-    get_adomd_connection_class,
     _discover_adomd_search_dirs,
-)
-
-# Import model path parsing from model_path.py
-from pql_test.runner.model_path import (
-    parse_model_identifier,
-    _find_semantic_model_dir,
-    _find_pbip_file,
-    _collect_dax_test_files,
-    _parse_dax_test_file,
-    _discover_local_test_names,
-    _has_local_ownership_sources,
-)
-
-# Import local PBI detection from local_pbi.py
-from pql_test.runner.local_pbi import (
-    HAS_PSUTIL,  # Module-level constant for psutil availability
-    get_pbi_files_opened,
-    resolve_local_xmla_connection,
-    _detect_local_pbi_desktop_port,
-    _get_pbi_process_window_titles,
-    _get_catalog_from_local_port,
-    _find_pbi_ancestor_pid,
-    _psutil,  # For test mocking compatibility
+    get_adomd_connection_class,
 )
 
 # Import auth bridge from auth.py
@@ -84,35 +44,12 @@ from pql_test.runner.auth import (
     _resolve_authentication_with_stored_credentials,
 )
 
-# Import Power BI REST helpers from pbi_rest.py
-from pql_test.runner.pbi_rest import (
-    _resolve_pbi_workspace_and_dataset_names,
-    _resolve_pbi_workspace_name,
-    _verify_dataset_exists_in_workspace,
-    _acquire_service_principal_token,
-)
-
-# Import connection resolution from resolver.py
-from pql_test.runner.resolver import (
-    resolve_xmla_connection,
-    resolve_service_xmla_connection_by_name,
-    resolve_local_xmla_connection_by_name,
-    _resolve_service_xmla_connection,
-)
-
-# Import XMLA query execution from xmla.py
-from pql_test.runner.xmla import (
-    _build_connection_string,
-    _get_col,
-    _execute_dax_query,
-)
-
 # Import test discovery from discovery.py
 from pql_test.runner.discovery import (
-    _test_matches_environment,
     _retrieve_tests_via_dax,
-    retrieve_tests,
+    _test_matches_environment,
     retrieve_test_by_name,
+    retrieve_tests,
 )
 
 # Import test execution from execution.py
@@ -120,6 +57,68 @@ from pql_test.runner.execution import (
     run_test,
     run_tests,
     run_tests_from_model,
+)
+
+# Import local PBI detection from local_pbi.py
+from pql_test.runner.local_pbi import (
+    HAS_PSUTIL,  # Module-level constant for psutil availability
+    _detect_local_pbi_desktop_port,
+    _find_pbi_ancestor_pid,
+    _get_catalog_from_local_port,
+    _get_pbi_process_window_titles,
+    _psutil,  # For test mocking compatibility
+    get_pbi_files_opened,
+    resolve_local_xmla_connection,
+)
+
+# Import model path parsing from model_path.py
+from pql_test.runner.model_path import (
+    _collect_dax_test_files,
+    _discover_local_test_names,
+    _find_pbip_file,
+    _find_semantic_model_dir,
+    _has_local_ownership_sources,
+    _parse_dax_test_file,
+    parse_model_identifier,
+)
+
+# During refactoring: import from appropriate submodules as they're created
+# This maintains backward compatibility while we migrate code module-by-module
+# Import data models from models.py
+from pql_test.runner.models import (
+    Endpoints,
+    Environment,
+    LocalPbiInstance,
+    ModelIdentifier,
+    PqlTest,
+    ResolvedXmlaConnection,
+    TestResult,
+    TestSuite,
+    XmlaConnectionOptions,
+    get_api_endpoints,
+)
+
+# Import Power BI REST helpers from pbi_rest.py
+from pql_test.runner.pbi_rest import (
+    _acquire_service_principal_token,
+    _resolve_pbi_workspace_and_dataset_names,
+    _resolve_pbi_workspace_name,
+    _verify_dataset_exists_in_workspace,
+)
+
+# Import connection resolution from resolver.py
+from pql_test.runner.resolver import (
+    _resolve_service_xmla_connection,
+    resolve_local_xmla_connection_by_name,
+    resolve_service_xmla_connection_by_name,
+    resolve_xmla_connection,
+)
+
+# Import XMLA query execution from xmla.py
+from pql_test.runner.xmla import (
+    _build_connection_string,
+    _execute_dax_query,
+    _get_col,
 )
 
 # HAS_MSAL is needed by external modules

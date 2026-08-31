@@ -1033,6 +1033,162 @@ ssss
 
 ---
 
+### skill
+
+Manage AI assistant skill files packaged with pql-test.
+
+```bash
+pql-test skill [name] [--list] [--format {markdown,json}] [--version]
+                      [--install <harness>] [--all] [--show] [--uninstall] [--dry-run]
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+|---|---|---|
+| `name` | ❌ | Skill name to print (check-prereqs, retrieve-test, retrieve-tests, run-tests) |
+| `--list`, `-l` | ❌ | List all available skills (names only) |
+| `--format {markdown,json}` | ❌ | Output format (default: markdown) |
+| `--version` | ❌ | Show installed skill version |
+| `--install <harness>` | ❌ | Install skills to an AI harness: `claude`, `copilot`, `cursor`, `windsurf` |
+| `--all` | ❌ | Install to all harnesses (claude, copilot, cursor, windsurf) |
+| `--show` | ❌ | Show installation status and version for all harnesses |
+| `--uninstall` | ❌ | Remove pql-test skills from all harnesses |
+| `--dry-run` | ❌ | Preview changes without writing files (use with --install or --uninstall) |
+
+**List all available skills:**
+
+```bash
+pql-test skill --list
+```
+
+```
+check-prereqs
+retrieve-test
+retrieve-tests
+run-tests
+```
+
+**Print a specific skill:**
+
+```bash
+pql-test skill run-tests
+```
+
+This outputs the full skill documentation in markdown format, including:
+- YAML frontmatter (name, description, version)
+- Usage instructions
+- CLI flag reference
+- SudoLang behavioral contracts (Interface and Constraints blocks)
+
+**Print skill in JSON format:**
+
+```bash
+pql-test skill run-tests --format json
+```
+
+```json
+{
+  "name": "run-tests",
+  "description": "Execute DAX test suites via XMLA",
+  "version": "0.1.13",
+  "content": "---\nname: run-tests\n..."
+}
+```
+
+**Show skill version:**
+
+```bash
+pql-test skill --version
+```
+
+```
+pql-test skills version 0.1.13
+```
+
+**Install skills to AI assistant harnesses:**
+
+```bash
+# Install to GitHub Copilot (.github/copilot-instructions.md)
+pql-test skill --install copilot
+
+# Install to Anthropic Claude (.github/skills/pql-test/)
+pql-test skill --install claude
+
+# Install to Cursor (.cursor/skills/pql-test/)
+pql-test skill --install cursor
+
+# Install to Windsurf (.windsurf/skills/pql-test/)
+pql-test skill --install windsurf
+
+# Install to all harnesses at once
+pql-test skill --all
+```
+
+Each install adds a version marker for tracking:
+```markdown
+<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+```
+
+**Preview installation without writing files:**
+
+```bash
+pql-test skill --install copilot --dry-run
+```
+
+```
+Would update (10 changes):
+  • .github/copilot-instructions.md (CREATE)
+
+Run without --dry-run to apply changes.
+```
+
+**Show installation status:**
+
+```bash
+pql-test skill --show
+```
+
+```
+pql-test skill installation status:
+
+  Copilot:  ✅ v0.1.13 (.github/copilot-instructions.md)
+  Claude:   ✅ v0.1.13 (.github/skills/pql-test/)
+  Cursor:   ❌ Not installed
+  Windsurf: ❌ Not installed
+
+All installed harnesses are up to date.
+```
+
+If a harness has an outdated version, `--show` reports it:
+
+```
+  Copilot:  ⚠️  v0.1.12 (current: 0.1.13) — run pql-test skill --install copilot to update
+```
+
+**Uninstall skills from all harnesses:**
+
+```bash
+pql-test skill --uninstall
+```
+
+This removes all pql-test skill files with the version marker comment. Use `--dry-run` to preview changes first.
+
+**Harness target paths:**
+
+| Harness | Install Location |
+|---|---|
+| Copilot | `.github/copilot-instructions.md` |
+| Claude | `.github/skills/pql-test/` |
+| Cursor | `.cursor/skills/pql-test/` |
+| Windsurf | `.windsurf/skills/pql-test/` |
+
+**Skill content:**
+
+All skills are packaged in the wheel (`pql_test/skills/`) and installed from the package. Local overrides in `skills/` at the repository root take precedence during development.
+
+---
+
 ## Connection Options
 
 `pql-test` resolves an XMLA connection using the following priority order:

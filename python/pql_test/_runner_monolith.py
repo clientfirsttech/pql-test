@@ -38,7 +38,8 @@ import re
 import sys
 import time
 import urllib.request
-from dataclasses import dataclass, replace as _dc_replace
+from dataclasses import dataclass
+from dataclasses import replace as _dc_replace
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar, Optional
@@ -235,9 +236,9 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         file=sys.stderr,
     )
 
-    import tempfile  # noqa: PLC0415 — avoid the cost on the fast path
-    import urllib.request  # noqa: PLC0415
-    import zipfile  # noqa: PLC0415
+    import tempfile
+    import urllib.request
+    import zipfile
 
     tmp_path: Optional[str] = None
     try:
@@ -820,7 +821,7 @@ def _get_pbi_process_window_titles(
 
     Windows only; returns an empty dict on other platforms.
     """
-    import ctypes  # noqa: PLC0415
+    import ctypes
 
     titles: dict[int, str] = {}
     if not hasattr(ctypes, "windll"):
@@ -881,7 +882,7 @@ def _get_catalog_from_local_port(port: int) -> Optional[str]:
 
 
 def _find_pbi_ancestor_pid(
-    proc: "_psutil.Process",  # type: ignore[name-defined]
+    proc: _psutil.Process,  # type: ignore[name-defined]
     pbi_pids: set,
     max_depth: int = 6,
 ) -> Optional[int]:
@@ -1846,9 +1847,9 @@ def _test_matches_environment(test_name: str, environment: str) -> bool:
 
 
 def _retrieve_tests_via_dax(
-    connection: "ResolvedXmlaConnection",
+    connection: ResolvedXmlaConnection,
     environment: Optional[str] = None,
-) -> Optional[list["PqlTest"]]:
+) -> Optional[list[PqlTest]]:
     """
     Discover test functions from a live model using XMLA.
 
@@ -1947,7 +1948,7 @@ def _retrieve_tests_via_dax(
 
 def retrieve_tests(
     model_path: str,
-    connection: Optional["ResolvedXmlaConnection"] = None,
+    connection: Optional[ResolvedXmlaConnection] = None,
     environment: Optional[str] = None,
 ) -> list[PqlTest]:
     """
@@ -2049,7 +2050,7 @@ def retrieve_tests(
 def retrieve_test_by_name(
     model_path: str,
     test_name: str,
-    connection: Optional["ResolvedXmlaConnection"] = None,
+    connection: Optional[ResolvedXmlaConnection] = None,
     environment: Optional[str] = None,
 ) -> Optional[PqlTest]:
     """

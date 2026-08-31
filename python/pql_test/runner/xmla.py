@@ -9,19 +9,14 @@ This module provides low-level functions for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pql_test.runner.adomd import HAS_PYADOMD, get_adomd_connection_class
 from pql_test.runner.models import ResolvedXmlaConnection
 from pql_test.runner.pbi_rest import _acquire_service_principal_token
 
-if TYPE_CHECKING:
-    pass
-
 __all__ = [
     "_build_connection_string",
-    "_get_col",
     "_execute_dax_query",
+    "_get_col",
 ]
 
 

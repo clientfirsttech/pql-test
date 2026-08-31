@@ -395,6 +395,111 @@ and the optional `PQL_ENVIRONMENT`.
 
 ---
 
+## Skill Update Workflow
+
+Skills live in both **source** (`skills/`) and **packaged** (`python/pql_test/skills/`) locations. The CI pipeline validates that they stay in sync.
+
+### Directory Structure
+
+```
+pql-test/
+├── skills/                          ← source skills (maintained by contributors)
+│   ├── check-prereqs/SKILL.md
+│   ├── retrieve-test/SKILL.md
+│   ├── retrieve-tests/SKILL.md
+│   └── run-tests/SKILL.md
+└── python/pql_test/skills/          ← packaged skills (distributed in wheel)
+    ├── check-prereqs/SKILL.md
+    ├── retrieve-test/SKILL.md
+    ├── retrieve-tests/SKILL.md
+    └── run-tests/SKILL.md
+```
+
+### Required YAML Frontmatter
+
+Every `SKILL.md` file must begin with YAML frontmatter:
+
+```markdown
+---
+name: skill-name
+description: One-line description of what the skill does
+version: 0.1.13
+---
+
+# Skill content here...
+```
+
+**Required fields**:
+- `name` — Skill identifier (lowercase-kebab-case)
+- `description` — Brief summary for skill listing
+- `version` — Must match package version in `pyproject.toml`
+
+### Updating a Skill
+
+1. **Edit the source** file in `skills/<skill-name>/SKILL.md`
+2. **Copy to packaged location**: `python/pql_test/skills/<skill-name>/SKILL.md`
+3. **Ensure version matches** `pyproject.toml`
+4. **Run tests** to validate:
+   ```powershell
+   pytest tests/test_skill_packaging.py -v
+   ```
+5. **Commit both files together** — CI validates they match byte-for-byte
+
+### CI Validation
+
+`test_skill_packaging.py` enforces:
+- ✅ Source and packaged skills are identical
+- ✅ All skills have required frontmatter (name, description, version)
+- ✅ Version fields match `pyproject.toml`
+- ✅ `run-tests` skill has SudoLang contracts (Interface, Constraints)
+- ✅ All source skills are packaged
+- ✅ `pyproject.toml` includes `skills/**/*.md` in package-data
+
+### SudoLang Behavioral Contracts
+
+Complex skills like `run-tests` use SudoLang syntax for behavioral contracts:
+
+```markdown
+## Interface RunTests {
+  exit_code: 0 | 1,
+  output_format: "pytest-style" | "json",
+  log_annotations: null | "github" | "azuredevops"
+}
+
+## Constraints {
+  - MODEL_PATH resolution order: local/<name> → filesystem path → <workspace>/<model>
+  - Credentials: interactive > service principal > error
+  - Environment filtering: Match PQL_ENVIRONMENT or "default" suffix
+}
+```
+
+### Skill Componentization
+
+**Threshold**: Skills under 300 lines should remain single-file. Only componentize if a skill exceeds this limit.
+
+**Rationale**: Small skills are easier to install and maintain. Componentization adds complexity without benefit for short files.
+
+### Installing Skills to Harnesses
+
+Skills can be installed to any AI assistant harness:
+
+```bash
+pql-test skill --install claude       # .github/skills/pql-test/
+pql-test skill --install copilot      # .github/copilot-instructions.md
+pql-test skill --install cursor       # .cursor/skills/pql-test/
+pql-test skill --install windsurf     # .windsurf/skills/pql-test/
+pql-test skill --all                  # Install to all harnesses
+pql-test skill --show                 # Show install status
+pql-test skill --uninstall            # Remove from all harnesses
+```
+
+Each install adds a version marker comment for tracking:
+```markdown
+<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+```
+
+---
+
 ## Pull request checklist
 
 Before opening a PR:

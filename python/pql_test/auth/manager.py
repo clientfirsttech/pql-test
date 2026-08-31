@@ -21,7 +21,6 @@ from pql_test.auth.factory import CredentialFactory
 from pql_test.auth.models import AuthStatus, CredentialConfig
 from pql_test.auth.store import CredentialStore
 
-
 # Configure audit logger for authentication events
 # Addresses OWASP A09 (Security Logging and Monitoring Failures)
 _audit_logger = logging.getLogger("pql_test.auth.audit")

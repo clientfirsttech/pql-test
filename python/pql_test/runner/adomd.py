@@ -29,11 +29,11 @@ from typing import Optional
 
 __all__ = [
     "HAS_PYADOMD",
-    "get_adomd_connection_class",
-    "_discover_adomd_search_dirs",
     "_adomd_assemblies_present",
     "_adomd_auto_install_cache_dir",
     "_auto_install_adomd_from_nuget",
+    "_discover_adomd_search_dirs",
+    "get_adomd_connection_class",
 ]
 
 # Module-level constants
@@ -181,9 +181,9 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         file=sys.stderr,
     )
 
-    import tempfile  # noqa: PLC0415 — avoid the cost on the fast path
-    import urllib.request  # noqa: PLC0415
-    import zipfile  # noqa: PLC0415
+    import tempfile
+    import urllib.request
+    import zipfile
 
     tmp_path: Optional[str] = None
     try:

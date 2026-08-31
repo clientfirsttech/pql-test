@@ -9,16 +9,12 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 __all__ = [
+    "_acquire_service_principal_token",
     "_resolve_pbi_workspace_and_dataset_names",
     "_resolve_pbi_workspace_name",
     "_verify_dataset_exists_in_workspace",
-    "_acquire_service_principal_token",
 ]
 
 # Runtime import handling for optional dependencies

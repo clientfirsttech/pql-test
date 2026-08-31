@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import replace as _dc_replace
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pql_test.runner.discovery import retrieve_test_by_name, retrieve_tests
 from pql_test.runner.models import (

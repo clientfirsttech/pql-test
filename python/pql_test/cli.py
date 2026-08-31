@@ -74,6 +74,9 @@ if not os.environ.get("PQL_TEST_HERMETIC"):
     except ImportError:
         pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 import click
 
 from pql_test.runner import (
@@ -81,7 +84,6 @@ from pql_test.runner import (
     HAS_PSUTIL,
     HAS_PYADOMD,
     Environment,
-    ModelIdentifier,
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
@@ -95,7 +97,6 @@ from pql_test.runner import (
     run_tests_from_model,
 )
 
-from importlib.metadata import version as _pkg_version, PackageNotFoundError
 try:
     _VERSION = _pkg_version("pql-test")
 except PackageNotFoundError:
@@ -1640,9 +1641,8 @@ def _uninstall_skills(dry_run: bool) -> None:
                                     if not any(skill_dir.iterdir()):
                                         skill_dir.rmdir()
                 # Remove pql-test directory if empty
-                if harness_path.exists() and not any(harness_path.iterdir()):
-                    if not dry_run:
-                        harness_path.rmdir()
+                if harness_path.exists() and not any(harness_path.iterdir()) and not dry_run:
+                    harness_path.rmdir()
     
     if dry_run:
         click.echo(f"\nDry run summary: {removed_count} files would be removed")

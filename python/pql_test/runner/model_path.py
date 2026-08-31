@@ -20,13 +20,13 @@ from typing import Optional
 from pql_test.runner.models import ModelIdentifier, PqlTest
 
 __all__ = [
-    "parse_model_identifier",
-    "_find_semantic_model_dir",
-    "_find_pbip_file",
     "_collect_dax_test_files",
-    "_parse_dax_test_file",
     "_discover_local_test_names",
+    "_find_pbip_file",
+    "_find_semantic_model_dir",
     "_has_local_ownership_sources",
+    "_parse_dax_test_file",
+    "parse_model_identifier",
 ]
 
 

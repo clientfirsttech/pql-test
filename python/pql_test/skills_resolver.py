@@ -6,12 +6,11 @@ to packaged resources (pql_test/skills/).
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional
 import importlib.resources as pkg_resources
+from pathlib import Path
 
 
-def resolve_skill_dir(name: str, repo_root: Optional[Path] = None) -> Path:
+def resolve_skill_dir(name: str, repo_root: Path | None = None) -> Path:
     """Resolve the directory containing a skill's SKILL.md file.
     
     Args:
@@ -56,7 +55,7 @@ def resolve_skill_dir(name: str, repo_root: Optional[Path] = None) -> Path:
     )
 
 
-def list_available_skills(repo_root: Optional[Path] = None) -> list[dict[str, str]]:
+def list_available_skills(repo_root: Path | None = None) -> list[dict[str, str]]:
     """List all available skills from local override or package.
     
     Args:

@@ -11,7 +11,7 @@ This module provides functions to:
 from __future__ import annotations
 
 import sys
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from pql_test.runner.model_path import (
     _collect_dax_test_files,
@@ -31,10 +31,10 @@ else:
     _get_col = lambda *args: runner._get_col(*args)
 
 __all__ = [
-    "_test_matches_environment",
     "_retrieve_tests_via_dax",
-    "retrieve_tests",
+    "_test_matches_environment",
     "retrieve_test_by_name",
+    "retrieve_tests",
 ]
 
 

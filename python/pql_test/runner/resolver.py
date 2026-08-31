@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from pql_test.runner.auth import _resolve_authentication_with_stored_credentials
     from pql_test.runner.local_pbi import (
-        get_pbi_files_opened,
         _detect_local_pbi_desktop_port,
+        get_pbi_files_opened,
     )
     from pql_test.runner.pbi_rest import (
         _acquire_service_principal_token,
@@ -38,17 +38,16 @@ else:
 
 from pql_test.runner.model_path import parse_model_identifier
 from pql_test.runner.models import (
-    Environment,
     ResolvedXmlaConnection,
     XmlaConnectionOptions,
     get_api_endpoints,
 )
 
 __all__ = [
-    "resolve_xmla_connection",
-    "resolve_service_xmla_connection_by_name",
-    "resolve_local_xmla_connection_by_name",
     "_resolve_service_xmla_connection",
+    "resolve_local_xmla_connection_by_name",
+    "resolve_service_xmla_connection_by_name",
+    "resolve_xmla_connection",
 ]
 
 
