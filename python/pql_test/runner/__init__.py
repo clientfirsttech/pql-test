@@ -69,12 +69,14 @@ from pql_test.runner.model_path import (
 
 # Import local PBI detection from local_pbi.py
 from pql_test.runner.local_pbi import (
+    HAS_PSUTIL,  # Module-level constant for psutil availability
     get_pbi_files_opened,
     resolve_local_xmla_connection,
     _detect_local_pbi_desktop_port,
     _get_pbi_process_window_titles,
     _get_catalog_from_local_port,
     _find_pbi_ancestor_pid,
+    _psutil,  # For test mocking compatibility
 )
 
 # Import auth bridge from auth.py
@@ -120,7 +122,7 @@ from pql_test.runner.execution import (
     run_tests_from_model,
 )
 
-# HAS_MSAL and HAS_PSUTIL are needed by external modules
+# HAS_MSAL is needed by external modules
 HAS_MSAL = False
 try:
     import msal  # type: ignore[import-untyped]
@@ -128,12 +130,7 @@ try:
 except ImportError:
     pass
 
-HAS_PSUTIL = False
-try:
-    import psutil  # type: ignore[import-untyped]
-    HAS_PSUTIL = True
-except ImportError:
-    pass
+# HAS_PSUTIL is imported from local_pbi module above
 
 __all__ = [
     # Re-exported from models

@@ -1251,6 +1251,42 @@ if ($LASTEXITCODE -ne 0) {
 
 ---
 
+## Architecture
+
+The `pql-test` runner is organized as a modular Python package under `python/pql_test/runner/` with focused, single-responsibility modules:
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `__init__.py` | 150 | Public API re-exports for backward compatibility |
+| `models.py` | 204 | Pure data classes and enums (Environment, PqlTest, TestResult, etc.) |
+| `adomd.py` | 253 | ADOMD.NET assembly loading and NuGet auto-install |
+| `auth.py` | 159 | Authentication credential resolution bridge |
+| `pbi_rest.py` | 123 | Power BI REST API helpers (workspace/dataset resolution) |
+| `local_pbi.py` | 362 | Local Power BI Desktop process detection via psutil |
+| `model_path.py` | 216 | Model identifier parsing (filesystem, local/, Fabric paths) |
+| `resolver.py` | 271 | XMLA connection resolution coordination |
+| `xmla.py` | 117 | XMLA query execution via ADOMD.NET |
+| `discovery.py` | 248 | Test discovery (live XMLA + filesystem) |
+| `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
+
+**Total**: 2,298 lines across 11 modules (average 209 lines per module)
+
+All modules follow a 400-line soft budget (800-line hard budget) to keep code maintainable. Each module has minimal coupling to others, making the codebase easier to understand, test, and modify.
+
+The public API surface remains unchanged from the original monolithic design—all existing imports continue to work:
+
+```python
+from pql_test.runner import (
+    Environment,
+    PqlTest,
+    TestResult,
+    retrieve_tests,
+    run_tests_from_model,
+)
+```
+
+---
+
 ## Troubleshooting
 
 ### `pql-test` is not recognised
