@@ -16,6 +16,7 @@ Search Priority:
 3. Standalone ADOMD.NET (C:\\Program Files\\Microsoft.NET\\ADOMD.NET\\*)
 
 Environment Variables:
+- PQL_DEBUG=1 — Print ADOMD.NET assembly load diagnostics to stderr
 - PQL_TEST_HERMETIC=1 — Skip all auto-detection (test mode)
 - PQL_TEST_NO_AUTO_INSTALL_ADOMD=1 — Skip NuGet auto-install
 """
@@ -281,16 +282,18 @@ try:
     # which ADOMD.NET assembly pythonnet resolved — this caught a CI bug
     # where the older AS-shipped client on the runner shadowed our NuGet
     # install and triggered the bearer + Roles + RLS-filter failure.
-    try:
-        from System.Reflection import Assembly as _Assembly  # type: ignore[import]
+    # Only print when PQL_DEBUG=1 to avoid noise in interactive use.
+    if os.environ.get("PQL_DEBUG") == "1":
+        try:
+            from System.Reflection import Assembly as _Assembly  # type: ignore[import]
 
-        _asm = _Assembly.GetAssembly(_AdomdConnection)
-        if _asm is not None:
-            print(
-                f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
-                file=sys.stderr,
-            )
-    except Exception:
-        pass
+            _asm = _Assembly.GetAssembly(_AdomdConnection)
+            if _asm is not None:
+                print(
+                    f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
 except Exception:
     pass
