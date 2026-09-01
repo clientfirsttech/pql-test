@@ -27,6 +27,9 @@ tests/promptfoo/.promptfoo/
 
 # Local harness installs from `pql-test skill --install`
 # (These belong in consumer repos, not this one; committed skills live in skills/)
+.claude/skills/pql-test/
+.cursor/skills/pql-test/
+.windsurf/skills/pql-test/
 python/.claude/
 python/.cursor/
 python/.windsurf/

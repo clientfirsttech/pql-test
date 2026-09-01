@@ -1039,7 +1039,7 @@ Manage AI assistant skill files packaged with pql-test.
 
 ```bash
 pql-test skill [name] [--list] [--format {markdown,json}] [--version]
-                      [--install <harness>] [--all] [--show] [--uninstall] [--dry-run]
+                      [--install <harness>] [--all] [--show] [--uninstall] [--dry-run] [--force]
 ```
 
 **Arguments:**
@@ -1055,6 +1055,7 @@ pql-test skill [name] [--list] [--format {markdown,json}] [--version]
 | `--show` | ❌ | Show installation status and version for all harnesses |
 | `--uninstall` | ❌ | Remove pql-test skills from all harnesses |
 | `--dry-run` | ❌ | Preview changes without writing files (use with --install or --uninstall) |
+| `--force` | ❌ | Overwrite locally-customized skill files during `--install` (skips preserve check) |
 
 **List all available skills:**
 
@@ -1173,6 +1174,28 @@ pql-test skill --uninstall
 ```
 
 This removes all pql-test skill files with the version marker comment. Use `--dry-run` to preview changes first.
+
+**Preserve local customizations (default behavior):**
+
+When you re-run `--install`, pql-test refuses to overwrite a skill file if you've customized it locally. Two cases trigger preservation:
+
+1. The installed marker version matches the current package version (`v0.1.17` marker + `v0.1.17` package) — assumed intentional user edit.
+2. The file has no `<!-- Installed by pql-test skill v... -->` marker at all — treated as unmanaged.
+
+Example output:
+
+```
+Preserved (customized, v0.1.17 marker present): .claude\skills\pql-test\run-tests\SKILL.md — use --force to overwrite
+Preserved (no pql-test marker found): .claude\skills\pql-test\my-custom\SKILL.md — use --force to overwrite
+```
+
+**Force overwrite (discard local edits):**
+
+```bash
+pql-test skill --install claude --force
+```
+
+`--force` writes the packaged skill content regardless of the marker version or user edits. Combine with `--dry-run` to preview.
 
 **Harness target paths:**
 

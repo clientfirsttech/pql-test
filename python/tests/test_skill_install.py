@@ -216,3 +216,77 @@ def test_skill_show_detects_version_mismatch(runner, temp_workspace):
         
         assert result.exit_code == 0
         assert 'mismatch' in result.output.lower() or 'outdated' in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# Customization preservation (--force)
+# ---------------------------------------------------------------------------
+
+
+def test_install_preserves_customization_when_marker_version_matches(runner, temp_workspace):
+    """User edits an installed skill; second `--install` must not clobber it."""
+    with runner.isolated_filesystem(temp_dir=temp_workspace):
+        runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
+        original = skill_file.read_text()
+        customized = original + "\n\n<!-- USER CUSTOMIZATION -->\n"
+        skill_file.write_text(customized)
+
+        result = runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        assert result.exit_code == 0
+        assert skill_file.read_text() == customized
+        assert 'preserved' in result.output.lower()
+        assert '--force' in result.output
+
+
+def test_install_force_overwrites_customization(runner, temp_workspace):
+    """`--force` must overwrite user-modified files regardless of marker version."""
+    with runner.isolated_filesystem(temp_dir=temp_workspace):
+        runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
+        original = skill_file.read_text()
+        skill_file.write_text(original + "\n\n<!-- USER CUSTOMIZATION -->\n")
+
+        result = runner.invoke(cli, ['skill', '--install', 'claude', '--force'])
+
+        assert result.exit_code == 0
+        assert skill_file.read_text() == original
+        assert 'updated' in result.output.lower()
+
+
+def test_install_updates_when_marker_version_differs(runner, temp_workspace):
+    """When installed marker version is older than package, install must update."""
+    with runner.isolated_filesystem(temp_dir=temp_workspace):
+        runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
+        content = skill_file.read_text()
+        stale = content.replace('Installed by pql-test skill v', 'Installed by pql-test skill v0.0.1-', 1)
+        # The above trick keeps the regex parse-able but changes the captured version.
+        skill_file.write_text(stale)
+
+        result = runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        assert result.exit_code == 0
+        assert 'updated' in result.output.lower()
+        assert 'Preserved (customized' not in result.output
+        assert 'Preserved (no pql-test marker' not in result.output
+
+
+def test_install_preserves_unmanaged_files_without_marker(runner, temp_workspace):
+    """A pre-existing file with no pql-test marker must not be clobbered without --force."""
+    with runner.isolated_filesystem(temp_dir=temp_workspace):
+        skill_dir = Path('.claude/skills/pql-test/run-tests')
+        skill_dir.mkdir(parents=True)
+        unmanaged = skill_dir / 'SKILL.md'
+        unmanaged.write_text("# Someone else's file\n")
+
+        result = runner.invoke(cli, ['skill', '--install', 'claude'])
+
+        assert result.exit_code == 0
+        assert unmanaged.read_text() == "# Someone else's file\n"
+        assert 'preserved' in result.output.lower()
+        assert 'no pql-test marker' in result.output.lower()

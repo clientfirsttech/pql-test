@@ -1414,8 +1414,10 @@ def _get_harness_paths() -> dict[str, Path]:
     }
 
 
-def _install_skills(harness: str | None, install_all: bool, dry_run: bool) -> None:
+def _install_skills(harness: str | None, install_all: bool, dry_run: bool, force: bool = False) -> None:
     """Install skills to specified harness(es)."""
+    import re as _re
+
     from pql_test.skills_resolver import list_available_skills
     
     harnesses = _get_harness_paths()
@@ -1440,7 +1442,26 @@ def _install_skills(harness: str | None, install_all: bool, dry_run: bool) -> No
     created_count = 0
     updated_count = 0
     unchanged_count = 0
-    
+    preserved_count = 0
+
+    marker_regex = _re.compile(r"<!--\s*Installed by pql-test skill v([0-9][0-9A-Za-z.\-]*)\s*-->")
+
+    def _write_decision(target_file: Path, new_content: str) -> str:
+        """Return one of 'create', 'update', 'unchanged', 'preserve-customized', 'preserve-unmanaged'."""
+        if not target_file.exists():
+            return "create"
+        existing = target_file.read_text(encoding="utf-8")
+        if existing == new_content:
+            return "unchanged"
+        if force:
+            return "update"
+        m = marker_regex.search(existing)
+        if m is None:
+            return "preserve-unmanaged"
+        if m.group(1) == _VERSION:
+            return "preserve-customized"
+        return "update"
+
     for target_harness in targets:
         target_path = harnesses[target_harness]
         
@@ -1448,29 +1469,46 @@ def _install_skills(harness: str | None, install_all: bool, dry_run: bool) -> No
             # Copilot uses a single copilot-instructions.md file
             instructions_file = target_path / 'copilot-instructions.md'
             content = _generate_copilot_instructions(skills)
+            decision = _write_decision(instructions_file, content)
             
             if dry_run:
-                if not instructions_file.exists():
+                if decision == "create":
                     click.echo(f"Would create: {instructions_file}")
                     created_count += 1
-                else:
+                elif decision == "update":
                     click.echo(f"Would update: {instructions_file}")
                     updated_count += 1
-            else:
-                instructions_file.parent.mkdir(parents=True, exist_ok=True)
-                if instructions_file.exists():
-                    existing = instructions_file.read_text(encoding='utf-8')
-                    if content == existing:
-                        click.echo(f"Unchanged: {instructions_file}")
-                        unchanged_count += 1
-                    else:
-                        instructions_file.write_text(content, encoding='utf-8')
-                        click.echo(f"Updated: {instructions_file}")
-                        updated_count += 1
+                elif decision == "unchanged":
+                    click.echo(f"Unchanged: {instructions_file}")
+                    unchanged_count += 1
                 else:
+                    click.echo(f"Would preserve: {instructions_file} (use --force to overwrite)")
+                    preserved_count += 1
+            else:
+                if decision in ("create", "update"):
+                    instructions_file.parent.mkdir(parents=True, exist_ok=True)
                     instructions_file.write_text(content, encoding='utf-8')
+                if decision == "create":
                     click.echo(f"Created: {instructions_file}")
                     created_count += 1
+                elif decision == "update":
+                    click.echo(f"Updated: {instructions_file}")
+                    updated_count += 1
+                elif decision == "unchanged":
+                    click.echo(f"Unchanged: {instructions_file}")
+                    unchanged_count += 1
+                elif decision == "preserve-customized":
+                    click.echo(
+                        f"Preserved (customized, v{_VERSION} marker present): {instructions_file} "
+                        f"— use --force to overwrite"
+                    )
+                    preserved_count += 1
+                else:  # preserve-unmanaged
+                    click.echo(
+                        f"Preserved (no pql-test marker found): {instructions_file} "
+                        f"— use --force to overwrite"
+                    )
+                    preserved_count += 1
         else:
             # Claude, Cursor, Windsurf use skill directories
             for skill in skills:
@@ -1497,33 +1535,56 @@ def _install_skills(harness: str | None, install_all: bool, dry_run: bool) -> No
                     lines.insert(insert_idx, marker.rstrip())
                     content = '\n'.join(lines)
                 
+                decision = _write_decision(target_skill_file, content)
+
                 if dry_run:
-                    if not target_skill_file.exists():
+                    if decision == "create":
                         click.echo(f"Would create: {target_skill_file}")
                         created_count += 1
-                    else:
+                    elif decision == "update":
                         click.echo(f"Would update: {target_skill_file}")
                         updated_count += 1
-                else:
-                    target_skill_dir.mkdir(parents=True, exist_ok=True)
-                    if target_skill_file.exists():
-                        existing = target_skill_file.read_text(encoding='utf-8')
-                        if content == existing:
-                            unchanged_count += 1
-                        else:
-                            target_skill_file.write_text(content, encoding='utf-8')
-                            click.echo(f"Updated: {target_skill_file}")
-                            updated_count += 1
+                    elif decision == "unchanged":
+                        unchanged_count += 1
                     else:
+                        click.echo(f"Would preserve: {target_skill_file} (use --force to overwrite)")
+                        preserved_count += 1
+                else:
+                    if decision in ("create", "update"):
+                        target_skill_dir.mkdir(parents=True, exist_ok=True)
                         target_skill_file.write_text(content, encoding='utf-8')
+                    if decision == "create":
                         click.echo(f"Created: {target_skill_file}")
                         created_count += 1
+                    elif decision == "update":
+                        click.echo(f"Updated: {target_skill_file}")
+                        updated_count += 1
+                    elif decision == "unchanged":
+                        unchanged_count += 1
+                    elif decision == "preserve-customized":
+                        click.echo(
+                            f"Preserved (customized, v{_VERSION} marker present): {target_skill_file} "
+                            f"— use --force to overwrite"
+                        )
+                        preserved_count += 1
+                    else:  # preserve-unmanaged
+                        click.echo(
+                            f"Preserved (no pql-test marker found): {target_skill_file} "
+                            f"— use --force to overwrite"
+                        )
+                        preserved_count += 1
     
     # Summary
     if dry_run:
-        click.echo(f"\nDry run summary: {created_count} would be created, {updated_count} would be updated")
+        click.echo(
+            f"\nDry run summary: {created_count} would be created, "
+            f"{updated_count} would be updated, {preserved_count} would be preserved"
+        )
     else:
-        click.echo(f"\nInstallation complete: {created_count} created, {updated_count} updated, {unchanged_count} unchanged")
+        click.echo(
+            f"\nInstallation complete: {created_count} created, {updated_count} updated, "
+            f"{unchanged_count} unchanged, {preserved_count} preserved"
+        )
 
 
 def _generate_copilot_instructions(skills: list[dict[str, str]]) -> str:
@@ -1674,8 +1735,17 @@ def _extract_version_from_marker(content: str) -> str | None:
 @click.option("--show", is_flag=True, help="Show installation status for all harnesses")
 @click.option("--uninstall", is_flag=True, help="Uninstall all pql-test skills")
 @click.option("--dry-run", is_flag=True, help="Show what would be installed/uninstalled without making changes")
+@click.option(
+    "--force",
+    is_flag=True,
+    help=(
+        "Overwrite skill files even if the installed marker version matches the "
+        "current package (useful after a manual customization you want to discard)."
+    ),
+)
 def cmd_skill(name: str | None, format: str, list: bool, version: bool, 
-              install: str | None, install_all: bool, show: bool, uninstall: bool, dry_run: bool) -> None:
+              install: str | None, install_all: bool, show: bool, uninstall: bool,
+              dry_run: bool, force: bool) -> None:
     """Manage pql-test skill files.
     
     With no arguments, lists all available skills with descriptions.
@@ -1702,7 +1772,7 @@ def cmd_skill(name: str | None, format: str, list: bool, version: bool,
     
     # Handle --install
     if install or install_all:
-        _install_skills(install if install else None, install_all, dry_run)
+        _install_skills(install if install else None, install_all, dry_run, force)
         return
     
     if list:
