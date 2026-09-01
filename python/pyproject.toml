@@ -61,8 +61,10 @@ dev = [
     "twine>=4.0.0",
 ]
 
-[tool.setuptools]
-packages = ["pql_test", "pql_test.auth"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pql_test*"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 pql_test = ["skills/**/*.md"]
