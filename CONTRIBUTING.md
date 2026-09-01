@@ -522,7 +522,7 @@ Complex skills like `run-tests` use SudoLang syntax for behavioral contracts:
 Skills can be installed to any AI assistant harness:
 
 ```bash
-pql-test skill --install claude       # .github/skills/pql-test/
+pql-test skill --install claude       # .claude/skills/pql-test/
 pql-test skill --install copilot      # .github/copilot-instructions.md
 pql-test skill --install cursor       # .cursor/skills/pql-test/
 pql-test skill --install windsurf     # .windsurf/skills/pql-test/

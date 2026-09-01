@@ -1112,7 +1112,7 @@ pql-test skills version 0.1.13
 # Install to GitHub Copilot (.github/copilot-instructions.md)
 pql-test skill --install copilot
 
-# Install to Anthropic Claude (.github/skills/pql-test/)
+# Install to Anthropic Claude (.claude/skills/pql-test/)
 pql-test skill --install claude
 
 # Install to Cursor (.cursor/skills/pql-test/)
@@ -1153,7 +1153,7 @@ pql-test skill --show
 pql-test skill installation status:
 
   Copilot:  ✅ v0.1.13 (.github/copilot-instructions.md)
-  Claude:   ✅ v0.1.13 (.github/skills/pql-test/)
+  Claude:   ✅ v0.1.16 (.claude/skills/pql-test/)
   Cursor:   ❌ Not installed
   Windsurf: ❌ Not installed
 
@@ -1179,7 +1179,7 @@ This removes all pql-test skill files with the version marker comment. Use `--dr
 | Harness | Install Location |
 |---|---|
 | Copilot | `.github/copilot-instructions.md` |
-| Claude | `.github/skills/pql-test/` |
+| Claude | `.claude/skills/pql-test/` |
 | Cursor | `.cursor/skills/pql-test/` |
 | Windsurf | `.windsurf/skills/pql-test/` |
 

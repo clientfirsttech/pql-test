@@ -25,6 +25,14 @@ venv/
 tests/promptfoo/results.json
 tests/promptfoo/.promptfoo/
 
+# Local harness installs from `pql-test skill --install`
+# (These belong in consumer repos, not this one; committed skills live in skills/)
+python/.claude/
+python/.cursor/
+python/.windsurf/
+python/.github/skills/
+python/.github/copilot-instructions.md
+
 # pql-test config
 .pql-test/
 **/cache.abf

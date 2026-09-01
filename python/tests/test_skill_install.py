@@ -15,6 +15,47 @@ def runner():
     return CliRunner()
 
 
+# ---------------------------------------------------------------------------
+# Harness path invariants
+# ---------------------------------------------------------------------------
+#
+# These tests lock in the target directory each harness installs to. If
+# someone changes _get_harness_paths() (as happened when `claude` was
+# accidentally mapped to `.github/skills/pql-test` instead of the standard
+# `.claude/skills/pql-test`), these tests fail loudly with a clear diff.
+
+
+EXPECTED_HARNESS_PATHS: dict[str, str] = {
+    "claude": ".claude/skills/pql-test",
+    "copilot": ".github",
+    "cursor": ".cursor/skills/pql-test",
+    "windsurf": ".windsurf/skills/pql-test",
+}
+
+
+@pytest.mark.parametrize("harness,expected", list(EXPECTED_HARNESS_PATHS.items()))
+def test_harness_installs_to_conventional_path(harness: str, expected: str):
+    """Each harness must map to its standard community convention path."""
+    from pql_test.cli import _get_harness_paths
+
+    paths = _get_harness_paths()
+    assert harness in paths, f"Missing harness: {harness}"
+    assert str(paths[harness]) == expected.replace("/", "\\") or str(paths[harness]) == expected, (
+        f"Harness '{harness}' installs to {paths[harness]!s}, expected {expected!r}. "
+        f"See community conventions: claude=.claude/skills, cursor=.cursor/skills, "
+        f"windsurf=.windsurf/skills, copilot=.github/copilot-instructions.md."
+    )
+
+
+def test_harness_paths_covers_all_supported_harnesses():
+    """The harness map must contain exactly the four supported harnesses."""
+    from pql_test.cli import _get_harness_paths
+
+    actual = set(_get_harness_paths().keys())
+    expected = set(EXPECTED_HARNESS_PATHS.keys())
+    assert actual == expected, f"Harness set mismatch. Extra: {actual - expected}, Missing: {expected - actual}"
+
+
 @pytest.fixture
 def temp_workspace(tmp_path):
     """Create a temporary workspace directory."""
@@ -35,13 +76,13 @@ def test_skill_install_copilot_creates_instructions_file(runner, temp_workspace)
 
 
 def test_skill_install_claude_creates_skills_directory(runner, temp_workspace):
-    """Given pql-test skill --install claude, should create .github/skills/pql-test/."""
+    """Given pql-test skill --install claude, should create .claude/skills/pql-test/."""
     with runner.isolated_filesystem(temp_dir=temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'claude'])
         
         assert result.exit_code == 0
-        assert Path('.github/skills/pql-test/run-tests/SKILL.md').exists()
-        assert Path('.github/skills/pql-test/check-prereqs/SKILL.md').exists()
+        assert Path('.claude/skills/pql-test/run-tests/SKILL.md').exists()
+        assert Path('.claude/skills/pql-test/check-prereqs/SKILL.md').exists()
 
 
 def test_skill_install_cursor_creates_cursor_directory(runner, temp_workspace):
@@ -69,7 +110,7 @@ def test_skill_install_adds_marker_comment(runner, temp_workspace):
     with runner.isolated_filesystem(temp_dir=temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
-        skill_file = Path('.github/skills/pql-test/run-tests/SKILL.md')
+        skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
         content = skill_file.read_text()
         marker = f'<!-- Installed by pql-test skill v{_pkg_version("pql-test")} -->'
         assert marker in content
@@ -82,7 +123,7 @@ def test_skill_install_dry_run_reports_changes_without_writing(runner, temp_work
         
         assert result.exit_code == 0
         assert 'would create' in result.output.lower() or 'would install' in result.output.lower()
-        assert not Path('.github/skills/pql-test/').exists()
+        assert not Path('.claude/skills/pql-test/').exists()
 
 
 def test_skill_install_reports_created_files(runner, temp_workspace):
@@ -124,15 +165,13 @@ def test_skill_show_reports_install_status(runner, temp_workspace):
 def test_skill_uninstall_removes_installed_files(runner, temp_workspace):
     """Given pql-test skill --uninstall, should remove files with pql-test marker."""
     with runner.isolated_filesystem(temp_dir=temp_workspace):
-        # Install first
         runner.invoke(cli, ['skill', '--install', 'claude'])
-        assert Path('.github/skills/pql-test/run-tests/SKILL.md').exists()
+        assert Path('.claude/skills/pql-test/run-tests/SKILL.md').exists()
         
-        # Uninstall
         result = runner.invoke(cli, ['skill', '--uninstall'])
         
         assert result.exit_code == 0
-        assert not Path('.github/skills/pql-test/').exists()
+        assert not Path('.claude/skills/pql-test/').exists()
 
 
 def test_skill_install_invalid_harness_fails(runner, temp_workspace):
@@ -155,7 +194,7 @@ def test_skill_install_all_installs_to_all_harnesses(runner, temp_workspace):
         assert result.exit_code == 0
         # Should create files for all harnesses
         assert Path('.github/copilot-instructions.md').exists()
-        assert Path('.github/skills/pql-test/run-tests/SKILL.md').exists()
+        assert Path('.claude/skills/pql-test/run-tests/SKILL.md').exists()
         assert Path('.cursor/skills/pql-test/run-tests/SKILL.md').exists()
         assert Path('.windsurf/skills/pql-test/run-tests/SKILL.md').exists()
 
@@ -167,7 +206,7 @@ def test_skill_show_detects_version_mismatch(runner, temp_workspace):
     with runner.isolated_filesystem(temp_dir=temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
-        skill_file = Path('.github/skills/pql-test/run-tests/SKILL.md')
+        skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
         content = skill_file.read_text()
         current = f'v{_pkg_version("pql-test")}'
         modified = content.replace(current, 'v0.1.0')

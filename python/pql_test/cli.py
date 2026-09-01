@@ -1407,7 +1407,7 @@ def cmd_auth_status() -> None:
 def _get_harness_paths() -> dict[str, Path]:
     """Return the target paths for each harness."""
     return {
-        'claude': Path('.github/skills/pql-test'),
+        'claude': Path('.claude/skills/pql-test'),
         'copilot': Path('.github'),  # Copilot uses copilot-instructions.md
         'cursor': Path('.cursor/skills/pql-test'),
         'windsurf': Path('.windsurf/skills/pql-test'),
