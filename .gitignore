@@ -30,8 +30,7 @@ tests/promptfoo/.promptfoo/
 python/.claude/
 python/.cursor/
 python/.windsurf/
-python/.github/skills/
-python/.github/copilot-instructions.md
+python/.github/
 
 # pql-test config
 .pql-test/
