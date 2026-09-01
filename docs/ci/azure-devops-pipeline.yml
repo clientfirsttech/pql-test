@@ -1,0 +1,308 @@
+# --------------------------------------------------------------------------
+# pql-test-remote.azure-pipelines.yml
+#
+# Runs pql-test DAX unit tests against a Fabric / Power BI Premium workspace.
+#
+# Parameters:
+#   workspaceName  (required) - Fabric workspace display name.
+#   datasetName    (optional) - Semantic model display name. Blank = every
+#                               semantic model in the workspace.
+#   environment    (optional) - Test-tag filter. Blank = ANY + PROD; else
+#                               ANY + <value>. Always two runs per model.
+#
+# Required variable group:
+#   pql-test-spn with PQL_TENANT_ID, PQL_CLIENT_ID, PQL_CLIENT_SECRET
+#   (secret), and optional PQL_ENVIRONMENT.
+#
+# Self-contained: no template:, extends:, or script-file references.
+# See docs/ci/azure-devops-pipeline.md for setup and adoption instructions.
+# --------------------------------------------------------------------------
+
+trigger: none
+pr: none
+
+parameters:
+  - name: workspaceName
+    displayName: 'Fabric workspace name'
+    type: string
+  - name: datasetName
+    displayName: 'Semantic model name (blank = all)'
+    type: string
+    default: ''
+  - name: environment
+    displayName: 'Test-tag environment (blank = ANY + PROD; else ANY + <value>)'
+    type: string
+    default: ''
+
+variables:
+  - group: pql-test-spn
+  - name: WORKSPACE_NAME
+    value: ${{ parameters.workspaceName }}
+  - name: DATASET_NAME
+    value: ${{ parameters.datasetName }}
+  - name: TEST_ENVIRONMENT
+    value: ${{ parameters.environment }}
+
+pool:
+  vmImage: windows-latest    # pyadomd (ADOMD.NET) requires Windows/.NET
+
+jobs:
+  - job: run_pql_test
+    displayName: 'Run pql-test'
+    timeoutInMinutes: 60
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Python runtime
+      # ------------------------------------------------------------------
+      - task: UsePythonVersion@0
+        displayName: 'Use Python 3.12'
+        inputs:
+          versionSpec: '3.12'
+          addToPath: true
+
+      # ------------------------------------------------------------------
+      # 2. Install pql-test and Fabric CLI (latest)
+      # ------------------------------------------------------------------
+      - powershell: |
+          python -m pip install --upgrade pip
+          pip install pql-test ms-fabric-cli
+        displayName: 'Install pql-test + ms-fabric-cli'
+
+      # ------------------------------------------------------------------
+      # 3. Install ADOMD.NET client libraries (pyadomd dependency)
+      # ------------------------------------------------------------------
+      - powershell: |
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient `
+            -Version 19.114.0 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "##vso[task.logissue type=warning]ADOMD.NET NuGet install failed - pyadomd may still find assemblies in the GAC"
+          }
+        displayName: 'Install ADOMD.NET (NuGet)'
+
+      # ------------------------------------------------------------------
+      # 4. Fabric CLI service-principal login
+      # ------------------------------------------------------------------
+      - powershell: |
+          fab config set encryption_fallback_enabled true | Out-Null
+          fab auth login `
+            --username $env:PQL_CLIENT_ID `
+            --password $env:PQL_CLIENT_SECRET `
+            --tenant   $env:PQL_TENANT_ID
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "##vso[task.logissue type=error]Fabric CLI login failed. Verify PQL_TENANT_ID / PQL_CLIENT_ID / PQL_CLIENT_SECRET in the pql-test-spn variable group."
+            exit 1
+          }
+        displayName: 'fab auth login (service principal)'
+        env:
+          PQL_TENANT_ID:     $(PQL_TENANT_ID)
+          PQL_CLIENT_ID:     $(PQL_CLIENT_ID)
+          PQL_CLIENT_SECRET: $(PQL_CLIENT_SECRET)
+
+      # ------------------------------------------------------------------
+      # 5. Validate workspace and resolve dataset list (case-insensitive)
+      # ------------------------------------------------------------------
+      - powershell: |
+          $py = @'
+          import json, os, re, subprocess, sys
+
+          workspace = os.environ["WORKSPACE_NAME"].strip()
+          dataset   = os.environ.get("DATASET_NAME", "").strip()
+
+          def logissue(kind, msg):
+              print(f"##vso[task.logissue type={kind}]{msg}")
+
+          def run_fab(args):
+              p = subprocess.run(["fab"] + args, capture_output=True, text=True)
+              return p.returncode, p.stdout, p.stderr
+
+          ansi = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+          def clean(line):
+              return ansi.sub("", line).strip().rstrip("/")
+
+          rc, out, err = run_fab(["ls"])
+          if rc != 0:
+              logissue("error", f"`fab ls` exited {rc}. stderr: {err.strip() or '(empty)'}")
+              sys.exit(1)
+
+          workspaces = []
+          for l in [clean(x) for x in out.splitlines() if x.strip()]:
+              name = l[:-len(".Workspace")] if l.endswith(".Workspace") else l
+              workspaces.append(name)
+
+          match = next(
+              (w for w in workspaces if w.casefold() == workspace.casefold()),
+              None,
+          )
+          if match is None:
+              logissue("error",
+                       f"Service principal cannot see workspace '{workspace}'. "
+                       f"Visible workspaces: {', '.join(workspaces) or '(none)'}")
+              sys.exit(1)
+          workspace = match
+          print(f"##[section]Workspace validated: {workspace}")
+
+          rc, out, err = run_fab(["ls", f"{workspace}.Workspace"])
+          if rc != 0:
+              logissue("error",
+                       f"`fab ls '{workspace}.Workspace'` exited {rc}. "
+                       f"stderr: {err.strip() or '(empty)'}")
+              sys.exit(1)
+
+          items = [clean(l) for l in out.splitlines() if l.strip()]
+          sem_models = [
+              i[:-len(".SemanticModel")] for i in items
+              if i.endswith(".SemanticModel")
+          ]
+
+          if dataset:
+              hit = next(
+                  (m for m in sem_models if m.casefold() == dataset.casefold()),
+                  None,
+              )
+              if hit is None:
+                  logissue("error",
+                           f"Semantic model '{dataset}' not found in workspace "
+                           f"'{workspace}'. Available: {', '.join(sem_models) or '(none)'}")
+                  sys.exit(1)
+              models = [hit]
+              print(f"##[section]Dataset validated: {hit}")
+          else:
+              if not sem_models:
+                  logissue("error",
+                           f"Workspace '{workspace}' contains no .SemanticModel items.")
+                  sys.exit(1)
+              models = sem_models
+              print(f"##[section]Discovered {len(models)} semantic model(s) in '{workspace}'")
+              for m in models:
+                  print(f"  - {m}")
+
+          print(f"##vso[task.setvariable variable=RESOLVED_WORKSPACE;isOutput=true]{workspace}")
+          print(f"##vso[task.setvariable variable=RESOLVED_MODELS;isOutput=true]{json.dumps(models)}")
+          '@
+          $tmp = New-TemporaryFile
+          Set-Content -Path $tmp.FullName -Value $py -Encoding utf8
+          python $tmp.FullName
+          $rc = $LASTEXITCODE
+          Remove-Item $tmp.FullName -Force
+          exit $rc
+        name: resolve
+        displayName: 'Validate workspace + resolve dataset list'
+        env:
+          WORKSPACE_NAME: $(WORKSPACE_NAME)
+          DATASET_NAME:   $(DATASET_NAME)
+
+      # ------------------------------------------------------------------
+      # 6. Run pql-test for each (model, env-tag) pair
+      # ------------------------------------------------------------------
+      - powershell: |
+          New-Item -ItemType Directory -Force -Path results | Out-Null
+          $py = @'
+          import json, os, subprocess, sys, pathlib
+
+          workspace = os.environ["RESOLVED_WORKSPACE"]
+          models    = json.loads(os.environ["RESOLVED_MODELS"])
+          env_input = os.environ.get("TEST_ENVIRONMENT", "").strip()
+
+          env_tags = ["ANY", env_input.upper() if env_input else "PROD"]
+          seen, ordered = set(), []
+          for t in env_tags:
+              if t not in seen:
+                  seen.add(t)
+                  ordered.append(t)
+          env_tags = ordered
+
+          overall_failed_runs = 0
+          overall_tests_run   = 0
+          summary_rows        = []
+
+          for model in models:
+              model_path = f"{workspace}.Workspace/{model}.SemanticModel"
+              for tag in env_tags:
+                  safe = "".join(c if c.isalnum() else "-" for c in f"{model}-{tag}")
+                  out_file = pathlib.Path("results") / f"dax-results-{safe}.json"
+                  print(f"##[group]{model} / --env {tag}")
+                  cmd = [
+                      "pql-test", "run-tests", model_path,
+                      "--env", tag,
+                      "--log-format", "azuredevops",
+                      "--output", str(out_file),
+                  ]
+                  print("+ " + " ".join(cmd))
+                  proc = subprocess.run(cmd)
+                  rc = proc.returncode
+
+                  passed = failed = total = 0
+                  if out_file.exists():
+                      try:
+                          data = json.loads(out_file.read_text(encoding="utf-8"))
+                          passed = int(data.get("passed", 0))
+                          failed = int(data.get("failed", 0))
+                          total  = int(data.get("total", passed + failed))
+                      except Exception as ex:
+                          print(f"##vso[task.logissue type=warning]Result parse failed: {out_file}: {ex}")
+
+                  overall_tests_run += total
+                  if rc != 0:
+                      overall_failed_runs += 1
+
+                  summary_rows.append({
+                      "model": model, "env": tag, "rc": rc,
+                      "passed": passed, "failed": failed, "total": total,
+                  })
+                  print("##[endgroup]")
+
+          lines = [
+              f"# pql-test results - `{workspace}`",
+              "",
+              "| Model | Env | Passed | Failed | Total | Exit |",
+              "| --- | --- | ---: | ---: | ---: | ---: |",
+          ]
+          for r in summary_rows:
+              lines.append(
+                  f"| {r['model']} | {r['env']} | {r['passed']} | "
+                  f"{r['failed']} | {r['total']} | {r['rc']} |"
+              )
+          md = pathlib.Path("results") / "summary.md"
+          md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(f"##vso[task.uploadsummary]{md.resolve()}")
+
+          if overall_tests_run == 0:
+              print(
+                  "##vso[task.logissue type=warning]No DAX tests executed across "
+                  "any (model, env) combination. Check that *.Tests.dax files "
+                  f"exist and their tags match one of: {', '.join(env_tags)}."
+              )
+
+          if overall_failed_runs > 0:
+              print(f"##vso[task.logissue type=error]{overall_failed_runs} pql-test run(s) failed.")
+              sys.exit(1)
+          '@
+          $tmp = New-TemporaryFile
+          Set-Content -Path $tmp.FullName -Value $py -Encoding utf8
+          python $tmp.FullName
+          $rc = $LASTEXITCODE
+          Remove-Item $tmp.FullName -Force
+          exit $rc
+        displayName: 'Run pql-test'
+        env:
+          RESOLVED_WORKSPACE: $(resolve.RESOLVED_WORKSPACE)
+          RESOLVED_MODELS:    $(resolve.RESOLVED_MODELS)
+          TEST_ENVIRONMENT:   $(TEST_ENVIRONMENT)
+          PQL_TENANT_ID:      $(PQL_TENANT_ID)
+          PQL_CLIENT_ID:      $(PQL_CLIENT_ID)
+          PQL_CLIENT_SECRET:  $(PQL_CLIENT_SECRET)
+          PQL_ENVIRONMENT:    $(PQL_ENVIRONMENT)
+
+      # ------------------------------------------------------------------
+      # 7. Publish result JSON files as pipeline artifacts
+      # ------------------------------------------------------------------
+      - task: PublishPipelineArtifact@1
+        condition: always()
+        displayName: 'Publish result artifacts'
+        inputs:
+          targetPath: results
+          artifact:   dax-results
