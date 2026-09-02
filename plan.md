@@ -10,7 +10,6 @@
 - **Refactor runner.py monolith into focused module package** — CRITICAL for maintainability (promoted from backlog 2026-08-30). File is 1,947 lines mixing 9+ responsibilities, causing high regression risk and slow code review velocity. Split into `runner/` package with 9 focused modules (~150-350 lines each). See [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md). Estimated 2-3 days.
 - **Implement token validation in auth/manager.py** — TODO at line 123 needs implementation for OWASP A07 (Authentication Failures). Validate JWT expiry without making service calls. Estimated 4 hours.
 - **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address A01, A04, A06, A07 findings from 2026-08-30 AIDD review. Estimated 1 day.
-- **Test coverage metrics and tracking** — Run `pytest --cov`, set minimum 80% threshold in `pyproject.toml`, add coverage badge to README, track trend in CI. Currently 252 tests passing but coverage percentage unknown. Estimated 2 hours.
 
 ## Open Items
 
@@ -33,6 +32,24 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-09-02 — Restore ≥ 80% test coverage after monolith removal
+
+- **Coverage restoration** — See [tasks/archive/2026-09-02-coverage-restoration.md](tasks/archive/2026-09-02-coverage-restoration.md)
+  - Total coverage jumped from 74.23% → **80.02%** (1,602 / 2,002 statements). The `fail_under=80` gate in [python/pyproject.toml](python/pyproject.toml) now passes cleanly.
+  - Added 55 new unit tests across three files. Test count: 422 → 477 passed (14 skipped, all live-network).
+  - New tests: [python/tests/auth/test_auth_cli_branches.py](python/tests/auth/test_auth_cli_branches.py) (`cmd_auth_login` flag routing + interactive menu + exception path, `cmd_auth_logout`, `cmd_auth_status`); [python/tests/test_pbi_rest.py](python/tests/test_pbi_rest.py) (workspace/dataset resolution, sovereign-cloud API prefix, dataset existence checks, every MSAL error branch of `_acquire_service_principal_token`); [python/tests/test_adomd_helpers.py](python/tests/test_adomd_helpers.py) (search-path discovery incl. NuGet priority and legacy package id, `.nupkg` download+extract with culture-subdir preservation, hermetic/opt-out env vars, module `__getattr__` bridge).
+  - Per-file coverage lifts: `runner/pbi_rest.py` 31% → 95%, `runner/adomd.py` 33% → 91%, `runner/xmla.py` 55% → 92%, `runner/local_pbi.py` 76% → 81%, `cli.py` 59% → 65% (auth subcommands, previously untested).
+  - No production logic modified. No `# pragma: no cover` added to real branches. No `fail_under` change.
+
+### 2026-09-02 — Remove runner monolith and restore coverage signal
+
+- **Remove `_runner_monolith.py`** — See [tasks/archive/2026-09-02-remove-runner-monolith.md](tasks/archive/2026-09-02-remove-runner-monolith.md)
+  - Deleted [python/pql_test/_runner_monolith.py](python/pql_test/_runner_monolith.py) (781 statements, 0% covered, zero references anywhere in the repo). It was the pre-refactor copy left behind when `runner.py` was split into the `pql_test/runner/` package.
+  - Also fixed test-mocking regressions introduced by the runner-refactor: `discovery.py`, `execution.py`, `resolver.py`, and `local_pbi.py` now route cross-module helper calls through `pql_test.runner.<name>` so tests can patch at the package level (matching the pattern already in place for `_execute_dax_query`). See failing tests fix commit.
+  - Coverage jumped from **52.4% → 74.23%** — the dead file had been masking the real signal. Reaching the 80% gate is scoped into [tasks/coverage-restoration-epic.md](tasks/coverage-restoration-epic.md); the majority of the remaining gap is in `cli.py` (59%), `runner/adomd.py` (~33%), and `runner/pbi_rest.py` (~31%).
+  - Also fixed CI Windows encoding crash in [.github/workflows/pytest.yml](.github/workflows/pytest.yml) — the "Display coverage percentage" step used emoji in `print()` which crashed under cp1252 on `windows-latest`; step now sets `PYTHONIOENCODING=utf-8` and reconfigures stdout/stderr to utf-8.
+  - Switched [python/tests/test_skill_packaging.py](python/tests/test_skill_packaging.py) to prefer stdlib `tomllib` (Python 3.11+) with a `tomli` fallback for 3.9/3.10, so the CI test job (Python 3.12) no longer fails on `ModuleNotFoundError: No module named 'tomli'`.
 
 ### 2026-09-01 — Lazy-load ADOMD.NET at first XMLA use
 
