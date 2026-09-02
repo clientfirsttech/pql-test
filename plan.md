@@ -34,6 +34,14 @@
 
 ## Completed Work
 
+### 2026-09-01 — Speed up `local/<model_name>` detection
+
+- **Speed up `local/<model_name>` resolution** — See [tasks/archive/2026-09-01-speed-up-local-pbi-detection.md](tasks/archive/2026-09-01-speed-up-local-pbi-detection.md)
+  - Dropped the ADOMD/DAX connectivity probe (`_get_catalog_from_local_port`) from `get_pbi_files_opened` — enumeration no longer opens a MSOLAP session per detected instance
+  - Threaded an optional `instances` parameter through `resolve_local_xmla_connection_by_name` and `_format_local_miss_diagnostic` so the CLI enumerates once and shares the result with the resolver, verbose printout, and miss diagnostic
+  - Added `connection_pre_resolved` keyword to `run_tests_from_model` so it doesn't re-run `resolve_xmla_connection` when the CLI has already resolved (or attempted to)
+  - Cold-start `pql-test run-tests local/<bogus>` dropped from ~5.8s → ~4.7s with no instances open; savings scale linearly with the number of running Power BI Desktop instances
+
 ### 2026-05-28 — Issue Review Agent Workflow
 
 - **Issue Review Agent Workflow** — See [tasks/archive/2026-05-28-issue-review-agent.md](tasks/archive/2026-05-28-issue-review-agent.md)

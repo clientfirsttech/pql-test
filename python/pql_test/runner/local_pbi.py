@@ -275,14 +275,15 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
                         break
 
             if port is not None:
-                # Step 4 — verify connectivity; local AS auto-selects the single database
-                _cat = _get_catalog_from_local_port(port)
-                catalog = _cat if _cat is not None else ""
+                # Skip the ADOMD/DAX connectivity probe here — the caller
+                # opens a real connection later and any bad port will fail
+                # loudly there. Local AS auto-selects the single database,
+                # so catalog is unconditionally empty.
                 instances.append(
                     LocalPbiInstance(
                         model_name=model_name,
                         server=f"localhost:{port}",
-                        catalog=catalog,
+                        catalog="",
                     )
                 )
         except (_psutil.NoSuchProcess, _psutil.AccessDenied):

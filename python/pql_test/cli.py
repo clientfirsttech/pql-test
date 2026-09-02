@@ -567,7 +567,10 @@ _env_option = click.option(
 )
 
 
-def _format_local_miss_diagnostic(model_name: str) -> str:
+def _format_local_miss_diagnostic(
+    model_name: str,
+    instances: list | None = None,
+) -> str:
     """Build a multi-line diagnostic when local/<model_name> doesn't resolve.
 
     Shows every Power BI Desktop instance the CLI could detect (with
@@ -575,18 +578,24 @@ def _format_local_miss_diagnostic(model_name: str) -> str:
     happens with the Microsoft Store build whose process tree is ACL-locked).
     Also lists the common reasons a name lookup misses so the user can
     self-diagnose without having to re-run with --verbose.
+
+    When *instances* is provided, it is used directly — this lets the caller
+    enumerate once and share the result with the resolver and any verbose
+    printout.  When *instances* is ``None``, the diagnostic enumerates itself
+    (preserves the original call signature for other callers).
     """
     lines: list[str] = [
         f"No matching Power BI Desktop instance found for model '{model_name}'.",
         "",
     ]
-    try:
-        instances = get_pbi_files_opened()
-    except ImportError:
-        lines.append(
-            "  (psutil not installed — local detection limited to port-file fallback.)"
-        )
-        instances = []
+    if instances is None:
+        try:
+            instances = get_pbi_files_opened()
+        except ImportError:
+            lines.append(
+                "  (psutil not installed — local detection limited to port-file fallback.)"
+            )
+            instances = []
     if instances:
         lines.append("Detected Power BI Desktop instances:")
         for inst in instances:
@@ -990,24 +999,35 @@ def cmd_run_tests(
         # local/<model_name> — resolve local connection by name
         abs_path = f"local/{ident.model_name}"
 
-        if verbose:
-            try:
-                instances = get_pbi_files_opened()
-                if instances:
-                    click.echo("\nDetected Power BI Desktop instances:")
-                    for inst in instances:
-                        name = inst.model_name or "<unnamed>"
-                        click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
-                else:
-                    click.echo("\nNo Power BI Desktop instances detected.")
-            except ImportError:
-                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+        # Enumerate open Power BI Desktop instances once and share the
+        # result with the verbose printout, the resolver, and the miss
+        # diagnostic — otherwise a single miss triggers 3+ redundant
+        # process/window/port scans (each of which used to run an ADOMD
+        # probe per port).  See tasks/speed-up-local-pbi-detection-epic.md.
+        instances: list | None
+        try:
+            instances = get_pbi_files_opened()
+        except ImportError:
+            instances = None
 
-        conn = resolve_local_xmla_connection_by_name(ident.model_name)
+        if verbose:
+            if instances is None:
+                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+            elif instances:
+                click.echo("\nDetected Power BI Desktop instances:")
+                for inst in instances:
+                    name = inst.model_name or "<unnamed>"
+                    click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
+            else:
+                click.echo("\nNo Power BI Desktop instances detected.")
+
+        conn = resolve_local_xmla_connection_by_name(ident.model_name, instances=instances)
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            diagnostic = _format_local_miss_diagnostic(ident.model_name)
+            diagnostic = _format_local_miss_diagnostic(
+                ident.model_name, instances=instances,
+            )
             pre_warnings.append(diagnostic)
             click.echo("\nWarning: " + diagnostic, err=True)
 
@@ -1083,6 +1103,7 @@ def cmd_run_tests(
         connection=conn,
         skip_message=skip_message,
         environment=test_environment,
+        connection_pre_resolved=True,
     )
 
     if log_format == "azuredevops":

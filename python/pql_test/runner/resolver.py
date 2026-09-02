@@ -254,6 +254,7 @@ def resolve_service_xmla_connection_by_name(
 
 def resolve_local_xmla_connection_by_name(
     model_name: str,
+    instances: list | None = None,
 ) -> Optional[ResolvedXmlaConnection]:
     """
     Resolve a local XMLA connection by matching *model_name* against
@@ -261,14 +262,22 @@ def resolve_local_xmla_connection_by_name(
 
     Used by the ``local/<model_name>`` model-identifier format where no
     local filesystem path is available.
+
+    When *instances* is provided, it is used directly and
+    ``get_pbi_files_opened`` is not called — this lets callers enumerate
+    once and share the result across the resolver, verbose printouts, and
+    miss-diagnostics.  When *instances* is ``None`` (default), the
+    resolver enumerates itself, preserving the original single-argument
+    call signature.
     """
-    try:
-        instances = get_pbi_files_opened()
-    except ImportError:
-        port = _detect_local_pbi_desktop_port()
-        if port:
-            return ResolvedXmlaConnection(server=port, catalog="")
-        return None
+    if instances is None:
+        try:
+            instances = get_pbi_files_opened()
+        except ImportError:
+            port = _detect_local_pbi_desktop_port()
+            if port:
+                return ResolvedXmlaConnection(server=port, catalog="")
+            return None
 
     if not instances:
         port_str = _detect_local_pbi_desktop_port()

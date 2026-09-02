@@ -170,6 +170,8 @@ def run_tests_from_model(
     connection: Optional[ResolvedXmlaConnection] = None,
     skip_message: str = _DEFAULT_SKIP_MESSAGE,
     environment: Optional[str] = None,
+    *,
+    connection_pre_resolved: bool = False,
 ) -> TestSuite:
     """
     High-level helper: discover tests, optionally filter, execute, and summarise.
@@ -186,6 +188,12 @@ def run_tests_from_model(
         Optional environment name (e.g. ``DEV``, ``PROD``, ``ANY``, ``BKUP``).
         When supplied, only suites targeting that environment are discovered
         and executed (see :func:`retrieve_tests`).
+    connection_pre_resolved:
+        Keyword-only.  When ``True`` the caller asserts that *connection*
+        already reflects a completed resolution attempt (including a
+        deliberate ``None`` for the miss case), so the helper must not
+        re-run ``resolve_xmla_connection`` — that redundant call caused
+        the local Power BI Desktop scan to run twice per invocation.
 
     Returns
     -------
@@ -194,9 +202,7 @@ def run_tests_from_model(
     if conn_opts is None:
         conn_opts = XmlaConnectionOptions()
 
-    # Use a pre-resolved connection when supplied (e.g. from local/<name>
-    # detection), otherwise resolve from conn_opts as normal.
-    if connection is None:
+    if connection is None and not connection_pre_resolved:
         connection = resolve_xmla_connection(model_path, conn_opts)
 
     if test_name:

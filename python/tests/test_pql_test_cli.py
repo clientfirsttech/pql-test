@@ -658,6 +658,67 @@ class TestRunTestsLogFormat:
 
 
 # ---------------------------------------------------------------------------
+# Enumeration reuse — see tasks/speed-up-local-pbi-detection-epic.md
+# ---------------------------------------------------------------------------
+
+class TestLocalEnumerationReuse:
+    """
+    A single `run-tests local/<name>` invocation must enumerate running
+    Power BI Desktop instances exactly once, even on a name miss (which
+    also formats a diagnostic) and even with --verbose (which prints
+    detected instances).  Previously the resolver, the verbose printout,
+    and the miss-diagnostic each called ``get_pbi_files_opened`` independently.
+    """
+
+    def _invoke(self, monkeypatch, *args: str, instances: list) -> tuple[int, str, int]:
+        from unittest.mock import MagicMock
+        from click.testing import CliRunner
+        from pql_test import cli as cli_module
+        from pql_test import runner as runner_module
+
+        for key in list(os.environ):
+            if key.startswith("PQL_"):
+                monkeypatch.delenv(key, raising=False)
+
+        spy = MagicMock(return_value=instances)
+        # Patch every callable reference the CLI + resolver could reach so a
+        # single spy sees the total enumeration count across all callers.
+        monkeypatch.setattr(cli_module, "get_pbi_files_opened", spy)
+        monkeypatch.setattr(runner_module, "get_pbi_files_opened", spy)
+
+        runner = CliRunner()
+        result = runner.invoke(cli_module.cli, list(args))
+        return spy.call_count, result.output, result.exit_code
+
+    def test_miss_enumerates_exactly_once(self, monkeypatch):
+        """Bogus local/<name> miss must not re-enumerate for the diagnostic."""
+        count, output, _ = self._invoke(
+            monkeypatch,
+            "run-tests",
+            "local/DefinitelyNotOpenBogus",
+            instances=[],
+        )
+        assert count == 1, (
+            f"get_pbi_files_opened called {count}x; expected 1 (resolver + "
+            f"diagnostic should share one enumeration). Output:\n{output[:400]}"
+        )
+
+    def test_miss_with_verbose_enumerates_exactly_once(self, monkeypatch):
+        """--verbose printout must reuse the same enumeration as the resolver."""
+        count, output, _ = self._invoke(
+            monkeypatch,
+            "run-tests",
+            "-v",
+            "local/DefinitelyNotOpenBogus",
+            instances=[],
+        )
+        assert count == 1, (
+            f"get_pbi_files_opened called {count}x with --verbose; expected 1. "
+            f"Output:\n{output[:400]}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Model identifier format tests (local/<name>, workspace.model)
 # ---------------------------------------------------------------------------
 

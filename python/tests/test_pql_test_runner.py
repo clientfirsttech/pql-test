@@ -1575,6 +1575,42 @@ class TestGetPbiFilesOpened:
         assert len(instances) == 1
         assert instances[0].model_name == "WindowTitleModel"
 
+    def test_does_not_probe_adomd_for_any_enumerated_instance(self):
+        """
+        Enumeration must never open an ADOMD/MSOLAP connection or run a DAX
+        query against detected msmdsrv ports.  The probe adds a cold
+        pythonnet/ADOMD load + N XMLA handshakes per invocation, its return
+        value is discarded (catalog is always empty on success), and callers
+        that need real connectivity verification open their own connection
+        later.  See tasks/speed-up-local-pbi-detection-epic.md.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        proc_a = _make_mock_process(
+            pid=10, name="msmdsrv.exe", ppid=100, listen_port=_MOCK_AS_PORT_A,
+        )
+        proc_b = _make_mock_process(
+            pid=20, name="msmdsrv.exe", ppid=200, listen_port=_MOCK_AS_PORT_B,
+        )
+        with (
+            patch(
+                "pql_test.runner._get_pbi_process_window_titles",
+                return_value={
+                    100: "ModelA - Power BI Desktop",
+                    200: "ModelB - Power BI Desktop",
+                },
+            ),
+            patch("pql_test.runner._psutil.process_iter", return_value=[proc_a, proc_b]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner.local_pbi._get_catalog_from_local_port") as probe,
+        ):
+            instances = get_pbi_files_opened()
+
+        assert probe.call_count == 0
+        assert len(instances) == 2
+        assert all(inst.catalog == "" for inst in instances)
+
 
 # ---------------------------------------------------------------------------
 # resolve_local_xmla_connection — mirrors Pester -Local flag tests
