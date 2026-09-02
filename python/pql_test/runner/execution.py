@@ -24,6 +24,7 @@ from pql_test.runner.models import (
 from pql_test.runner.resolver import resolve_xmla_connection
 
 if TYPE_CHECKING:
+    from pql_test import runner
     from pql_test.runner.xmla import _execute_dax_query, _get_col
 else:
     # Import at runtime through runner package to enable test mocking
@@ -203,15 +204,17 @@ def run_tests_from_model(
         conn_opts = XmlaConnectionOptions()
 
     if connection is None and not connection_pre_resolved:
-        connection = resolve_xmla_connection(model_path, conn_opts)
+        # Route through the runner package so tests can patch
+        # ``pql_test.runner.resolve_xmla_connection``.
+        connection = runner.resolve_xmla_connection(model_path, conn_opts)
 
     if test_name:
-        found = retrieve_test_by_name(
+        found = runner.retrieve_test_by_name(
             model_path, test_name, connection=connection, environment=environment
         )
         tests: list[PqlTest] = [found] if found else []
     else:
-        tests = retrieve_tests(model_path, connection=connection, environment=environment)
+        tests = runner.retrieve_tests(model_path, connection=connection, environment=environment)
     results = run_tests(tests, connection, skip_message=skip_message)
     passed = sum(1 for r in results if r.passed)
     skipped = sum(1 for r in results if r.skipped)

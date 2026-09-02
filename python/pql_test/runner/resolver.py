@@ -91,7 +91,9 @@ def resolve_xmla_connection(
     if ident.kind == "local":
         if hermetic:
             return None
-        return resolve_local_xmla_connection_by_name(ident.model_name)
+        # Route through the runner package so tests can patch
+        # ``pql_test.runner.resolve_local_xmla_connection_by_name``.
+        return runner.resolve_local_xmla_connection_by_name(ident.model_name)
 
     # Option 2 — remote workspace (service principal).
     # If the service path raises (bad creds, dead workspace, unreachable

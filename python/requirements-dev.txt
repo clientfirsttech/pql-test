@@ -1,3 +1,6 @@
 # Dev / test dependencies (install in addition to requirements.txt)
 pytest>=7.4.0
 pytest-cov>=4.1.0
+# tests/test_skill_packaging.py parses pyproject.toml; use tomli for py < 3.11
+# and keep it available on all supported versions for consistency.
+tomli>=2.0.1; python_version < "3.11"

@@ -23,6 +23,7 @@ from pql_test.runner.model_path import (
 from pql_test.runner.models import PqlTest, ResolvedXmlaConnection
 
 if TYPE_CHECKING:
+    from pql_test import runner
     from pql_test.runner.xmla import _execute_dax_query, _get_col
 else:
     # Import at runtime through runner package to enable test mocking
@@ -192,7 +193,9 @@ def retrieve_tests(
     List of PqlTest descriptors; empty list when none are found.
     """
     if connection is not None:
-        live = _retrieve_tests_via_dax(connection, environment=environment)
+        # Route through the runner package so tests can patch
+        # ``pql_test.runner._retrieve_tests_via_dax``.
+        live = runner._retrieve_tests_via_dax(connection, environment=environment)
         if live is not None:  # None means both queries failed
             # When model_path declares ownership-tracking artifacts (a
             # DAXQueries/ folder or a functions.tmdl), the local repo is the

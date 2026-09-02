@@ -14,11 +14,20 @@ from __future__ import annotations
 import ctypes
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from pql_test.runner.adomd import get_adomd_connection_class, has_pyadomd
 from pql_test.runner.model_path import _find_pbip_file
 from pql_test.runner.models import LocalPbiInstance, ResolvedXmlaConnection
+
+if TYPE_CHECKING:
+    from pql_test import runner
+else:
+    # Import at runtime through the runner package so tests can patch
+    # ``pql_test.runner.<helper>`` and have the patch observed by the
+    # helpers defined in this module (get_pbi_files_opened,
+    # resolve_local_xmla_connection, etc.).
+    from pql_test import runner
 
 __all__ = [
     "_detect_local_pbi_desktop_port",
@@ -173,7 +182,13 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
 
     Requires ``psutil`` (``pip install psutil``).
     """
-    if not HAS_PSUTIL or _psutil is None:
+    # Read HAS_PSUTIL / _psutil through the runner package so tests that toggle
+    # ``pql_test.runner.HAS_PSUTIL`` (e.g. the psutil-unavailable case) see the
+    # updated value.  Fall back to the module-local values for callers that
+    # invoke this function before ``pql_test.runner`` has finished importing.
+    has_psutil = getattr(runner, "HAS_PSUTIL", HAS_PSUTIL)
+    psutil_mod = getattr(runner, "_psutil", _psutil)
+    if not has_psutil or psutil_mod is None:
         raise ImportError(
             "psutil is required for local Power BI Desktop detection. "
             "Install with: pip install psutil"
@@ -186,7 +201,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # builds drop the legacy " - Power BI Desktop" suffix and would
     # otherwise be filtered out by the title-substring check.
     pbi_pid_to_model: dict[int, str] = {}
-    for _fp in _psutil.process_iter(["pid", "name", "cmdline"]):
+    for _fp in psutil_mod.process_iter(["pid", "name", "cmdline"]):
         try:
             _pname = (_fp.info.get("name") or "").lower()
             if _pname != "pbidesktop.exe":
@@ -201,7 +216,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
                     _model = _p.stem
                     break
             pbi_pid_to_model[_pid] = _model
-        except (_psutil.NoSuchProcess, _psutil.AccessDenied):
+        except (psutil_mod.NoSuchProcess, psutil_mod.AccessDenied):
             continue
     pbi_pids = set(pbi_pid_to_model.keys())
 
@@ -211,7 +226,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # currently-loaded model after Save As / rename, whereas the cmdline
     # is frozen at process start.  A title-derived name only OVERWRITES
     # the cmdline name when it's non-empty after suffix-stripping.
-    pid_to_raw_title = _get_pbi_process_window_titles(known_pbi_pids=pbi_pids)
+    pid_to_raw_title = runner._get_pbi_process_window_titles(known_pbi_pids=pbi_pids)
     for pid, title in pid_to_raw_title.items():
         idx = title.rfind(" - ")
         model_name = title[:idx].strip() if idx > 0 else title.strip()
@@ -221,7 +236,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
 
     # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
     # the plain string "LISTEN".  Accept both so the code works on any version.
-    _listen_status: object = getattr(_psutil, "CONN_LISTEN", "LISTEN")
+    _listen_status: object = getattr(psutil_mod, "CONN_LISTEN", "LISTEN")
 
     # Pre-build a pid → listen_port map using the global net_connections call.
     # This is more reliable on Windows than per-process net_connections() because
@@ -230,7 +245,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # global call raises an exception (e.g. on some test environments).
     _global_listen_ports: dict[int, int] = {}
     try:
-        for _c in _psutil.net_connections(kind="tcp"):
+        for _c in psutil_mod.net_connections(kind="tcp"):
             _c_status = getattr(_c, "status", None)
             if (
                 (_c_status == _listen_status or _c_status == "LISTEN")
@@ -245,7 +260,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # Step 2 & 3 — msmdsrv ports mapped back to parent PBIDesktop via PPID
     # (walking the full process tree, not just the immediate parent)
     instances: list[LocalPbiInstance] = []
-    for proc in _psutil.process_iter(["pid", "name", "ppid"]):
+    for proc in psutil_mod.process_iter(["pid", "name", "ppid"]):
         try:
             pname = (proc.info.get("name") or "").lower()
             if pname != "msmdsrv.exe":
@@ -257,7 +272,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
             parent_pid: int = proc.info.get("ppid") or 0
             model_name = pbi_pid_to_model.get(parent_pid, "")
             if not model_name and pbi_pids:
-                ancestor = _find_pbi_ancestor_pid(proc, pbi_pids)
+                ancestor = runner._find_pbi_ancestor_pid(proc, pbi_pids)
                 if ancestor is not None:
                     model_name = pbi_pid_to_model.get(ancestor, "")
 
@@ -286,7 +301,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
                         catalog="",
                     )
                 )
-        except (_psutil.NoSuchProcess, _psutil.AccessDenied):
+        except (psutil_mod.NoSuchProcess, psutil_mod.AccessDenied):
             continue
 
     return instances
@@ -361,7 +376,7 @@ def resolve_local_xmla_connection(
     model_path:
         Root directory of the PBIP model.
     """
-    pbip = _find_pbip_file(model_path)
+    pbip = runner._find_pbip_file(model_path)
     model_name = Path(pbip).stem if pbip else None
 
     # Fallback: derive model name from the .SemanticModel directory stem
@@ -371,17 +386,17 @@ def resolve_local_xmla_connection(
             model_name = p.name[: -len(".SemanticModel")]
 
     try:
-        instances = get_pbi_files_opened()
+        instances = runner.get_pbi_files_opened()
     except ImportError:
         # psutil not installed — fall back to port-file approach
-        port = _detect_local_pbi_desktop_port()
+        port = runner._detect_local_pbi_desktop_port()
         if port:
             return ResolvedXmlaConnection(server=port, catalog="")
         return None
 
     if not instances:
         # No running PBI Desktop found via process detection; try port-file
-        port_str = _detect_local_pbi_desktop_port()
+        port_str = runner._detect_local_pbi_desktop_port()
         if port_str:
             return ResolvedXmlaConnection(server=port_str, catalog="")
         return None

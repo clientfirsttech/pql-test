@@ -62,12 +62,15 @@ def test_all_skills_have_required_frontmatter():
 
 def test_skill_versions_match_package_version():
     """Given skill frontmatter version fields, should match pyproject.toml version."""
-    import tomli
-    
+    try:
+        import tomllib  # Python 3.11+ stdlib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
     # Read package version from pyproject.toml
     pyproject_path = Path(__file__).parent.parent / 'pyproject.toml'
     with open(pyproject_path, 'rb') as f:
-        pyproject = tomli.load(f)
+        pyproject = tomllib.load(f)
     
     package_version = pyproject['project']['version']
     
@@ -118,11 +121,14 @@ def test_all_skills_are_packaged():
 
 def test_pyproject_includes_package_data():
     """Given pyproject.toml, should include skills/**/*.md in package-data."""
-    import tomli
-    
+    try:
+        import tomllib  # Python 3.11+ stdlib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
     pyproject_path = Path(__file__).parent.parent / 'pyproject.toml'
     with open(pyproject_path, 'rb') as f:
-        pyproject = tomli.load(f)
+        pyproject = tomllib.load(f)
     
     package_data = pyproject.get('tool', {}).get('setuptools', {}).get('package-data', {})
     pql_test_data = package_data.get('pql_test', [])
