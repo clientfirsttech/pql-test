@@ -35,11 +35,14 @@ __all__ = [
     "_auto_install_adomd_from_nuget",
     "_discover_adomd_search_dirs",
     "get_adomd_connection_class",
+    "has_pyadomd",
 ]
 
-# Module-level constants
+# Load state.  Both remain False/None until `_ensure_adomd_loaded()` fires
+# on first XMLA use — see tasks/archive/2026-09-01-lazy-load-adomd.md.
 HAS_PYADOMD = False
-_AdomdConnection = None  # set to AdomdConnection class after successful load
+_AdomdConnection = None
+_load_attempted = False
 
 
 def _discover_adomd_search_dirs() -> list[str]:
@@ -232,68 +235,90 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
 
 
 def get_adomd_connection_class():
-    """Return the AdomdConnection class if loaded, None otherwise."""
+    """Return the AdomdConnection class, loading ADOMD.NET on first call."""
+    _ensure_adomd_loaded()
     return _AdomdConnection
 
 
+def has_pyadomd() -> bool:
+    """Return True iff ADOMD.NET is loadable.  Triggers the lazy load."""
+    _ensure_adomd_loaded()
+    return HAS_PYADOMD
+
+
 # ---------------------------------------------------------------------------
-# Module initialization: Auto-discover and load ADOMD.NET
+# Lazy ADOMD.NET load — deferred until has_pyadomd() or
+# get_adomd_connection_class() is first called so `pql-test --help`,
+# `check-prereqs`, and `local/<name>` misses don't pay the CLR startup
+# cost.  See tasks/lazy-load-adomd-epic.md.
 # ---------------------------------------------------------------------------
 
-_ADOMD_SEARCH_DIRS = _discover_adomd_search_dirs()
+def _ensure_adomd_loaded() -> None:
+    """Discover, auto-install (if needed), and load ADOMD.NET exactly once."""
+    global HAS_PYADOMD, _AdomdConnection, _load_attempted
+    if _load_attempted:
+        return
+    _load_attempted = True
 
-# Bootstrap: when none of the discovered directories already carry ADOMD
-# assemblies, attempt a one-time fetch into the user-local cache.  No-op
-# when assemblies are already present anywhere on the search path.
-if not _adomd_assemblies_present(_ADOMD_SEARCH_DIRS):
-    _auto_dir = _auto_install_adomd_from_nuget()
-    if _auto_dir:
-        _ADOMD_SEARCH_DIRS.append(_auto_dir)
+    search_dirs = _discover_adomd_search_dirs()
+    if not _adomd_assemblies_present(search_dirs):
+        auto_dir = _auto_install_adomd_from_nuget()
+        if auto_dir:
+            search_dirs.append(auto_dir)
 
-# Attempt to load ADOMD.NET via pythonnet
-try:
-    import clr  # type: ignore[import-untyped]  # pythonnet
+    try:
+        import clr  # type: ignore[import-untyped]  # pythonnet
 
-    for _d in _ADOMD_SEARCH_DIRS:
-        if os.path.isdir(_d) and _d not in sys.path:
-            sys.path.append(_d)
+        for _d in search_dirs:
+            if os.path.isdir(_d) and _d not in sys.path:
+                sys.path.append(_d)
 
-    # PBI Desktop ships Microsoft.PowerBI.AdomdClient.dll; the NuGet package and
-    # standalone ADOMD.NET ship Microsoft.AnalysisServices.AdomdClient.dll. The
-    # embedded .NET namespace is Microsoft.AnalysisServices.AdomdClient in both,
-    # so the from-import stays the same — only the assembly name differs.
-    for _assembly_name in (
-        "Microsoft.PowerBI.AdomdClient",
-        "Microsoft.AnalysisServices.AdomdClient",
-    ):
-        try:
-            clr.AddReference(_assembly_name)
-            break
-        except Exception:
-            continue
+        # PBI Desktop ships Microsoft.PowerBI.AdomdClient.dll; the NuGet package
+        # and standalone ADOMD.NET ship Microsoft.AnalysisServices.AdomdClient.dll.
+        # The embedded .NET namespace is Microsoft.AnalysisServices.AdomdClient in
+        # both, so the from-import stays the same — only the assembly name differs.
+        for _assembly_name in (
+            "Microsoft.PowerBI.AdomdClient",
+            "Microsoft.AnalysisServices.AdomdClient",
+        ):
+            try:
+                clr.AddReference(_assembly_name)
+                break
+            except Exception:
+                continue
 
-    from Microsoft.AnalysisServices.AdomdClient import (
-        AdomdConnection as _AdomdConnection,
-    )  # type: ignore[import]
+        from Microsoft.AnalysisServices.AdomdClient import (
+            AdomdConnection as _AdomdConnectionClass,
+        )  # type: ignore[import]
+        _AdomdConnection = _AdomdConnectionClass
+        HAS_PYADOMD = True
 
-    HAS_PYADOMD = True
-
-    # One-line diagnostic so CI logs (and any local debugging) show exactly
-    # which ADOMD.NET assembly pythonnet resolved — this caught a CI bug
-    # where the older AS-shipped client on the runner shadowed our NuGet
-    # install and triggered the bearer + Roles + RLS-filter failure.
-    # Only print when PQL_DEBUG=1 to avoid noise in interactive use.
-    if os.environ.get("PQL_DEBUG") == "1":
-        try:
-            from System.Reflection import Assembly as _Assembly  # type: ignore[import]
-
-            _asm = _Assembly.GetAssembly(_AdomdConnection)
-            if _asm is not None:
-                print(
-                    f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
-                    file=sys.stderr,
+        if os.environ.get("PQL_DEBUG") == "1":
+            try:
+                from System.Reflection import (
+                    Assembly as _Assembly,  # type: ignore[import]
                 )
-        except Exception:
-            pass
-except Exception:
-    pass
+
+                _asm = _Assembly.GetAssembly(_AdomdConnection)
+                if _asm is not None:
+                    print(
+                        f"ADOMD.NET loaded: {_asm.Location} (version {_asm.GetName().Version})",
+                        file=sys.stderr,
+                    )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def __getattr__(name: str):
+    """Module-level lazy resolver.
+
+    Preserves the historical ``from pql_test.runner.adomd import HAS_PYADOMD``
+    call pattern: the load fires only when the name is actually bound by a
+    consumer, not at module import time.
+    """
+    if name == "HAS_PYADOMD":
+        _ensure_adomd_loaded()
+        return HAS_PYADOMD
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

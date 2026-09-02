@@ -82,12 +82,12 @@ import click
 from pql_test.runner import (
     HAS_MSAL,
     HAS_PSUTIL,
-    HAS_PYADOMD,
     Environment,
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
     get_pbi_files_opened,
+    has_pyadomd,
     parse_model_identifier,
     resolve_local_xmla_connection_by_name,
     resolve_service_xmla_connection_by_name,
@@ -121,10 +121,10 @@ def _check_prereqs() -> list[dict]:
     results.append(
         {
             "name": "pyadomd (ADOMD.NET XMLA client)",
-            "ok": HAS_PYADOMD,
+            "ok": has_pyadomd(),
             "detail": (
                 "pyadomd available"
-                if HAS_PYADOMD
+                if has_pyadomd()
                 else "Not installed — pip install pyadomd  "
                      "(requires .NET / ADOMD.NET on Windows)"
             ),

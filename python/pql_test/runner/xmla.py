@@ -9,7 +9,7 @@ This module provides low-level functions for:
 
 from __future__ import annotations
 
-from pql_test.runner.adomd import HAS_PYADOMD, get_adomd_connection_class
+from pql_test.runner.adomd import get_adomd_connection_class, has_pyadomd
 from pql_test.runner.models import ResolvedXmlaConnection
 from pql_test.runner.pbi_rest import _acquire_service_principal_token
 
@@ -92,7 +92,7 @@ def _execute_dax_query(
     Token-based auth is preferred because it supports row-level security
     evaluation with service principals — the primary use-case for build agents.
     """
-    if not HAS_PYADOMD:
+    if not has_pyadomd():
         raise ImportError(
             "pyadomd is required for XMLA query execution. "
             "Install with: pip install pyadomd"

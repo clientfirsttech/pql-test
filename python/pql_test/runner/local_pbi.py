@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from pql_test.runner.adomd import HAS_PYADOMD, get_adomd_connection_class
+from pql_test.runner.adomd import get_adomd_connection_class, has_pyadomd
 from pql_test.runner.model_path import _find_pbip_file
 from pql_test.runner.models import LocalPbiInstance, ResolvedXmlaConnection
 
@@ -98,9 +98,9 @@ def _get_catalog_from_local_port(port: int) -> Optional[str]:
     Returns ``""`` (empty string) when the connection succeeds, or ``None``
     when pyadomd is unavailable or the connection fails.
     """
-    if not HAS_PYADOMD:
+    if not has_pyadomd():
         return None
-    
+
     _AdomdConnection = get_adomd_connection_class()
     if _AdomdConnection is None:
         return None

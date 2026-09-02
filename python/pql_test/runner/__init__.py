@@ -34,9 +34,9 @@ from __future__ import annotations
 
 # Import ADOMD.NET loading from adomd.py
 from pql_test.runner.adomd import (
-    HAS_PYADOMD,
     _discover_adomd_search_dirs,
     get_adomd_connection_class,
+    has_pyadomd,
 )
 
 # Import auth bridge from auth.py
@@ -146,6 +146,7 @@ __all__ = [
     # Re-exported from adomd
     "HAS_PYADOMD",
     "get_adomd_connection_class",
+    "has_pyadomd",
     # Re-exported from model_path
     "parse_model_identifier",
     # Re-exported from local_pbi
@@ -165,3 +166,13 @@ __all__ = [
     "HAS_MSAL",
     "HAS_PSUTIL",
 ]
+
+
+def __getattr__(name: str):
+    """Lazily resolve ``HAS_PYADOMD`` so its current value reflects the
+    deferred ADOMD.NET load state.  Preserves the historical
+    ``from pql_test.runner import HAS_PYADOMD`` call pattern used by the
+    live-service tests and any external consumer."""
+    if name == "HAS_PYADOMD":
+        return has_pyadomd()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

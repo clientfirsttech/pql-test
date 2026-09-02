@@ -176,6 +176,45 @@ class TestCheckPrereqs:
         stdout, _, _ = run_cli(["check-prereqs"])
         assert "psutil" in stdout
 
+    def test_pyadomd_shows_available_when_adomd_loadable(self):
+        """
+        Given ADOMD.NET is loadable on this machine, `check-prereqs` must
+        report pyadomd as available.  Regression guard against the lazy-load
+        refactor freezing the pyadomd flag at False at CLI-module import
+        time before the deferred load fires.  See tasks/lazy-load-adomd-epic.md.
+
+        Runs a non-hermetic subprocess so ADOMD.NET auto-install/discovery
+        can actually succeed — hermetic mode deliberately suppresses it.
+        """
+        import subprocess
+        import sys
+        probe = subprocess.run(
+            [sys.executable, "-c",
+             "from pql_test.runner.adomd import has_pyadomd; "
+             "import sys; sys.exit(0 if has_pyadomd() else 2)"],
+            capture_output=True,
+            timeout=30,
+        )
+        if probe.returncode == 2:
+            pytest.skip("ADOMD.NET not loadable on this machine")
+
+        env = {k: v for k, v in os.environ.items() if not k.startswith("PQL_")}
+        env["PYTHONIOENCODING"] = "utf-8"
+        result = subprocess.run(
+            [sys.executable, "-m", "pql_test.cli", "check-prereqs"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            env=env,
+        )
+        pyadomd_line = next(
+            (line for line in result.stdout.splitlines() if "pyadomd" in line), "",
+        )
+        assert "\u2705" in pyadomd_line or "available" in pyadomd_line, (
+            f"pyadomd line looked stale: {pyadomd_line!r}\nfull stdout:\n{result.stdout}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # retrieve-tests

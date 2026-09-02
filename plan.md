@@ -34,6 +34,15 @@
 
 ## Completed Work
 
+### 2026-09-01 — Lazy-load ADOMD.NET at first XMLA use
+
+- **Lazy-load ADOMD.NET** — See [tasks/archive/2026-09-01-lazy-load-adomd.md](tasks/archive/2026-09-01-lazy-load-adomd.md)
+  - Moved the module-scope `import clr` + `clr.AddReference` + `from Microsoft.AnalysisServices.AdomdClient import AdomdConnection` block into a memoized `_ensure_adomd_loaded()` helper called by `has_pyadomd()` and `get_adomd_connection_class()`
+  - Added a module-level `__getattr__` in [python/pql_test/runner/adomd.py](python/pql_test/runner/adomd.py) and [python/pql_test/runner/__init__.py](python/pql_test/runner/__init__.py) so `from pql_test.runner import HAS_PYADOMD` still works but only triggers the load when the name is actually bound
+  - Migrated `cli._check_prereqs`, `runner/xmla.py`, and `runner/local_pbi.py` from reading `HAS_PYADOMD` at module-import time to calling `has_pyadomd()` at runtime so the reported / gate state reflects the current load outcome
+  - Added subprocess regression guard tests in [python/tests/test_adomd_lazy_load.py](python/tests/test_adomd_lazy_load.py) that assert `clr` and `Microsoft.AnalysisServices.AdomdClient` are absent from `sys.modules` after `import pql_test.cli`
+  - Cold-start `pql-test --help` dropped from ~5.8s → ~0.43s (13× faster); `check-prereqs` remains eager as its whole purpose is to verify ADOMD.NET loads
+
 ### 2026-09-01 — Speed up `local/<model_name>` detection
 
 - **Speed up `local/<model_name>` resolution** — See [tasks/archive/2026-09-01-speed-up-local-pbi-detection.md](tasks/archive/2026-09-01-speed-up-local-pbi-detection.md)
