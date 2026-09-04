@@ -33,6 +33,13 @@
 
 ## Completed Work
 
+### 2026-09-04 — Fix `local/<model_name>` truncation for names containing " - "
+
+- **Fix window-title suffix stripping** — See [tasks/archive/2026-09-04-local-model-name-hyphen-truncation.md](tasks/archive/2026-09-04-local-model-name-hyphen-truncation.md)
+  - `get_pbi_files_opened()` in [python/pql_test/runner/local_pbi.py](python/pql_test/runner/local_pbi.py) used `title.rfind(" - ")` to strip the legacy `" - Power BI Desktop"` window-title suffix, unconditionally truncating at the *last* " - " in the title. On newer PBI Desktop builds (no app-name suffix), a model name that itself contains " - " (e.g. "Component 4 - Daily Results Dashboard") was silently truncated to "Component 4", breaking `local/<model_name>` lookups for the real name.
+  - Now only strips the suffix via an explicit `str.endswith(" - Power BI Desktop")` check; otherwise the full title is used as the model name.
+  - Added regression tests in [python/tests/test_pql_test_runner.py](python/tests/test_pql_test_runner.py): title with no suffix + internal " - " keeps full name; title with suffix + internal " - " strips only the suffix; `resolve_local_xmla_connection_by_name` matches a model name containing " - ".
+
 ### 2026-09-02 — Restore ≥ 80% test coverage after monolith removal
 
 - **Coverage restoration** — See [tasks/archive/2026-09-02-coverage-restoration.md](tasks/archive/2026-09-02-coverage-restoration.md)

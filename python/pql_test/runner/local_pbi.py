@@ -38,6 +38,13 @@ __all__ = [
     "resolve_local_xmla_connection",
 ]
 
+# Legacy window-title suffix appended by some Power BI Desktop builds.
+# Newer/Store builds omit this suffix entirely, so it must only be
+# stripped when present as a literal trailing match — never via a blind
+# rfind(" - "), which would truncate model names that themselves contain
+# " - " (e.g. "Component 4 - Daily Results Dashboard").
+_PBI_DESKTOP_TITLE_SUFFIX = " - Power BI Desktop"
+
 # Runtime import handling for optional dependencies
 HAS_PSUTIL = False
 _psutil = None
@@ -228,8 +235,15 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # the cmdline name when it's non-empty after suffix-stripping.
     pid_to_raw_title = runner._get_pbi_process_window_titles(known_pbi_pids=pbi_pids)
     for pid, title in pid_to_raw_title.items():
-        idx = title.rfind(" - ")
-        model_name = title[:idx].strip() if idx > 0 else title.strip()
+        # Only strip the legacy " - Power BI Desktop" app-name suffix when
+        # the title actually ends with it.  Using rfind(" - ") unconditionally
+        # would truncate model names that themselves contain " - " (e.g.
+        # "Component 4 - Daily Results Dashboard") on newer builds whose
+        # window title is just the model name with no app-name suffix.
+        if title.endswith(_PBI_DESKTOP_TITLE_SUFFIX):
+            model_name = title[: -len(_PBI_DESKTOP_TITLE_SUFFIX)].strip()
+        else:
+            model_name = title.strip()
         if model_name:
             pbi_pid_to_model[pid] = model_name
             pbi_pids.add(pid)
