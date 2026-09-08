@@ -12,6 +12,9 @@ from pathlib import Path
 
 import pytest
 
+from pql_test.runner import TestSuite
+from pql_test.skills_resolver import _parse_skill_metadata, list_available_skills, resolve_skill_dir
+
 
 SKILLS_DIR = Path(__file__).parent.parent / "pql_test" / "skills"
 
@@ -40,6 +43,90 @@ def _click_flags(command_name: str) -> set[str]:
             if opt.startswith("--"):
                 flags.add(opt)
     return flags
+
+
+def test_testsuite_dataclass_is_not_collected_by_pytest():
+    """The runner summary model should not be mistaken for a pytest test class."""
+    assert TestSuite.__test__ is False
+
+
+def test_resolve_skill_dir_prefers_local_override(tmp_path):
+    """Local skills should win over the packaged defaults when both exist."""
+    local_dir = tmp_path / "skills" / "demo" / "SKILL.md"
+    local_dir.parent.mkdir(parents=True)
+    local_dir.write_text("---\nname: demo\ndescription: local demo\nversion: 1.2.3\n---\n", encoding="utf-8")
+
+    resolved = resolve_skill_dir("demo", repo_root=tmp_path)
+
+    assert resolved == local_dir.parent
+    assert resolved.joinpath("SKILL.md").read_text(encoding="utf-8") == local_dir.read_text(encoding="utf-8")
+
+
+def test_list_available_skills_and_metadata_parse_local_override(tmp_path):
+    """Skill metadata should parse from a local override and be returned by the resolver."""
+    local_dir = tmp_path / "skills" / "demo" / "SKILL.md"
+    local_dir.parent.mkdir(parents=True)
+    local_dir.write_text(
+        "---\nname: demo\ndescription: demo skill\nversion: 9.9.9\n---\ncontent here\n",
+        encoding="utf-8",
+    )
+
+    parsed = _parse_skill_metadata(local_dir, "local")
+    skills = list_available_skills(repo_root=tmp_path)
+
+    assert parsed["name"] == "demo"
+    assert parsed["description"] == "demo skill"
+    assert parsed["version"] == "9.9.9"
+    assert any(skill["name"] == "demo" and skill["source"] == "local" for skill in skills)
+
+
+def test_resolve_skill_dir_raises_helpful_error_for_unknown_skill(tmp_path):
+    """Missing skill names should raise a clear FileNotFoundError for end users."""
+    with pytest.raises(FileNotFoundError, match="Skill 'missing-skill' not found"):
+        resolve_skill_dir("missing-skill", repo_root=tmp_path)
+
+
+def test_parse_skill_metadata_without_frontmatter_uses_defaults():
+    """SKILL.md files without frontmatter should still return sensible metadata."""
+    path = SKILLS_DIR / "run-tests" / "SKILL.md"
+    body = path.read_text(encoding="utf-8")
+    stripped = body.split("---\n", 2)[-1] if body.startswith("---") else body
+    tmp_path = Path(__file__).parent / "tmp-skill-no-frontmatter.md"
+    tmp_path.write_text(stripped, encoding="utf-8")
+    try:
+        parsed = _parse_skill_metadata(tmp_path, "packaged")
+        assert parsed["name"] == tmp_path.parent.name
+        assert parsed["description"] == "(no description)"
+        assert parsed["version"] == "unknown"
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def test_resolve_skill_dir_handles_packaged_lookup_failure(monkeypatch, tmp_path):
+    """When packaged skills are unavailable, resolve_skill_dir should still raise a clear error."""
+    import pql_test.skills_resolver as skills_resolver
+
+    def raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError("missing package")
+
+    monkeypatch.setattr(skills_resolver.pkg_resources, "files", raise_file_not_found)
+
+    with pytest.raises(FileNotFoundError, match="Skill 'missing-skill' not found"):
+        skills_resolver.resolve_skill_dir("missing-skill", repo_root=tmp_path)
+
+
+def test_list_available_skills_handles_packaged_lookup_failure(monkeypatch, tmp_path):
+    """Missing packaged metadata should not crash listing; it should fall back cleanly to local skills only."""
+    import pql_test.skills_resolver as skills_resolver
+
+    def raise_file_not_found(*args, **kwargs):
+        raise FileNotFoundError("missing package")
+
+    monkeypatch.setattr(skills_resolver.pkg_resources, "files", raise_file_not_found)
+
+    skills = skills_resolver.list_available_skills(repo_root=tmp_path)
+    assert isinstance(skills, list)
+    assert skills == []
 
 
 # ---------------------------------------------------------------------------

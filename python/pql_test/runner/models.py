@@ -173,6 +173,10 @@ class TestResult:
 class TestSuite:
     """Summary of a full test run against a model."""
 
+    # Suppress pytest collection: name starts with 'Test' but this is a model
+    # used by tests and by the runner, not a real test case.
+    __test__: ClassVar[bool] = False
+
     model_path: str
     tests: list[PqlTest]
     results: list[TestResult]
