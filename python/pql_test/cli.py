@@ -1823,16 +1823,19 @@ def cmd_skill(name: str | None, format: str, list: bool, version: bool,
         content = skill_md.read_text(encoding='utf-8')
         
         if format == 'json':
-            # Extract frontmatter
-            import re
-            frontmatter_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
             metadata = {'name': name, 'version': 'unknown'}
-            if frontmatter_match:
-                frontmatter = frontmatter_match.group(1)
-                ver_match = re.search(r'^version:\s*(.+)$', frontmatter, re.MULTILINE)
-                if ver_match:
-                    metadata['version'] = ver_match.group(1).strip()
-            
+            try:
+                metadata['version'] = _pkg_version('pql-test')
+            except Exception:
+                # Fall back to the skill file's frontmatter when package metadata is unavailable.
+                import re
+                frontmatter_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+                if frontmatter_match:
+                    frontmatter = frontmatter_match.group(1)
+                    ver_match = re.search(r'^version:\s*(.+)$', frontmatter, re.MULTILINE)
+                    if ver_match:
+                        metadata['version'] = ver_match.group(1).strip()
+
             metadata['content'] = content
             metadata['source_path'] = str(skill_dir)
             click.echo(json.dumps(metadata, indent=2))

@@ -1,0 +1,225 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.6, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\JohnKerski\Git\pql-test\python
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.10.0, cov-7.0.0, mock-3.15.1
+collected 360 items
+
+tests\auth\test_auth_login_cmd.py ....                                   [  1%]
+tests\auth\test_cloud_config.py ........                                 [  3%]
+tests\auth\test_factory.py ..............                                [  7%]
+tests\auth\test_manager.py .......                                       [  9%]
+tests\auth\test_models.py ..............                                 [ 13%]
+tests\auth\test_store.py ......                                          [ 14%]
+tests\test_auth_runtime_integration.py ...........                       [ 17%]
+tests\test_cli_exit_codes.py ....                                        [ 18%]
+tests\test_connection_string_impersonation.py .....                      [ 20%]
+tests\test_dataset_name_resolution.py .......                            [ 22%]
+tests\test_environment_discovery.py ......................               [ 28%]
+tests\test_live_service.py ...FF                                         [ 29%]
+tests\test_local_ownership_filter.py ......                              [ 31%]
+tests\test_pql_test_cli.py ............................................. [ 43%]
+.........................FFFF..........                                  [ 54%]
+tests\test_pql_test_runner.py .......................................... [ 66%]
+.................................................................s...... [ 86%]
+.................................................                        [100%]
+
+================================== FAILURES ===================================
+_________________ TestLiveService.test_run_tests_on_rls_model _________________
+
+self = <tests.test_live_service.TestLiveService object at 0x000002777BC9C530>
+rls_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel'
+
+    def test_run_tests_on_rls_model(self, rls_model_path):
+        """
+        Test that RLS model tests can be executed against the live service.
+        Uses PQL_DATASET_ID_RLS if configured, otherwise skips.
+        """
+        _require_credentials()
+        rls_dataset_id = _env("PQL_DATASET_ID_RLS")
+        if not rls_dataset_id:
+            pytest.skip("PQL_DATASET_ID_RLS not configured ù skipping RLS model tests")
+    
+        suite = run_tests_from_model(rls_model_path, conn_opts=_live_opts(rls_dataset_id))
+    
+        print(f"\n=== RLS Model Test Results ===")
+        print(f"Total tests: {suite.total}")
+        print(f"Passed: {suite.passed}")
+        print(f"Failed: {suite.failed}")
+        print(f"Skipped: {suite.skipped}")
+        print(f"\nTest suites: {sorted({r.suite_name for r in suite.results if r.suite_name})}")
+        print(f"\nSample test names:")
+        for r in suite.results[:10]:
+            status = "\u2713  PASS" if r.passed else "\u2717 FAIL"
+            print(f"  {status}: {r.test_name}")
+        if len(suite.results) > 10:
+            print(f"  ... and {len(suite.results) - 10} more tests")
+    
+>       assert suite.total > 0, (
+            "Expected at least one test result from RLS_Model. "
+            "Check that *.Tests.dax files exist under examples/RLS_Model.SemanticModel/DAXQueries/."
+        )
+E       AssertionError: Expected at least one test result from RLS_Model. Check that *.Tests.dax files exist under examples/RLS_Model.SemanticModel/DAXQueries/.
+E       assert 0 > 0
+E        +  where 0 = TestSuite(model_path='C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel', tests=[], results=[], passed=0, failed=0, skipped=0, total=0).total
+
+tests\test_live_service.py:182: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+=== RLS Model Test Results ===
+Total tests: 0
+Passed: 0
+Failed: 0
+Skipped: 0
+
+Test suites: []
+
+Sample test names:
+---------------------------- Captured stderr call -----------------------------
+Warning: live test discovery failed against powerbi://api.powerbi.com/v1.0/myorg/pqlint-demos [Dev] / RLS_Model: AdomdConnectionException: PowerBI Request Failed.
+
+
+
+Action: Generating MWC token
+
+
+
+Description: {"error":{"code":"PowerBINotLicensedException","pbi.error":{"code":"PowerBINotLicensedException","parameters":{},"details":[],"exceptionCulprit":1}}}
+
+
+
+Technical Details:
+
+RootActivityId: 3783a62e-8a9e-44da-b34e-506cd60753f2 --
+_________________ TestLiveService.test_run_tests_on_ols_model _________________
+
+self = <tests.test_live_service.TestLiveService object at 0x000002777BC9C860>
+ols_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\OLS_Model.SemanticModel'
+
+    def test_run_tests_on_ols_model(self, ols_model_path):
+        """
+        Test that OLS model tests can be executed against the live service.
+        Uses PQL_DATASET_ID_OLS if configured, otherwise skips.
+        """
+        _require_credentials()
+        ols_dataset_id = _env("PQL_DATASET_ID_OLS")
+        if not ols_dataset_id or ols_dataset_id == "<your-ols-model-guid>":
+            pytest.skip("PQL_DATASET_ID_OLS not configured ù skipping OLS model tests")
+    
+        suite = run_tests_from_model(ols_model_path, conn_opts=_live_opts(ols_dataset_id))
+    
+        print(f"\n=== OLS Model Test Results ===")
+        print(f"Total tests: {suite.total}")
+        print(f"Passed: {suite.passed}")
+        print(f"Failed: {suite.failed}")
+        print(f"Skipped: {suite.skipped}")
+        print(f"\nTest suites: {sorted({r.suite_name for r in suite.results if r.suite_name})}")
+        print(f"\nSample test names:")
+        for r in suite.results[:10]:
+            status = "\u2713 PASS" if r.passed else "\u2717 FAIL"
+            print(f"  {status}: {r.test_name}")
+        if len(suite.results) > 10:
+            print(f"  ... and {len(suite.results) - 10} more tests")
+    
+>       assert suite.total > 0, (
+            "Expected at least one test result from OLS_Model. "
+            "Check that *.Tests.dax files exist under examples/OLS_Model.SemanticModel/DAXQueries/."
+        )
+E       AssertionError: Expected at least one test result from OLS_Model. Check that *.Tests.dax files exist under examples/OLS_Model.SemanticModel/DAXQueries/.
+E       assert 0 > 0
+E        +  where 0 = TestSuite(model_path='C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\OLS_Model.SemanticModel', tests=[], results=[], passed=0, failed=0, skipped=0, total=0).total
+
+tests\test_live_service.py:212: AssertionError
+---------------------------- Captured stdout call -----------------------------
+
+=== OLS Model Test Results ===
+Total tests: 0
+Passed: 0
+Failed: 0
+Skipped: 0
+
+Test suites: []
+
+Sample test names:
+---------------------------- Captured stderr call -----------------------------
+Warning: live test discovery failed against powerbi://api.powerbi.com/v1.0/myorg/pqlint-demos [Dev] / OLS_Model: AdomdConnectionException: PowerBI Request Failed.
+
+
+
+Action: Generating MWC token
+
+
+
+Description: {"error":{"code":"PowerBINotLicensedException","pbi.error":{"code":"PowerBINotLicensedException","parameters":{},"details":[],"exceptionCulprit":1}}}
+
+
+
+Technical Details:
+
+RootActivityId: db9abdb2-a4bb-4727-8c5b-3e4743dfb0c0 --
+______________ TestRlsModel.test_retrieve_tests_finds_rls_suite _______________
+
+self = <tests.test_pql_test_cli.TestRlsModel object at 0x000002777BC5DCA0>
+rls_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel'
+
+    def test_retrieve_tests_finds_rls_suite(self, rls_model_path):
+        """retrieve-tests discovers the RLS.ANY.Tests suite in the RLS model."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
+        assert code == 0
+>       assert "RLS.ANY.Tests" in stdout
+E       AssertionError: assert 'RLS.ANY.Tests' in '[]\n'
+
+tests\test_pql_test_cli.py:809: AssertionError
+___________ TestRlsModel.test_retrieve_tests_returns_non_empty_list ___________
+
+self = <tests.test_pql_test_cli.TestRlsModel object at 0x000002777BC5DF70>
+rls_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel'
+
+    def test_retrieve_tests_returns_non_empty_list(self, rls_model_path):
+        """retrieve-tests returns a non-empty JSON array for the RLS model."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
+        assert code == 0
+>       assert stdout.strip() != "[]"
+E       AssertionError: assert '[]' != '[]'
+E        +  where '[]' = <built-in method strip of str object at 0x000002777CFB4C00>()
+E        +    where <built-in method strip of str object at 0x000002777CFB4C00> = '[]\n'.strip
+
+tests\test_pql_test_cli.py:815: AssertionError
+______________ TestRlsModel.test_retrieve_tests_has_single_suite ______________
+
+self = <tests.test_pql_test_cli.TestRlsModel object at 0x000002777BC5E240>
+rls_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel'
+
+    def test_retrieve_tests_has_single_suite(self, rls_model_path):
+        """The RLS model contains exactly one test suite."""
+        stdout, _, code = run_cli(["retrieve-tests", rls_model_path], live=True)
+        assert code == 0
+        suites = json.loads(stdout)
+>       assert len(suites) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_pql_test_cli.py:822: AssertionError
+______________ TestRlsModel.test_retrieve_test_returns_rls_suite ______________
+
+self = <tests.test_pql_test_cli.TestRlsModel object at 0x000002777BC5E510>
+rls_model_path = 'C:\\Users\\JohnKerski\\Git\\pql-test\\examples\\RLS_Model.SemanticModel'
+
+    def test_retrieve_test_returns_rls_suite(self, rls_model_path):
+        """retrieve-test returns the RLS.ANY.Tests suite when requested by name."""
+        stdout, _, code = run_cli(
+            ["retrieve-test", rls_model_path, "RLS.ANY.Tests"], live=True
+        )
+>       assert code == 0
+E       assert 1 == 0
+
+tests\test_pql_test_cli.py:830: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_live_service.py::TestLiveService::test_run_tests_on_rls_model
+FAILED tests/test_live_service.py::TestLiveService::test_run_tests_on_ols_model
+FAILED tests/test_pql_test_cli.py::TestRlsModel::test_retrieve_tests_finds_rls_suite
+FAILED tests/test_pql_test_cli.py::TestRlsModel::test_retrieve_tests_returns_non_empty_list
+FAILED tests/test_pql_test_cli.py::TestRlsModel::test_retrieve_tests_has_single_suite
+FAILED tests/test_pql_test_cli.py::TestRlsModel::test_retrieve_test_returns_rls_suite
+======= 6 failed, 353 passed, 1 skipped, 1 warning in 149.14s (0:02:29) =======
