@@ -13,21 +13,21 @@ from pql_test.runner import (
     TestSuite,
     XmlaConnectionOptions,
     parse_model_identifier,
-    retrieve_tests,
     retrieve_test_by_name,
+    retrieve_tests,
     run_tests_from_model,
 )
 
 __all__ = [
-    "__version__",
     "Environment",
     "ModelIdentifier",
     "PqlTest",
     "TestResult",
     "TestSuite",
     "XmlaConnectionOptions",
+    "__version__",
     "parse_model_identifier",
-    "retrieve_tests",
     "retrieve_test_by_name",
+    "retrieve_tests",
     "run_tests_from_model",
 ]

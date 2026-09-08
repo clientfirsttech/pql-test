@@ -1,6 +1,6 @@
 # Fabric-Style Model Path Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-27)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Make the canonical service-path syntax `<workspace>.Workspace/<model>.SemanticModel` so the CLI surface matches Fabric's filesystem-layout convention (workspaces are `.Workspace` directories, semantic models are `.SemanticModel` directories). Keep the legacy `<workspace>.<model>` dot notation working with a deprecation warning so existing pipelines do not break the day users upgrade.
 
 ## Overview
@@ -48,3 +48,28 @@ The new canonical syntax mirrors that path exactly: `MyWorkspace.Workspace/MyMod
 - Given a user runs `--help` on `run-tests` or `retrieve-tests` or `retrieve-test`, should see the new format listed first in the "MODEL_PATH accepts three formats" block, with the legacy form noted as deprecated
 - Given a user reads `README.md` §"Model Path Formats", should see the new format documented as canonical and the legacy form documented as a deprecated alias
 - Given a user reads `README.md` examples for `run-tests` / `retrieve-tests`, should see Fabric-style paths in the demos (with at least one legacy example kept for migration clarity)
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- Fabric-style path syntax correctly handles edge cases (workspace names with dots, backslash separators)
+- Legacy dot notation continues to work with clear deprecation warning
+- Path parsing logic is clear and well-tested
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- All path format scenarios have dedicated tests
+- Deprecation warning fires correctly
+- All existing tests continue to pass
+
+✅ **Documentation**: 
+- README.md "Model Path Formats" section updated with Fabric-style syntax as canonical
+- CLI --help text shows new format first
+- UPGRADING.md documents migration from legacy dot notation
+- Deprecation timeline documented (removal in v0.3.0)

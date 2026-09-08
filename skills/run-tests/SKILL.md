@@ -1,9 +1,48 @@
 ---
 name: run-tests
 description: Execute all DAX test suites in a PBIP semantic model against the XMLA endpoint. Connects to a locally-open Power BI Desktop instance or to a remote Power BI Premium / Fabric workspace.
+version: 0.1.17
 ---
 
 Run `pql-test run-tests MODEL_PATH` to execute all DAX test suites found in a Power BI Project (PBIP) semantic model and report results in a pytest-style format.
+
+## Behavioral Contract
+
+```sudolang
+Interface RunTests {
+  exit_code: 0 | 1
+    // 0 = all tests passed
+    // 1 = one or more tests failed
+  
+  output_format: "pytest-style" | "json"
+    // pytest-style: human-readable console output (default)
+    // json: structured output when --output specified
+  
+  log_annotations: null | "github" | "azuredevops"
+    // github: ::group::, ::error::, ::notice::
+    // azuredevops: ##[group], ##[error], ##vso[task.complete]
+}
+
+Constraints {
+  // MODEL_PATH resolution order
+  local/<name> => connect to running Power BI Desktop instance
+  <workspace>.Workspace/<model>.SemanticModel => remote Fabric path
+  <filesystem_path> => local PBIP directory
+  
+  // Credential precedence
+  CLI flags (--tenant-id, --client-id, --client-secret) >
+  PQL_* environment variables >
+  Stored auth login credentials (keyring)
+  
+  // Environment filtering
+  When --env specified: only run *.{ENV}.Tests suites
+  PQL_TEST_ENV environment variable also supported
+}
+```
+
+## MODEL_PATH Formats
+
+## MODEL_PATH Formats
 
 MODEL_PATH accepts three formats:
 - **Filesystem path** — the PBIP root directory containing the `.pbip` file and `.SemanticModel` sub-folder (or the `.SemanticModel` directory itself).

@@ -26,9 +26,9 @@ on:
   workflow_dispatch:
     inputs:
       model:
-        description: 'GitHub Models model name (e.g. gpt-4o-mini, gpt-4o)'
+        description: 'GitHub Models model name (e.g. anthropic/claude-sonnet-4, gpt-4o-mini)'
         required: false
-        default: 'gpt-4o-mini'
+        default: 'anthropic/claude-sonnet-4'
   # Called by ci.yml to participate in the sequential pipeline
   workflow_call:
     inputs:
@@ -36,7 +36,7 @@ on:
         description: 'GitHub Models model name'
         type: string
         required: false
-        default: 'gpt-4o-mini'
+        default: 'anthropic/claude-sonnet-4'
 
 jobs:
   skill-eval:
@@ -56,9 +56,13 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install PyYAML
+        run: pip install --quiet pyyaml
+
       # -----------------------------------------------------------------------
       # Run skill evaluations via direct HTTP calls to GitHub Models API.
-      # Uses only Python stdlib (urllib.request + json) – no axios or npm.
+      # Uses only Python stdlib (urllib.request + json) plus PyYAML for test
+      # discovery – no axios or npm required.
       # Model can be overridden via the PQL_TEST_MODEL environment variable.
       # -----------------------------------------------------------------------
       - name: Run skill evaluation
@@ -70,7 +74,7 @@ jobs:
         run: python3 run_eval.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          PQL_TEST_MODEL: ${{ inputs.model || 'gpt-4o-mini' }}
+          PQL_TEST_MODEL: ${{ inputs.model || 'anthropic/claude-sonnet-4' }}
 
       # -----------------------------------------------------------------------
       # Upload results regardless of outcome

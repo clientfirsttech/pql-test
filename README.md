@@ -1,5 +1,9 @@
 # pql-test — DAX Test Runner for PBIP Models
 
+[![pytest](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml)
+![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
+[![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
+
 `pql-test` is a command-line tool bundled with the Power Query Lint VS Code
 extension. It discovers and executes DAX unit-test suites stored inside a
 **Power BI Project (PBIP)** semantic model, mirroring the
@@ -569,6 +573,110 @@ Credentials are stored securely using the platform keyring:
 
 ---
 
+## Security Considerations
+
+### Service Principal Permissions
+
+**⚠️ Security Warning**: Over-permissioned service principals create security risks. Follow least-privilege principles.
+
+**Recommended minimum permissions**:
+- **Azure AD API**: `Dataset.Read.All` (application permission)
+- **Workspace Access**: **Viewer** (read-only) or **Contributor** (read + refresh)
+
+❌ **Avoid**: `Workspace.ReadWrite.All`, tenant admin roles, or workspace Admin access unless specifically required.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
+
+### RLS/OLS Security Model
+
+#### Row-Level Security (RLS) Testing
+
+Tests can impersonate users to validate RLS rules using the `ImpersonateUser:` annotation:
+
+```dax
+// File: RLS.ANY.Tests.dax
+// ImpersonateUser: user@example.com
+
+DEFINE
+  FUNCTION RLS.RegionFilter.Test() = ...
+EVALUATE
+  RLS.RegionFilter.Test()
+```
+
+**Security Implications**:
+- **Local connections**: `EffectiveUserName` parameter is ignored (not supported by local Analysis Services)
+- **Service connections**: XMLA connection string includes `EffectiveUserName=<email>`
+- **⚠️ Warning**: The calling identity (your user or service principal) must have **workspace Admin** permissions to use `EffectiveUserName`
+- **Risk**: Malicious test files can impersonate any user email—there is no validation that the email corresponds to a real Azure AD principal
+
+**Recommended Practice**:
+- Use `ImpersonateRole:` instead when possible (see OLS section)
+- Restrict test file authoring to trusted developers
+- Run tests in isolated environments (separate dev/test workspaces)
+- Future enhancement: Configuration-based allowlist for approved impersonation emails
+
+#### Object-Level Security (OLS) Testing
+
+Tests can assume roles to validate OLS rules using the `ImpersonateRole:` annotation:
+
+```dax
+// File: OLS.ANY.Tests.dax
+// ImpersonateRole: RegionalManager
+
+DEFINE
+  FUNCTION OLS.HiddenTables.Test() = ...
+EVALUATE
+  OLS.HiddenTables.Test()
+```
+
+**Security Implications**:
+- **Preferred over `EffectiveUserName`**: Works for both local and service connections
+- **Service principals**: Can be granted role membership (no Admin required)
+- **Validation**: Analysis Services validates that the role exists in the model
+- **⚠️ Risk**: Malicious test files can specify any role name—access is granted if role exists
+
+**Recommended Practice**:
+- Add service principals directly to model roles (no `EffectiveUserName` needed)
+- Document which roles should be tested in your test plan
+- Future enhancement: Configuration-based allowlist for approved role names
+
+#### Security Best Practices for RLS/OLS Testing
+
+✅ **DO**:
+- Use `ImpersonateRole:` instead of `ImpersonateUser:` when possible
+- Test RLS/OLS rules in non-production environments
+- Grant service principals only the roles they need to test
+- Review test files for unexpected impersonation annotations
+- Use separate datasets for RLS/OLS testing (don't test against production)
+
+❌ **DON'T**:
+- Grant workspace Admin to service principals just for testing
+- Use production datasets for RLS/OLS test execution
+- Share RLS test credentials (each developer should use their own identity)
+- Assume `EffectiveUserName` validates email addresses (it doesn't)
+
+**Threat Model**: See [docs/security-threat-model.md](docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
+
+### Secret Rotation
+
+**Best Practice**: Rotate service principal secrets every 90 days.
+
+```powershell
+# When secret approaches expiry:
+# 1. Create new secret in Azure Portal
+# 2. Update stored credential
+pql-test auth login -u <client-id> -p <new-secret> --tenant <tenant-id>
+
+# 3. Verify new secret works
+pql-test auth status
+
+# 4. Revoke old secret in Azure Portal
+```
+
+Set calendar reminders 1 week before expiry to avoid CI/CD outages.
+
+---
+
 ## Commands
 
 All commands are run from within the `python/` directory with the virtual
@@ -925,6 +1033,185 @@ ssss
 
 ---
 
+### skill
+
+Manage AI assistant skill files packaged with pql-test.
+
+```bash
+pql-test skill [name] [--list] [--format {markdown,json}] [--version]
+                      [--install <harness>] [--all] [--show] [--uninstall] [--dry-run] [--force]
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+|---|---|---|
+| `name` | ❌ | Skill name to print (check-prereqs, retrieve-test, retrieve-tests, run-tests) |
+| `--list`, `-l` | ❌ | List all available skills (names only) |
+| `--format {markdown,json}` | ❌ | Output format (default: markdown) |
+| `--version` | ❌ | Show installed skill version |
+| `--install <harness>` | ❌ | Install skills to an AI harness: `claude`, `copilot`, `cursor`, `windsurf` |
+| `--all` | ❌ | Install to all harnesses (claude, copilot, cursor, windsurf) |
+| `--show` | ❌ | Show installation status and version for all harnesses |
+| `--uninstall` | ❌ | Remove pql-test skills from all harnesses |
+| `--dry-run` | ❌ | Preview changes without writing files (use with --install or --uninstall) |
+| `--force` | ❌ | Overwrite locally-customized skill files during `--install` (skips preserve check) |
+
+**List all available skills:**
+
+```bash
+pql-test skill --list
+```
+
+```
+check-prereqs
+retrieve-test
+retrieve-tests
+run-tests
+```
+
+**Print a specific skill:**
+
+```bash
+pql-test skill run-tests
+```
+
+This outputs the full skill documentation in markdown format, including:
+- YAML frontmatter (name, description, version)
+- Usage instructions
+- CLI flag reference
+- SudoLang behavioral contracts (Interface and Constraints blocks)
+
+**Print skill in JSON format:**
+
+```bash
+pql-test skill run-tests --format json
+```
+
+```json
+{
+  "name": "run-tests",
+  "description": "Execute DAX test suites via XMLA",
+  "version": "0.1.13",
+  "content": "---\nname: run-tests\n..."
+}
+```
+
+**Show skill version:**
+
+```bash
+pql-test skill --version
+```
+
+```
+pql-test skills version 0.1.13
+```
+
+**Install skills to AI assistant harnesses:**
+
+```bash
+# Install to GitHub Copilot (.github/copilot-instructions.md)
+pql-test skill --install copilot
+
+# Install to Anthropic Claude (.claude/skills/pql-test/)
+pql-test skill --install claude
+
+# Install to Cursor (.cursor/skills/pql-test/)
+pql-test skill --install cursor
+
+# Install to Windsurf (.windsurf/skills/pql-test/)
+pql-test skill --install windsurf
+
+# Install to all harnesses at once
+pql-test skill --all
+```
+
+Each install adds a version marker for tracking:
+```markdown
+<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+```
+
+**Preview installation without writing files:**
+
+```bash
+pql-test skill --install copilot --dry-run
+```
+
+```
+Would update (10 changes):
+  • .github/copilot-instructions.md (CREATE)
+
+Run without --dry-run to apply changes.
+```
+
+**Show installation status:**
+
+```bash
+pql-test skill --show
+```
+
+```
+pql-test skill installation status:
+
+  Copilot:  ✅ v0.1.13 (.github/copilot-instructions.md)
+  Claude:   ✅ v0.1.16 (.claude/skills/pql-test/)
+  Cursor:   ❌ Not installed
+  Windsurf: ❌ Not installed
+
+All installed harnesses are up to date.
+```
+
+If a harness has an outdated version, `--show` reports it:
+
+```
+  Copilot:  ⚠️  v0.1.12 (current: 0.1.13) — run pql-test skill --install copilot to update
+```
+
+**Uninstall skills from all harnesses:**
+
+```bash
+pql-test skill --uninstall
+```
+
+This removes all pql-test skill files with the version marker comment. Use `--dry-run` to preview changes first.
+
+**Preserve local customizations (default behavior):**
+
+When you re-run `--install`, pql-test refuses to overwrite a skill file if you've customized it locally. Two cases trigger preservation:
+
+1. The installed marker version matches the current package version (`v0.1.17` marker + `v0.1.17` package) — assumed intentional user edit.
+2. The file has no `<!-- Installed by pql-test skill v... -->` marker at all — treated as unmanaged.
+
+Example output:
+
+```
+Preserved (customized, v0.1.17 marker present): .claude\skills\pql-test\run-tests\SKILL.md — use --force to overwrite
+Preserved (no pql-test marker found): .claude\skills\pql-test\my-custom\SKILL.md — use --force to overwrite
+```
+
+**Force overwrite (discard local edits):**
+
+```bash
+pql-test skill --install claude --force
+```
+
+`--force` writes the packaged skill content regardless of the marker version or user edits. Combine with `--dry-run` to preview.
+
+**Harness target paths:**
+
+| Harness | Install Location |
+|---|---|
+| Copilot | `.github/copilot-instructions.md` |
+| Claude | `.claude/skills/pql-test/` |
+| Cursor | `.cursor/skills/pql-test/` |
+| Windsurf | `.windsurf/skills/pql-test/` |
+
+**Skill content:**
+
+All skills are packaged in the wheel (`pql_test/skills/`) and installed from the package. Local overrides in `skills/` at the repository root take precedence during development.
+
+---
+
 ## Connection Options
 
 `pql-test` resolves an XMLA connection using the following priority order:
@@ -1247,6 +1534,42 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "DAX tests failed — blocking pipeline."
     exit 1
 }
+```
+
+---
+
+## Architecture
+
+The `pql-test` runner is organized as a modular Python package under `python/pql_test/runner/` with focused, single-responsibility modules:
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `__init__.py` | 150 | Public API re-exports for backward compatibility |
+| `models.py` | 204 | Pure data classes and enums (Environment, PqlTest, TestResult, etc.) |
+| `adomd.py` | 253 | ADOMD.NET assembly loading and NuGet auto-install |
+| `auth.py` | 159 | Authentication credential resolution bridge |
+| `pbi_rest.py` | 123 | Power BI REST API helpers (workspace/dataset resolution) |
+| `local_pbi.py` | 362 | Local Power BI Desktop process detection via psutil |
+| `model_path.py` | 216 | Model identifier parsing (filesystem, local/, Fabric paths) |
+| `resolver.py` | 271 | XMLA connection resolution coordination |
+| `xmla.py` | 117 | XMLA query execution via ADOMD.NET |
+| `discovery.py` | 248 | Test discovery (live XMLA + filesystem) |
+| `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
+
+**Total**: 2,298 lines across 11 modules (average 209 lines per module)
+
+All modules follow a 400-line soft budget (800-line hard budget) to keep code maintainable. Each module has minimal coupling to others, making the codebase easier to understand, test, and modify.
+
+The public API surface remains unchanged from the original monolithic design—all existing imports continue to work:
+
+```python
+from pql_test.runner import (
+    Environment,
+    PqlTest,
+    TestResult,
+    retrieve_tests,
+    run_tests_from_model,
+)
 ```
 
 ---

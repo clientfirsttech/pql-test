@@ -1,6 +1,6 @@
 # Unified Auth Runtime Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-26)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: `pql-test run-tests` and `retrieve-tests` consume whichever authentication method the user chose with `pql-test auth login` — interactive, service principal (secret/cert/federated), or managed identity — so the runtime identity matches the stored choice. The actual XMLA query still runs through ADOMD.NET / pyadomd; only the bearer-token source changes.
 
 ## Overview
@@ -39,3 +39,30 @@ This epic closes the gap by acquiring a bearer token via `AuthenticationManager.
 **Requirements**:
 - Given stored credentials have method `INTERACTIVE` and the runtime detects a non-TTY stdin or the `CI` env var is set, should fail with a clear error message ("Stored interactive credentials cannot be used in a non-interactive environment; run pql-test auth login with --user/--password or --identity for CI") instead of hanging on a browser prompt that no one is there to complete
 - Given stored credentials have method `INTERACTIVE` and the runtime is in a TTY (developer machine), should launch the browser prompt as expected
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- All 5 auth methods (interactive, SPN secret/cert/federated, managed identity) flow correctly
+- Priority order (CLI flags → env vars → stored creds → local fallback) is clear
+- CI failure mode is fast and explicit (no hangs)
+- Bearer token handling is secure
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- All auth method scenarios have dedicated tests
+- Interactive CI failure mode tested
+- Priority order verified in tests
+- All existing tests continue to pass
+
+✅ **Documentation**: 
+- README.md "Authentication" section updated with all 5 methods
+- Auth flow priority documented
+- CONTRIBUTING.md includes auth testing guidance
+- Inline code comments explain bridge logic

@@ -74,18 +74,20 @@ if not os.environ.get("PQL_TEST_HERMETIC"):
     except ImportError:
         pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 import click
 
 from pql_test.runner import (
     HAS_MSAL,
     HAS_PSUTIL,
-    HAS_PYADOMD,
     Environment,
-    ModelIdentifier,
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
     get_pbi_files_opened,
+    has_pyadomd,
     parse_model_identifier,
     resolve_local_xmla_connection_by_name,
     resolve_service_xmla_connection_by_name,
@@ -95,7 +97,6 @@ from pql_test.runner import (
     run_tests_from_model,
 )
 
-from importlib.metadata import version as _pkg_version, PackageNotFoundError
 try:
     _VERSION = _pkg_version("pql-test")
 except PackageNotFoundError:
@@ -120,10 +121,10 @@ def _check_prereqs() -> list[dict]:
     results.append(
         {
             "name": "pyadomd (ADOMD.NET XMLA client)",
-            "ok": HAS_PYADOMD,
+            "ok": has_pyadomd(),
             "detail": (
                 "pyadomd available"
-                if HAS_PYADOMD
+                if has_pyadomd()
                 else "Not installed — pip install pyadomd  "
                      "(requires .NET / ADOMD.NET on Windows)"
             ),
@@ -566,7 +567,10 @@ _env_option = click.option(
 )
 
 
-def _format_local_miss_diagnostic(model_name: str) -> str:
+def _format_local_miss_diagnostic(
+    model_name: str,
+    instances: list | None = None,
+) -> str:
     """Build a multi-line diagnostic when local/<model_name> doesn't resolve.
 
     Shows every Power BI Desktop instance the CLI could detect (with
@@ -574,18 +578,24 @@ def _format_local_miss_diagnostic(model_name: str) -> str:
     happens with the Microsoft Store build whose process tree is ACL-locked).
     Also lists the common reasons a name lookup misses so the user can
     self-diagnose without having to re-run with --verbose.
+
+    When *instances* is provided, it is used directly — this lets the caller
+    enumerate once and share the result with the resolver and any verbose
+    printout.  When *instances* is ``None``, the diagnostic enumerates itself
+    (preserves the original call signature for other callers).
     """
     lines: list[str] = [
         f"No matching Power BI Desktop instance found for model '{model_name}'.",
         "",
     ]
-    try:
-        instances = get_pbi_files_opened()
-    except ImportError:
-        lines.append(
-            "  (psutil not installed — local detection limited to port-file fallback.)"
-        )
-        instances = []
+    if instances is None:
+        try:
+            instances = get_pbi_files_opened()
+        except ImportError:
+            lines.append(
+                "  (psutil not installed — local detection limited to port-file fallback.)"
+            )
+            instances = []
     if instances:
         lines.append("Detected Power BI Desktop instances:")
         for inst in instances:
@@ -989,24 +999,35 @@ def cmd_run_tests(
         # local/<model_name> — resolve local connection by name
         abs_path = f"local/{ident.model_name}"
 
-        if verbose:
-            try:
-                instances = get_pbi_files_opened()
-                if instances:
-                    click.echo("\nDetected Power BI Desktop instances:")
-                    for inst in instances:
-                        name = inst.model_name or "<unnamed>"
-                        click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
-                else:
-                    click.echo("\nNo Power BI Desktop instances detected.")
-            except ImportError:
-                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+        # Enumerate open Power BI Desktop instances once and share the
+        # result with the verbose printout, the resolver, and the miss
+        # diagnostic — otherwise a single miss triggers 3+ redundant
+        # process/window/port scans (each of which used to run an ADOMD
+        # probe per port).  See tasks/speed-up-local-pbi-detection-epic.md.
+        instances: list | None
+        try:
+            instances = get_pbi_files_opened()
+        except ImportError:
+            instances = None
 
-        conn = resolve_local_xmla_connection_by_name(ident.model_name)
+        if verbose:
+            if instances is None:
+                click.echo("\npsutil not installed \u2014 local detection limited to port-file fallback.")
+            elif instances:
+                click.echo("\nDetected Power BI Desktop instances:")
+                for inst in instances:
+                    name = inst.model_name or "<unnamed>"
+                    click.echo(f"  \u2022 '{name}'  \u2192  {inst.server} / {inst.catalog}")
+            else:
+                click.echo("\nNo Power BI Desktop instances detected.")
+
+        conn = resolve_local_xmla_connection_by_name(ident.model_name, instances=instances)
         if conn:
             click.echo(f"\nLocal XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
-            diagnostic = _format_local_miss_diagnostic(ident.model_name)
+            diagnostic = _format_local_miss_diagnostic(
+                ident.model_name, instances=instances,
+            )
             pre_warnings.append(diagnostic)
             click.echo("\nWarning: " + diagnostic, err=True)
 
@@ -1082,6 +1103,7 @@ def cmd_run_tests(
         connection=conn,
         skip_message=skip_message,
         environment=test_environment,
+        connection_pre_resolved=True,
     )
 
     if log_format == "azuredevops":
@@ -1397,6 +1419,429 @@ def cmd_auth_status() -> None:
     if status.client_id:
         click.echo(f"  Client ID: {status.client_id}")
     click.echo(f"  Environment: {status.environment}")
+
+
+# ---------------------------------------------------------------------------
+# skill helpers
+# ---------------------------------------------------------------------------
+
+def _get_harness_paths() -> dict[str, Path]:
+    """Return the target paths for each harness."""
+    return {
+        'claude': Path('.claude/skills/pql-test'),
+        'copilot': Path('.github'),  # Copilot uses copilot-instructions.md
+        'cursor': Path('.cursor/skills/pql-test'),
+        'windsurf': Path('.windsurf/skills/pql-test'),
+    }
+
+
+def _install_skills(harness: str | None, install_all: bool, dry_run: bool, force: bool = False) -> None:
+    """Install skills to specified harness(es)."""
+    import re as _re
+
+    from pql_test.skills_resolver import list_available_skills
+    
+    harnesses = _get_harness_paths()
+    valid_harnesses = list(harnesses.keys())
+    
+    # Validate harness name if specified
+    if harness and harness not in valid_harnesses:
+        click.echo(f"Error: Unknown harness '{harness}'", err=True)
+        click.echo(f"Valid harnesses: {', '.join(valid_harnesses)}", err=True)
+        sys.exit(1)
+    
+    # Determine which harnesses to install to
+    if install_all:
+        targets = valid_harnesses
+    elif harness:
+        targets = [harness]
+    else:
+        click.echo("Error: Must specify --install HARNESS or --all", err=True)
+        sys.exit(1)
+    
+    skills = list_available_skills()
+    created_count = 0
+    updated_count = 0
+    unchanged_count = 0
+    preserved_count = 0
+
+    marker_regex = _re.compile(r"<!--\s*Installed by pql-test skill v([0-9][0-9A-Za-z.\-]*)\s*-->")
+
+    def _write_decision(target_file: Path, new_content: str) -> str:
+        """Return one of 'create', 'update', 'unchanged', 'preserve-customized', 'preserve-unmanaged'."""
+        if not target_file.exists():
+            return "create"
+        existing = target_file.read_text(encoding="utf-8")
+        if existing == new_content:
+            return "unchanged"
+        if force:
+            return "update"
+        m = marker_regex.search(existing)
+        if m is None:
+            return "preserve-unmanaged"
+        if m.group(1) == _VERSION:
+            return "preserve-customized"
+        return "update"
+
+    for target_harness in targets:
+        target_path = harnesses[target_harness]
+        
+        if target_harness == 'copilot':
+            # Copilot uses a single copilot-instructions.md file
+            instructions_file = target_path / 'copilot-instructions.md'
+            content = _generate_copilot_instructions(skills)
+            decision = _write_decision(instructions_file, content)
+            
+            if dry_run:
+                if decision == "create":
+                    click.echo(f"Would create: {instructions_file}")
+                    created_count += 1
+                elif decision == "update":
+                    click.echo(f"Would update: {instructions_file}")
+                    updated_count += 1
+                elif decision == "unchanged":
+                    click.echo(f"Unchanged: {instructions_file}")
+                    unchanged_count += 1
+                else:
+                    click.echo(f"Would preserve: {instructions_file} (use --force to overwrite)")
+                    preserved_count += 1
+            else:
+                if decision in ("create", "update"):
+                    instructions_file.parent.mkdir(parents=True, exist_ok=True)
+                    instructions_file.write_text(content, encoding='utf-8')
+                if decision == "create":
+                    click.echo(f"Created: {instructions_file}")
+                    created_count += 1
+                elif decision == "update":
+                    click.echo(f"Updated: {instructions_file}")
+                    updated_count += 1
+                elif decision == "unchanged":
+                    click.echo(f"Unchanged: {instructions_file}")
+                    unchanged_count += 1
+                elif decision == "preserve-customized":
+                    click.echo(
+                        f"Preserved (customized, v{_VERSION} marker present): {instructions_file} "
+                        f"— use --force to overwrite"
+                    )
+                    preserved_count += 1
+                else:  # preserve-unmanaged
+                    click.echo(
+                        f"Preserved (no pql-test marker found): {instructions_file} "
+                        f"— use --force to overwrite"
+                    )
+                    preserved_count += 1
+        else:
+            # Claude, Cursor, Windsurf use skill directories
+            for skill in skills:
+                from pql_test.skills_resolver import resolve_skill_dir
+                skill_dir = resolve_skill_dir(skill['name'])
+                skill_md = skill_dir / 'SKILL.md'
+                
+                target_skill_dir = target_path / skill['name']
+                target_skill_file = target_skill_dir / 'SKILL.md'
+                
+                content = skill_md.read_text(encoding='utf-8')
+                # Add installation marker
+                marker = f"<!-- Installed by pql-test skill v{_VERSION} -->\n"
+                if not content.startswith('<!--'):
+                    content = marker + content
+                elif 'Installed by pql-test skill' not in content:
+                    # Insert marker after existing frontmatter comment
+                    lines = content.split('\n')
+                    insert_idx = 0
+                    for i, line in enumerate(lines):
+                        if line.strip().endswith('-->'):
+                            insert_idx = i + 1
+                            break
+                    lines.insert(insert_idx, marker.rstrip())
+                    content = '\n'.join(lines)
+                
+                decision = _write_decision(target_skill_file, content)
+
+                if dry_run:
+                    if decision == "create":
+                        click.echo(f"Would create: {target_skill_file}")
+                        created_count += 1
+                    elif decision == "update":
+                        click.echo(f"Would update: {target_skill_file}")
+                        updated_count += 1
+                    elif decision == "unchanged":
+                        unchanged_count += 1
+                    else:
+                        click.echo(f"Would preserve: {target_skill_file} (use --force to overwrite)")
+                        preserved_count += 1
+                else:
+                    if decision in ("create", "update"):
+                        target_skill_dir.mkdir(parents=True, exist_ok=True)
+                        target_skill_file.write_text(content, encoding='utf-8')
+                    if decision == "create":
+                        click.echo(f"Created: {target_skill_file}")
+                        created_count += 1
+                    elif decision == "update":
+                        click.echo(f"Updated: {target_skill_file}")
+                        updated_count += 1
+                    elif decision == "unchanged":
+                        unchanged_count += 1
+                    elif decision == "preserve-customized":
+                        click.echo(
+                            f"Preserved (customized, v{_VERSION} marker present): {target_skill_file} "
+                            f"— use --force to overwrite"
+                        )
+                        preserved_count += 1
+                    else:  # preserve-unmanaged
+                        click.echo(
+                            f"Preserved (no pql-test marker found): {target_skill_file} "
+                            f"— use --force to overwrite"
+                        )
+                        preserved_count += 1
+    
+    # Summary
+    if dry_run:
+        click.echo(
+            f"\nDry run summary: {created_count} would be created, "
+            f"{updated_count} would be updated, {preserved_count} would be preserved"
+        )
+    else:
+        click.echo(
+            f"\nInstallation complete: {created_count} created, {updated_count} updated, "
+            f"{unchanged_count} unchanged, {preserved_count} preserved"
+        )
+
+
+def _generate_copilot_instructions(skills: list[dict[str, str]]) -> str:
+    """Generate copilot-instructions.md content from skills."""
+    lines = [
+        f"<!-- Installed by pql-test skill v{_VERSION} -->",
+        "",
+        "# pql-test Skills",
+        "",
+        "This workspace has pql-test skills installed for DAX testing with Power BI semantic models.",
+        "",
+        "## Available Skills",
+        "",
+    ]
+    
+    for skill in skills:
+        lines.append(f"### {skill['name']}")
+        lines.append(f"{skill['description']}")
+        lines.append("")
+    
+    lines.extend([
+        "## Usage",
+        "",
+        "Use these skills when working with:",
+        "- Power BI semantic model testing",
+        "- DAX query execution",
+        "- PBIP project structure",
+        "- XMLA endpoint connections",
+        "",
+        "Run `pql-test --help` for CLI documentation.",
+    ])
+    
+    return '\n'.join(lines)
+
+
+def _show_install_status() -> None:
+    """Show installation status for all harnesses."""
+    from pql_test.skills_resolver import list_available_skills
+    
+    harnesses = _get_harness_paths()
+    skills = list_available_skills()
+    
+    click.echo("Installation status:\n")
+    
+    for harness_name, harness_path in harnesses.items():
+        if harness_name == 'copilot':
+            instructions_file = harness_path / 'copilot-instructions.md'
+            if instructions_file.exists():
+                content = instructions_file.read_text(encoding='utf-8')
+                version = _extract_version_from_marker(content)
+                status = "✅ installed" if version else "⚠️  installed (no version marker)"
+                if version and version != _VERSION:
+                    status += f" (version mismatch: {version} vs {_VERSION})"
+                click.echo(f"  {harness_name:<12} {status}")
+            else:
+                click.echo(f"  {harness_name:<12} ❌ not installed")
+        else:
+            # Check if any skills are installed
+            installed_skills = 0
+            mismatched = False
+            for skill in skills:
+                skill_file = harness_path / skill['name'] / 'SKILL.md'
+                if skill_file.exists():
+                    installed_skills += 1
+                    content = skill_file.read_text(encoding='utf-8')
+                    version = _extract_version_from_marker(content)
+                    if version and version != _VERSION:
+                        mismatched = True
+            
+            if installed_skills == len(skills):
+                status = "✅ installed"
+                if mismatched:
+                    status += " (version mismatch detected)"
+                click.echo(f"  {harness_name:<12} {status}")
+            elif installed_skills > 0:
+                click.echo(f"  {harness_name:<12} ⚠️  partially installed ({installed_skills}/{len(skills)} skills)")
+            else:
+                click.echo(f"  {harness_name:<12} ❌ not installed")
+
+
+def _uninstall_skills(dry_run: bool) -> None:
+    """Uninstall all pql-test skills."""
+    harnesses = _get_harness_paths()
+    removed_count = 0
+    
+    for harness_name, harness_path in harnesses.items():
+        if harness_name == 'copilot':
+            instructions_file = harness_path / 'copilot-instructions.md'
+            if instructions_file.exists():
+                content = instructions_file.read_text(encoding='utf-8')
+                if 'Installed by pql-test skill' in content:
+                    if dry_run:
+                        click.echo(f"Would remove: {instructions_file}")
+                        removed_count += 1
+                    else:
+                        instructions_file.unlink()
+                        click.echo(f"Removed: {instructions_file}")
+                        removed_count += 1
+        else:
+            if harness_path.exists():
+                for skill_dir in harness_path.iterdir():
+                    if skill_dir.is_dir():
+                        skill_file = skill_dir / 'SKILL.md'
+                        if skill_file.exists():
+                            content = skill_file.read_text(encoding='utf-8')
+                            if 'Installed by pql-test skill' in content:
+                                if dry_run:
+                                    click.echo(f"Would remove: {skill_file}")
+                                    removed_count += 1
+                                else:
+                                    skill_file.unlink()
+                                    click.echo(f"Removed: {skill_file}")
+                                    removed_count += 1
+                                    # Remove empty directories
+                                    if not any(skill_dir.iterdir()):
+                                        skill_dir.rmdir()
+                # Remove pql-test directory if empty
+                if harness_path.exists() and not any(harness_path.iterdir()) and not dry_run:
+                    harness_path.rmdir()
+    
+    if dry_run:
+        click.echo(f"\nDry run summary: {removed_count} files would be removed")
+    else:
+        if removed_count > 0:
+            click.echo(f"\nUninstallation complete: {removed_count} files removed")
+        else:
+            click.echo("\nNo pql-test skills found to uninstall")
+
+
+def _extract_version_from_marker(content: str) -> str | None:
+    """Extract version from installation marker comment."""
+    import re
+    match = re.search(r'Installed by pql-test skill v([\d.]+)', content)
+    return match.group(1) if match else None
+
+
+# ---------------------------------------------------------------------------
+# skill
+# ---------------------------------------------------------------------------
+
+@cli.command("skill")
+@click.argument("name", required=False)
+@click.option("--format", type=click.Choice(['text', 'json']), default='text', help="Output format (text or json)")
+@click.option("--list", is_flag=True, help="List skill names only (one per line)")
+@click.option("--version", is_flag=True, help="Print package version")
+@click.option("--install", metavar="HARNESS", help="Install skills to specified harness (claude, copilot, cursor, windsurf)")
+@click.option("--all", "install_all", is_flag=True, help="Install to all harnesses")
+@click.option("--show", is_flag=True, help="Show installation status for all harnesses")
+@click.option("--uninstall", is_flag=True, help="Uninstall all pql-test skills")
+@click.option("--dry-run", is_flag=True, help="Show what would be installed/uninstalled without making changes")
+@click.option(
+    "--force",
+    is_flag=True,
+    help=(
+        "Overwrite skill files even if the installed marker version matches the "
+        "current package (useful after a manual customization you want to discard)."
+    ),
+)
+def cmd_skill(name: str | None, format: str, list: bool, version: bool, 
+              install: str | None, install_all: bool, show: bool, uninstall: bool,
+              dry_run: bool, force: bool) -> None:
+    """Manage pql-test skill files.
+    
+    With no arguments, lists all available skills with descriptions.
+    With a NAME argument, prints that skill's content.
+    With --install HARNESS, installs skills to the specified harness.
+    With --show, displays installation status across all harnesses.
+    With --uninstall, removes all installed pql-test skills.
+    """
+    from pql_test.skills_resolver import list_available_skills, resolve_skill_dir
+    
+    if version:
+        click.echo(_VERSION)
+        return
+    
+    # Handle --show
+    if show:
+        _show_install_status()
+        return
+    
+    # Handle --uninstall
+    if uninstall:
+        _uninstall_skills(dry_run)
+        return
+    
+    # Handle --install
+    if install or install_all:
+        _install_skills(install if install else None, install_all, dry_run, force)
+        return
+    
+    if list:
+        skills = list_available_skills()
+        for skill in skills:
+            click.echo(skill['name'])
+        return
+    
+    if name is None:
+        # List all skills with descriptions
+        skills = list_available_skills()
+        if not skills:
+            click.echo("No skills found.")
+            return
+        
+        click.echo("Available pql-test skills:\n")
+        for skill in skills:
+            click.echo(f"  {skill['name']:<20} {skill['description']}")
+            if skill['source'] == 'local':
+                click.echo(f"{' ' * 22}(local override)")
+        return
+    
+    # Print specific skill
+    try:
+        skill_dir = resolve_skill_dir(name)
+        skill_md = skill_dir / "SKILL.md"
+        content = skill_md.read_text(encoding='utf-8')
+        
+        if format == 'json':
+            # Extract frontmatter
+            import re
+            frontmatter_match = re.match(r'^---\s*\n(.*?)\n---', content, re.DOTALL)
+            metadata = {'name': name, 'version': 'unknown'}
+            if frontmatter_match:
+                frontmatter = frontmatter_match.group(1)
+                ver_match = re.search(r'^version:\s*(.+)$', frontmatter, re.MULTILINE)
+                if ver_match:
+                    metadata['version'] = ver_match.group(1).strip()
+            
+            metadata['content'] = content
+            metadata['source_path'] = str(skill_dir)
+            click.echo(json.dumps(metadata, indent=2))
+        else:
+            click.echo(content)
+            
+    except FileNotFoundError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
