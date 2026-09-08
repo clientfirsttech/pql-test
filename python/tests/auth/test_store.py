@@ -141,3 +141,40 @@ def test_credential_store_namespace_isolation():
     
     assert loaded1.tenant_id == "tenant-ns1"
     assert loaded2.tenant_id == "tenant-ns2"
+
+
+def test_credential_store_raises_when_keyring_is_unavailable(monkeypatch):
+    """CredentialStore should fail cleanly when keyring support is missing."""
+    import pql_test.auth.store as store_module
+
+    monkeypatch.setattr(store_module, "HAS_KEYRING", False)
+
+    with pytest.raises(CredentialStorageError, match="keyring is required"):
+        CredentialStore(namespace="missing-keyring")
+
+
+def test_credential_store_save_raises_storage_error_on_save_failure(monkeypatch):
+    """Storage failures in save() should be wrapped as CredentialStorageError."""
+    store = CredentialStore(namespace="test-save-error")
+    monkeypatch.setattr(keyring, "set_password", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(CredentialStorageError, match="Failed to save"):
+        store.save(CredentialConfig(method=AuthMethod.INTERACTIVE, tenant_id="tenant-123"))
+
+
+def test_credential_store_load_raises_storage_error_on_load_failure(monkeypatch):
+    """Storage failures in load() should be wrapped as CredentialStorageError."""
+    store = CredentialStore(namespace="test-load-error")
+    monkeypatch.setattr(keyring, "get_password", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(CredentialStorageError, match="Failed to load"):
+        store.load()
+
+
+def test_credential_store_delete_raises_storage_error_on_generic_failure(monkeypatch):
+    """Unexpected delete failures should propagate as CredentialStorageError."""
+    store = CredentialStore(namespace="test-delete-error")
+    monkeypatch.setattr(keyring, "delete_password", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    with pytest.raises(CredentialStorageError, match="Failed to delete"):
+        store.delete()

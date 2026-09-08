@@ -1,6 +1,6 @@
 # Surface Silent Test Discovery Failures Epic
 
-**Status**: 🚧 IN PROGRESS (2026-05-27)
+**Status**: ✅ COMPLETED (2026-08-31)
 **Goal**: Eliminate two classes of confusing "0 passed, 0 failed, 0 total" / wrong-results output produced by silent failure paths in the discovery layer:
 
 1. `_retrieve_tests_via_dax` silently swallows every exception from the discovery DAX calls and returns `None`, hiding auth/permission/connectivity errors from the user — so a no-access bearer renders identically to an empty model.
@@ -45,3 +45,30 @@
 - Given `ManagedIdentityCredential` is used, no cache configuration is required because the IMDS endpoint provides its own caching
 - Given the platform lacks an encrypted secure store (typically headless Linux without `libsecret`), should respect the `PQL_TEST_ALLOW_UNENCRYPTED_TOKEN_CACHE=1` environment variable as an opt-in escape hatch; default behaviour is secure-by-default (error rather than write unencrypted tokens)
 - Given a user runs five `pql-test run-tests` commands in succession after a single `pql-test auth login`, should observe exactly zero browser tabs opening (today's behavior: five tabs)
+
+---
+
+## Epic Vision (Definition of Done)
+
+### Quality Gates (All Must Pass)
+
+✅ **Ruff Check**: All code passes `ruff check python/` with zero violations
+
+✅ **Code Review**: 
+- Discovery error messages are clear and actionable
+- `local/<model_name>` strict matching prevents wrong-instance fallback
+- Empty result messages distinguish "no tests" from "discovery failed"
+- Token persistence is secure-by-default
+
+✅ **Test Coverage**: 
+- Overall test coverage ≥ 80% (`pytest --cov=pql_test --cov-fail-under=80`)
+- Discovery error scenarios have dedicated tests
+- `local/<model_name>` strict matching verified
+- Token cache persistence tested
+- All existing tests continue to pass
+
+✅ **Documentation**: 
+- README.md updated with discovery error troubleshooting
+- `local/<model_name>` strict matching documented
+- Token cache behavior documented
+- CONTRIBUTING.md includes discovery debugging guidance

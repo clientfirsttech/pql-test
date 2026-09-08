@@ -7,6 +7,9 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Refactor runner.py monolith into focused module package** — CRITICAL for maintainability (promoted from backlog 2026-08-30). File is 1,947 lines mixing 9+ responsibilities, causing high regression risk and slow code review velocity. Split into `runner/` package with 9 focused modules (~150-350 lines each). See [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md). Estimated 2-3 days.
+- **Implement token validation in auth/manager.py** — TODO at line 123 needs implementation for OWASP A07 (Authentication Failures). Validate JWT expiry without making service calls. Estimated 4 hours.
+- **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address A01, A04, A06, A07 findings from 2026-08-30 AIDD review. Estimated 1 day.
 
 ## Open Items
 
@@ -16,13 +19,61 @@
 
 ## Backlog
 
-- **Split `python/pql_test/runner.py` into a focused module package** — the file is currently ~1,800 lines mixing 9+ responsibilities (ADOMD loading, model-path parsing, data classes, PBIP filesystem helpers, local PBI Desktop process detection, auth bridge, Power BI REST helpers, MSAL, XMLA execution, test discovery, and the actual test runner). Proposed split into `python/pql_test/runner/` with `models.py`, `adomd.py`, `auth.py`, `pbi_rest.py`, `local_pbi.py`, `model_path.py`, `resolver.py`, `discovery.py`, and `execution.py` (~150–350 lines each). `runner/__init__.py` re-exports the current public API so existing `from pql_test.runner import ...` callers keep working. **Defer** until a feature lands that would otherwise pile more code into the monolith — single-PR mechanical refactor with high regression surface, only worth doing alongside a substantive change.
+- **~~Split `python/pql_test/runner.py` into a focused module package~~** — PROMOTED TO ACTIVE WORK (2026-08-30). See above and [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md).
 
 - **Restore interactive prompt for service-principal-with-certificate auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 to keep the first-run UX focused on the two most common paths (browser interactive, SPN with secret). The underlying support is still wired end-to-end: `AuthMethod.SERVICE_PRINCIPAL_CERT`, the factory in [python/pql_test/auth/factory.py](python/pql_test/auth/factory.py), and the `--certificate` / `-u` / `--tenant` flag combination in [cli.py:cmd_auth_login](python/pql_test/cli.py) all still work for power users. Re-expose in the prompt once we have a real user asking for it, or after the public launch when we want to broaden the documented auth surface.
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
+- **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
+
+- **Expand deprecated features documentation** — Add "Deprecated Features" section to README documenting `<workspace>.<model>` dot notation deprecation and migration guide to Fabric-style `<workspace>.Workspace/<model>.SemanticModel` syntax. Link from CLI deprecation warnings. Estimated 1 hour.
+
+- **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
+
 ## Completed Work
+
+### 2026-09-04 — Fix `local/<model_name>` truncation for names containing " - "
+
+- **Fix window-title suffix stripping** — See [tasks/archive/2026-09-04-local-model-name-hyphen-truncation.md](tasks/archive/2026-09-04-local-model-name-hyphen-truncation.md)
+  - `get_pbi_files_opened()` in [python/pql_test/runner/local_pbi.py](python/pql_test/runner/local_pbi.py) used `title.rfind(" - ")` to strip the legacy `" - Power BI Desktop"` window-title suffix, unconditionally truncating at the *last* " - " in the title. On newer PBI Desktop builds (no app-name suffix), a model name that itself contains " - " (e.g. "Component 4 - Daily Results Dashboard") was silently truncated to "Component 4", breaking `local/<model_name>` lookups for the real name.
+  - Now only strips the suffix via an explicit `str.endswith(" - Power BI Desktop")` check; otherwise the full title is used as the model name.
+  - Added regression tests in [python/tests/test_pql_test_runner.py](python/tests/test_pql_test_runner.py): title with no suffix + internal " - " keeps full name; title with suffix + internal " - " strips only the suffix; `resolve_local_xmla_connection_by_name` matches a model name containing " - ".
+
+### 2026-09-02 — Restore ≥ 80% test coverage after monolith removal
+
+- **Coverage restoration** — See [tasks/archive/2026-09-02-coverage-restoration.md](tasks/archive/2026-09-02-coverage-restoration.md)
+  - Total coverage jumped from 74.23% → **80.02%** (1,602 / 2,002 statements). The `fail_under=80` gate in [python/pyproject.toml](python/pyproject.toml) now passes cleanly.
+  - Added 55 new unit tests across three files. Test count: 422 → 477 passed (14 skipped, all live-network).
+  - New tests: [python/tests/auth/test_auth_cli_branches.py](python/tests/auth/test_auth_cli_branches.py) (`cmd_auth_login` flag routing + interactive menu + exception path, `cmd_auth_logout`, `cmd_auth_status`); [python/tests/test_pbi_rest.py](python/tests/test_pbi_rest.py) (workspace/dataset resolution, sovereign-cloud API prefix, dataset existence checks, every MSAL error branch of `_acquire_service_principal_token`); [python/tests/test_adomd_helpers.py](python/tests/test_adomd_helpers.py) (search-path discovery incl. NuGet priority and legacy package id, `.nupkg` download+extract with culture-subdir preservation, hermetic/opt-out env vars, module `__getattr__` bridge).
+  - Per-file coverage lifts: `runner/pbi_rest.py` 31% → 95%, `runner/adomd.py` 33% → 91%, `runner/xmla.py` 55% → 92%, `runner/local_pbi.py` 76% → 81%, `cli.py` 59% → 65% (auth subcommands, previously untested).
+  - No production logic modified. No `# pragma: no cover` added to real branches. No `fail_under` change.
+
+### 2026-09-02 — Remove runner monolith and restore coverage signal
+
+- **Remove `_runner_monolith.py`** — See [tasks/archive/2026-09-02-remove-runner-monolith.md](tasks/archive/2026-09-02-remove-runner-monolith.md)
+  - Deleted [python/pql_test/_runner_monolith.py](python/pql_test/_runner_monolith.py) (781 statements, 0% covered, zero references anywhere in the repo). It was the pre-refactor copy left behind when `runner.py` was split into the `pql_test/runner/` package.
+  - Also fixed test-mocking regressions introduced by the runner-refactor: `discovery.py`, `execution.py`, `resolver.py`, and `local_pbi.py` now route cross-module helper calls through `pql_test.runner.<name>` so tests can patch at the package level (matching the pattern already in place for `_execute_dax_query`). See failing tests fix commit.
+  - Coverage jumped from **52.4% → 74.23%** — the dead file had been masking the real signal. Reaching the 80% gate is scoped into [tasks/coverage-restoration-epic.md](tasks/coverage-restoration-epic.md); the majority of the remaining gap is in `cli.py` (59%), `runner/adomd.py` (~33%), and `runner/pbi_rest.py` (~31%).
+  - Also fixed CI Windows encoding crash in [.github/workflows/pytest.yml](.github/workflows/pytest.yml) — the "Display coverage percentage" step used emoji in `print()` which crashed under cp1252 on `windows-latest`; step now sets `PYTHONIOENCODING=utf-8` and reconfigures stdout/stderr to utf-8.
+  - Switched [python/tests/test_skill_packaging.py](python/tests/test_skill_packaging.py) to prefer stdlib `tomllib` (Python 3.11+) with a `tomli` fallback for 3.9/3.10, so the CI test job (Python 3.12) no longer fails on `ModuleNotFoundError: No module named 'tomli'`.
+
+### 2026-09-01 — Lazy-load ADOMD.NET at first XMLA use
+
+- **Lazy-load ADOMD.NET** — See [tasks/archive/2026-09-01-lazy-load-adomd.md](tasks/archive/2026-09-01-lazy-load-adomd.md)
+  - Moved the module-scope `import clr` + `clr.AddReference` + `from Microsoft.AnalysisServices.AdomdClient import AdomdConnection` block into a memoized `_ensure_adomd_loaded()` helper called by `has_pyadomd()` and `get_adomd_connection_class()`
+  - Added a module-level `__getattr__` in [python/pql_test/runner/adomd.py](python/pql_test/runner/adomd.py) and [python/pql_test/runner/__init__.py](python/pql_test/runner/__init__.py) so `from pql_test.runner import HAS_PYADOMD` still works but only triggers the load when the name is actually bound
+  - Migrated `cli._check_prereqs`, `runner/xmla.py`, and `runner/local_pbi.py` from reading `HAS_PYADOMD` at module-import time to calling `has_pyadomd()` at runtime so the reported / gate state reflects the current load outcome
+  - Added subprocess regression guard tests in [python/tests/test_adomd_lazy_load.py](python/tests/test_adomd_lazy_load.py) that assert `clr` and `Microsoft.AnalysisServices.AdomdClient` are absent from `sys.modules` after `import pql_test.cli`
+  - Cold-start `pql-test --help` dropped from ~5.8s → ~0.43s (13× faster); `check-prereqs` remains eager as its whole purpose is to verify ADOMD.NET loads
+
+### 2026-09-01 — Speed up `local/<model_name>` detection
+
+- **Speed up `local/<model_name>` resolution** — See [tasks/archive/2026-09-01-speed-up-local-pbi-detection.md](tasks/archive/2026-09-01-speed-up-local-pbi-detection.md)
+  - Dropped the ADOMD/DAX connectivity probe (`_get_catalog_from_local_port`) from `get_pbi_files_opened` — enumeration no longer opens a MSOLAP session per detected instance
+  - Threaded an optional `instances` parameter through `resolve_local_xmla_connection_by_name` and `_format_local_miss_diagnostic` so the CLI enumerates once and shares the result with the resolver, verbose printout, and miss diagnostic
+  - Added `connection_pre_resolved` keyword to `run_tests_from_model` so it doesn't re-run `resolve_xmla_connection` when the CLI has already resolved (or attempted to)
+  - Cold-start `pql-test run-tests local/<bogus>` dropped from ~5.8s → ~4.7s with no instances open; savings scale linearly with the number of running Power BI Desktop instances
 
 ### 2026-05-28 — Issue Review Agent Workflow
 

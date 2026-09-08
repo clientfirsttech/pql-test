@@ -158,6 +158,160 @@ Desktop before running the suite, or skip them with
 
 ---
 
+## Service Principal Setup (Least-Privilege)
+
+**Security Note**: Service principals with broad permissions (e.g., `Workspace.ReadWrite.All`, tenant-wide admin roles) create security risks if credentials are compromised. Follow least-privilege principles to minimize exposure.
+
+### Recommended Permissions
+
+For DAX test execution, a service principal needs:
+
+#### 1. Azure AD API Permissions (Azure Portal)
+- **Power BI Service → `Dataset.Read.All`** (delegated or application)
+- **NOT required**: `Workspace.ReadWrite.All`, `Tenant.Read.All`, or admin roles
+
+#### 2. Workspace Access (Power BI Service)
+- **Minimum**: **Viewer** role (read-only access to datasets)
+- **Recommended**: **Contributor** role (can refresh datasets, useful for CI/CD)
+- **NOT recommended**: Admin or Member roles (unnecessary elevation)
+
+#### 3. Dataset RLS/OLS Roles (Optional)
+- If testing RLS: Add SPN to dataset roles via `ImpersonateRole:` annotation
+- If testing with `EffectiveUserName`: SPN must be workspace Admin (not recommended)
+
+### Step-by-Step SPN Creation
+
+#### A. Register Application in Azure AD
+
+1. Open [Azure Portal](https://portal.azure.com) → **Azure Active Directory** → **App registrations** → **New registration**
+2. **Name**: `pql-test-ci-<workspace-name>` (descriptive, scoped to purpose)
+3. **Supported account types**: "Accounts in this organizational directory only"
+4. **Redirect URI**: Leave blank (not needed for service principal auth)
+5. Click **Register**
+6. **Copy these values** (you'll need them later):
+   - **Application (client) ID**
+   - **Directory (tenant) ID**
+
+#### B. Create Client Secret
+
+1. In the app registration → **Certificates & secrets** → **Client secrets** → **New client secret**
+2. **Description**: `pql-test-ci-secret` (or descriptive name)
+3. **Expires**: **90 days** (recommended for security)
+   - ⚠️ **Important**: Set a calendar reminder to rotate before expiry
+   - Shorter expiry = better security, but requires more frequent rotation
+4. Click **Add** and **immediately copy the secret value** (shown only once)
+
+**Secret Rotation Policy**:
+- Rotate secrets every 90 days (best practice)
+- Never reuse old secrets
+- Update CI/CD secrets immediately after rotation
+- Revoke old secret only after confirming new secret works
+
+#### C. Grant Power BI API Permissions
+
+1. In the app registration → **API permissions** → **Add a permission**
+2. Select **Power BI Service**
+3. **Delegated permissions** → Check **Dataset.Read.All**
+4. Click **Add permissions**
+5. Click **Grant admin consent for [tenant]** (requires Azure AD admin)
+
+#### D. Add SPN to Power BI Workspace
+
+1. Open [Power BI Service](https://app.powerbi.com)
+2. Navigate to your workspace (must be Premium or Fabric F-SKU)
+3. **Workspace settings** → **Access**
+4. **Add** → Search for your SPN by **Application (client) ID** or **App name**
+5. Select **Contributor** role (allows read + refresh)
+6. Click **Add**
+
+**Role Guidance**:
+| Role | Can read datasets | Can run tests | Can refresh | Can modify | Recommended? |
+|------|-------------------|---------------|-------------|------------|--------------|
+| Viewer | ✅ | ✅ | ❌ | ❌ | ✅ Yes (minimal) |
+| Contributor | ✅ | ✅ | ✅ | ❌ | ✅ Yes (CI/CD) |
+| Member | ✅ | ✅ | ✅ | ✅ | ⚠️ No (too broad) |
+| Admin | ✅ | ✅ | ✅ | ✅ | ❌ No (excessive) |
+
+#### E. Enable XMLA Endpoint (Premium/Fabric Only)
+
+1. **Power BI Admin Portal** → **Tenant settings** → **Integration settings**
+2. **XMLA endpoint** → Set to **Read Only** or **Read Write**
+3. Click **Apply**
+
+**Note**: XMLA endpoints require Premium or Fabric capacity. Standard workspaces do not support XMLA connections.
+
+### Certificate-Based Authentication (Advanced)
+
+For production environments, certificates are more secure than secrets:
+
+#### A. Generate Self-Signed Certificate (Development)
+
+```powershell
+# Generate certificate (valid 2 years)
+$cert = New-SelfSignedCertificate `
+  -Subject "CN=pql-test-ci" `
+  -CertStoreLocation "Cert:\CurrentUser\My" `
+  -KeyExportPolicy Exportable `
+  -KeySpec Signature `
+  -KeyLength 2048 `
+  -KeyAlgorithm RSA `
+  -HashAlgorithm SHA256 `
+  -NotAfter (Get-Date).AddYears(2)
+
+# Export certificate (.cer for Azure AD upload)
+$certPath = "C:\temp\pql-test-ci.cer"
+Export-Certificate -Cert $cert -FilePath $certPath
+
+# Export private key (.pfx for pql-test auth)
+$pfxPath = "C:\temp\pql-test-ci.pfx"
+$password = ConvertTo-SecureString -String "your-strong-password" -Force -AsPlainText
+Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password
+```
+
+#### B. Upload Certificate to Azure AD
+
+1. App registration → **Certificates & secrets** → **Certificates** → **Upload certificate**
+2. Select the `.cer` file → **Add**
+3. Certificate is now trusted for authentication
+
+#### C. Use Certificate with pql-test
+
+```powershell
+pql-test auth login `
+  --certificate "C:\temp\pql-test-ci.pfx" `
+  --client-id <app-id> `
+  --tenant-id <tenant-id>
+```
+
+**Certificate Protection**:
+- **File permissions**: Set to `600` (owner read/write only)
+  ```powershell
+  icacls "C:\secure\pql-test-ci.pfx" /inheritance:r /grant:r "$env:USERNAME:(R,W)"
+  ```
+- **Production**: Use Azure Key Vault or HSM (Hardware Security Module)
+- **Rotation**: Renew certificates before expiry (2-year max recommended)
+
+### Security Best Practices Summary
+
+✅ **DO**:
+- Use separate SPNs for dev/staging/prod environments
+- Rotate secrets every 90 days
+- Grant minimum required permissions (Viewer or Contributor)
+- Store secrets in Azure Key Vault or CI/CD secret stores
+- Use certificate-based auth for production
+- Set file permissions on certificate files (`600` on Linux/macOS)
+- Monitor SPN usage in Azure AD sign-in logs
+
+❌ **DON'T**:
+- Grant `Workspace.ReadWrite.All` or tenant admin roles
+- Use the same SPN across multiple environments
+- Store secrets in code or version control
+- Share SPN credentials between teams
+- Use secrets longer than 90 days without rotation
+- Grant workspace Admin role (only needed for `EffectiveUserName`)
+
+---
+
 ## Service smoke test (Power BI Premium / Fabric)
 
 1. Copy `python/.env.example` to `python/tests/.env` and fill in:
@@ -238,6 +392,149 @@ Three sequential workflows in `.github/workflows/`:
 The remote workflow uses these repo secrets: `PQL_TENANT_ID`,
 `PQL_WORKSPACE_ID`, `PQL_DATASET_ID`, `PQL_CLIENT_ID`, `PQL_CLIENT_SECRET`,
 and the optional `PQL_ENVIRONMENT`.
+
+---
+
+## Skill Update Workflow
+
+Skills live in both **source** (`skills/`) and **packaged** (`python/pql_test/skills/`) locations. The CI pipeline validates that they stay in sync.
+
+### Directory Structure
+
+```
+pql-test/
+├── skills/                          ← source skills (maintained by contributors)
+│   ├── check-prereqs/SKILL.md
+│   ├── retrieve-test/SKILL.md
+│   ├── retrieve-tests/SKILL.md
+│   └── run-tests/SKILL.md
+└── python/pql_test/skills/          ← packaged skills (distributed in wheel)
+    ├── check-prereqs/SKILL.md
+    ├── retrieve-test/SKILL.md
+    ├── retrieve-tests/SKILL.md
+    └── run-tests/SKILL.md
+```
+
+### Required YAML Frontmatter
+
+Every `SKILL.md` file must begin with YAML frontmatter:
+
+```markdown
+---
+name: skill-name
+description: One-line description of what the skill does
+version: 0.1.13
+---
+
+# Skill content here...
+```
+
+**Required fields**:
+- `name` — Skill identifier (lowercase-kebab-case)
+- `description` — Brief summary for skill listing
+- `version` — Must match package version in `pyproject.toml`
+
+### Updating a Skill
+
+1. **Edit the source** file in `skills/<skill-name>/SKILL.md`
+2. **Copy to packaged location**: `python/pql_test/skills/<skill-name>/SKILL.md`
+3. **Ensure version matches** `pyproject.toml`
+4. **Run tests** to validate:
+   ```powershell
+   pytest tests/test_skill_packaging.py -v
+   ```
+5. **Commit both files together** — CI validates they match byte-for-byte
+
+### CI Validation
+
+`test_skill_packaging.py` enforces:
+- ✅ Source and packaged skills are identical
+- ✅ All skills have required frontmatter (name, description, version)
+- ✅ Version fields match `pyproject.toml`
+- ✅ `run-tests` skill has SudoLang contracts (Interface, Constraints)
+- ✅ All source skills are packaged
+- ✅ `pyproject.toml` includes `skills/**/*.md` in package-data
+
+`test_skill_content.py` enforces skill-to-CLI parity:
+- ✅ Every long-form Click flag on each command appears in the matching `SKILL.md`
+- ✅ All MODEL_PATH formats (filesystem, `local/<name>`, `<workspace>.Workspace/<model>.SemanticModel`) are documented
+- ✅ SudoLang `Interface` and `Constraints` blocks contain required fields
+- ✅ Exit codes, env vars, and log-format values are documented
+- ✅ No skill references removed flags (e.g. `--local`) or non-existent commands
+
+**When you add a CLI flag**, `test_skill_content.py` will fail until the corresponding `SKILL.md` mentions the new flag. Update the skill and re-run:
+
+```bash
+cd python
+pytest tests/test_skill_content.py -v
+```
+
+### LLM-Graded Skill Evaluation (Mode B)
+
+`tests/promptfoo/` contains realistic LLM tests that feed each `SKILL.md` to Claude Sonnet 4 via GitHub Models and assert the model produces correct `pql-test` commands. This catches skills that are technically complete but ambiguous enough to mislead the LLM.
+
+**Run locally** (requires `GITHUB_TOKEN` with `models: read`):
+
+```powershell
+cd tests/promptfoo
+$env:GITHUB_TOKEN = "ghp_..."
+python run_eval.py
+```
+
+**Dry-run** (validate test structure, no API calls):
+
+```powershell
+python run_eval.py --dry-run
+```
+
+**Without `GITHUB_TOKEN`**: the runner warns and exits 0 — never blocks local dev.
+
+**CI**: `.github/workflows/promptfoo-eval.yml` runs on every push touching `skills/**` or `tests/promptfoo/**`. Results are uploaded as the `eval-results` artifact.
+
+See [tests/promptfoo/README.md](tests/promptfoo/README.md) for how to add new test cases.
+
+### SudoLang Behavioral Contracts
+
+Complex skills like `run-tests` use SudoLang syntax for behavioral contracts:
+
+```markdown
+## Interface RunTests {
+  exit_code: 0 | 1,
+  output_format: "pytest-style" | "json",
+  log_annotations: null | "github" | "azuredevops"
+}
+
+## Constraints {
+  - MODEL_PATH resolution order: local/<name> → filesystem path → <workspace>/<model>
+  - Credentials: interactive > service principal > error
+  - Environment filtering: Match PQL_ENVIRONMENT or "default" suffix
+}
+```
+
+### Skill Componentization
+
+**Threshold**: Skills under 300 lines should remain single-file. Only componentize if a skill exceeds this limit.
+
+**Rationale**: Small skills are easier to install and maintain. Componentization adds complexity without benefit for short files.
+
+### Installing Skills to Harnesses
+
+Skills can be installed to any AI assistant harness:
+
+```bash
+pql-test skill --install claude       # .claude/skills/pql-test/
+pql-test skill --install copilot      # .github/copilot-instructions.md
+pql-test skill --install cursor       # .cursor/skills/pql-test/
+pql-test skill --install windsurf     # .windsurf/skills/pql-test/
+pql-test skill --all                  # Install to all harnesses
+pql-test skill --show                 # Show install status
+pql-test skill --uninstall            # Remove from all harnesses
+```
+
+Each install adds a version marker comment for tracking:
+```markdown
+<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+```
 
 ---
 

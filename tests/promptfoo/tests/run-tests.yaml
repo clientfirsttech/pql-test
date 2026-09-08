@@ -1,0 +1,103 @@
+# Mode B LLM evaluations for the run-tests skill.
+# Each test feeds the run-tests SKILL.md to Claude Sonnet 4 with a realistic user
+# task and asserts the response contains the correct pql-test invocation.
+
+- description: Local Power BI Desktop model by name
+  vars:
+    skill: run-tests
+    task: Run all DAX tests from a model called SampleModel that I have open in Power BI Desktop.
+  assert:
+    - type: contains
+      value: pql-test run-tests
+    - type: icontains
+      value: local/SampleModel
+
+- description: Remote Fabric workspace with service principal env vars
+  vars:
+    skill: run-tests
+    task: Run tests against my Fabric workspace using the PQL_ service principal environment variables.
+  assert:
+    - type: contains
+      value: pql-test run-tests
+    - type: regex
+      value: (--tenant-id|PQL_TENANT_ID)
+    - type: regex
+      value: (--client-secret|PQL_CLIENT_SECRET)
+
+- description: GitHub Actions CI output with JSON results
+  vars:
+    skill: run-tests
+    task: Run tests inside a GitHub Actions job. Emit native workflow annotations and save the full JSON results to results.json.
+  assert:
+    - type: contains
+      value: --log-format github
+    - type: contains
+      value: --output
+
+- description: Azure DevOps pipeline output
+  vars:
+    skill: run-tests
+    task: Run tests inside an Azure DevOps pipeline and use native Azure Pipelines log annotations.
+  assert:
+    - type: contains
+      value: --log-format azuredevops
+
+- description: Filter to a single environment
+  vars:
+    skill: run-tests
+    task: Only run test suites tagged for the DEV environment.
+  assert:
+    - type: regex
+      value: --env\s+DEV
+
+- description: Canonical Fabric service path
+  vars:
+    skill: run-tests
+    task: Connect to the workspace named MyWorkspace and the semantic model named MyModel using the Fabric service path syntax.
+  assert:
+    - type: regex
+      value: MyWorkspace\.Workspace/MyModel\.SemanticModel
+
+- description: Run one named suite via --test
+  vars:
+    skill: run-tests
+    task: Run only the Calculations.DEV.Tests suite from the SampleModel.
+  assert:
+    - type: contains
+      value: --test
+    - type: icontains
+      value: Calculations.DEV.Tests
+
+- description: Preview tests without executing — no hallucinated --dry-run
+  vars:
+    skill: run-tests
+    task: I want to preview which test suites would run without actually executing them.
+  assert:
+    - type: not-contains
+      value: --dry-run
+    - type: icontains
+      value: retrieve-tests
+
+- description: Credential precedence contract (llm-graded)
+  vars:
+    skill: run-tests
+    task: I set PQL_CLIENT_SECRET in my shell and also ran `pql-test auth login` yesterday. Which credential does `pql-test run-tests` use?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must explain the credential precedence order for pql-test run-tests:
+        CLI flags override PQL_* environment variables, which override stored keyring
+        credentials from `pql-test auth login`. Answer must clearly state that
+        PQL_CLIENT_SECRET (env var) takes precedence over the stored auth login
+        credentials in this scenario.
+
+- description: --env DEV does not include ANY suites (llm-graded)
+  vars:
+    skill: run-tests
+    task: If I run `pql-test run-tests ./model --env DEV`, will the BestPractices.ANY.Tests suite also run?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must correctly state that NO, --env DEV does not include *.ANY.Tests
+        suites, because ANY is an ordinary environment token (not a wildcard). The response
+        should suggest running with --env ANY separately or explain that matching is exact.

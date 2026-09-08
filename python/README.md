@@ -1,5 +1,9 @@
 # pql-test — DAX Test Runner for PBIP Models
 
+[![pytest](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml)
+![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
+[![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
+
 `pql-test` is a command-line tool bundled with the Power Query Lint VS Code
 extension. It discovers and executes DAX unit-test suites stored inside a
 **Power BI Project (PBIP)** semantic model, mirroring the
@@ -120,9 +124,7 @@ pql-test check-prereqs
 
 ### From source (development)
 
-`pql-test` lives in the `python/` directory of the
-[GitHub repository](https://github.com/clientfirsttech/pql-test). Clone it,
-then:
+`pql-test` lives in the `python/` directory of this repository:
 
 ```powershell
 cd python
@@ -568,6 +570,110 @@ Credentials are stored securely using the platform keyring:
 - **Windows**: Windows Credential Manager
 - **macOS**: Keychain
 - **Linux**: Secret Service API (GNOME Keyring, KWallet)
+
+---
+
+## Security Considerations
+
+### Service Principal Permissions
+
+**⚠️ Security Warning**: Over-permissioned service principals create security risks. Follow least-privilege principles.
+
+**Recommended minimum permissions**:
+- **Azure AD API**: `Dataset.Read.All` (application permission)
+- **Workspace Access**: **Viewer** (read-only) or **Contributor** (read + refresh)
+
+❌ **Avoid**: `Workspace.ReadWrite.All`, tenant admin roles, or workspace Admin access unless specifically required.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
+
+### RLS/OLS Security Model
+
+#### Row-Level Security (RLS) Testing
+
+Tests can impersonate users to validate RLS rules using the `ImpersonateUser:` annotation:
+
+```dax
+// File: RLS.ANY.Tests.dax
+// ImpersonateUser: user@example.com
+
+DEFINE
+  FUNCTION RLS.RegionFilter.Test() = ...
+EVALUATE
+  RLS.RegionFilter.Test()
+```
+
+**Security Implications**:
+- **Local connections**: `EffectiveUserName` parameter is ignored (not supported by local Analysis Services)
+- **Service connections**: XMLA connection string includes `EffectiveUserName=<email>`
+- **⚠️ Warning**: The calling identity (your user or service principal) must have **workspace Admin** permissions to use `EffectiveUserName`
+- **Risk**: Malicious test files can impersonate any user email—there is no validation that the email corresponds to a real Azure AD principal
+
+**Recommended Practice**:
+- Use `ImpersonateRole:` instead when possible (see OLS section)
+- Restrict test file authoring to trusted developers
+- Run tests in isolated environments (separate dev/test workspaces)
+- Future enhancement: Configuration-based allowlist for approved impersonation emails
+
+#### Object-Level Security (OLS) Testing
+
+Tests can assume roles to validate OLS rules using the `ImpersonateRole:` annotation:
+
+```dax
+// File: OLS.ANY.Tests.dax
+// ImpersonateRole: RegionalManager
+
+DEFINE
+  FUNCTION OLS.HiddenTables.Test() = ...
+EVALUATE
+  OLS.HiddenTables.Test()
+```
+
+**Security Implications**:
+- **Preferred over `EffectiveUserName`**: Works for both local and service connections
+- **Service principals**: Can be granted role membership (no Admin required)
+- **Validation**: Analysis Services validates that the role exists in the model
+- **⚠️ Risk**: Malicious test files can specify any role name—access is granted if role exists
+
+**Recommended Practice**:
+- Add service principals directly to model roles (no `EffectiveUserName` needed)
+- Document which roles should be tested in your test plan
+- Future enhancement: Configuration-based allowlist for approved role names
+
+#### Security Best Practices for RLS/OLS Testing
+
+✅ **DO**:
+- Use `ImpersonateRole:` instead of `ImpersonateUser:` when possible
+- Test RLS/OLS rules in non-production environments
+- Grant service principals only the roles they need to test
+- Review test files for unexpected impersonation annotations
+- Use separate datasets for RLS/OLS testing (don't test against production)
+
+❌ **DON'T**:
+- Grant workspace Admin to service principals just for testing
+- Use production datasets for RLS/OLS test execution
+- Share RLS test credentials (each developer should use their own identity)
+- Assume `EffectiveUserName` validates email addresses (it doesn't)
+
+**Threat Model**: See [docs/security-threat-model.md](docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
+
+### Secret Rotation
+
+**Best Practice**: Rotate service principal secrets every 90 days.
+
+```powershell
+# When secret approaches expiry:
+# 1. Create new secret in Azure Portal
+# 2. Update stored credential
+pql-test auth login -u <client-id> -p <new-secret> --tenant <tenant-id>
+
+# 3. Verify new secret works
+pql-test auth status
+
+# 4. Revoke old secret in Azure Portal
+```
+
+Set calendar reminders 1 week before expiry to avoid CI/CD outages.
 
 ---
 
@@ -1249,6 +1355,42 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "DAX tests failed — blocking pipeline."
     exit 1
 }
+```
+
+---
+
+## Architecture
+
+The `pql-test` runner is organized as a modular Python package under `python/pql_test/runner/` with focused, single-responsibility modules:
+
+| Module | Lines | Purpose |
+|--------|-------|---------|
+| `__init__.py` | 150 | Public API re-exports for backward compatibility |
+| `models.py` | 204 | Pure data classes and enums (Environment, PqlTest, TestResult, etc.) |
+| `adomd.py` | 253 | ADOMD.NET assembly loading and NuGet auto-install |
+| `auth.py` | 159 | Authentication credential resolution bridge |
+| `pbi_rest.py` | 123 | Power BI REST API helpers (workspace/dataset resolution) |
+| `local_pbi.py` | 362 | Local Power BI Desktop process detection via psutil |
+| `model_path.py` | 216 | Model identifier parsing (filesystem, local/, Fabric paths) |
+| `resolver.py` | 271 | XMLA connection resolution coordination |
+| `xmla.py` | 117 | XMLA query execution via ADOMD.NET |
+| `discovery.py` | 248 | Test discovery (live XMLA + filesystem) |
+| `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
+
+**Total**: 2,298 lines across 11 modules (average 209 lines per module)
+
+All modules follow a 400-line soft budget (800-line hard budget) to keep code maintainable. Each module has minimal coupling to others, making the codebase easier to understand, test, and modify.
+
+The public API surface remains unchanged from the original monolithic design—all existing imports continue to work:
+
+```python
+from pql_test.runner import (
+    Environment,
+    PqlTest,
+    TestResult,
+    retrieve_tests,
+    run_tests_from_model,
+)
 ```
 
 ---

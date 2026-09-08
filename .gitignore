@@ -21,6 +21,20 @@ venv/
 # pytest
 .pytest_cache/
 
+# promptfoo eval runtime artifacts
+tests/promptfoo/results.json
+tests/promptfoo/.promptfoo/
+
+# Local harness installs from `pql-test skill --install`
+# (These belong in consumer repos, not this one; committed skills live in skills/)
+.claude/skills/pql-test/
+.cursor/skills/pql-test/
+.windsurf/skills/pql-test/
+python/.claude/
+python/.cursor/
+python/.windsurf/
+python/.github/
+
 # pql-test config
 .pql-test/
 **/cache.abf

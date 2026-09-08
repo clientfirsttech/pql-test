@@ -1575,6 +1575,106 @@ class TestGetPbiFilesOpened:
         assert len(instances) == 1
         assert instances[0].model_name == "WindowTitleModel"
 
+    def test_model_name_containing_hyphen_survives_no_suffix_title(self):
+        """
+        Newer Power BI Desktop builds show a window title that is just the
+        model name, with no " - Power BI Desktop" app-name suffix.  When
+        the model name itself contains " - " (e.g. "Component 4 - Daily
+        Results Dashboard"), the parser must NOT truncate at that internal
+        hyphen — only a literal trailing " - Power BI Desktop" suffix
+        should ever be stripped.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        port = _MOCK_AS_PORT_A
+
+        msmdsrv_proc = _make_mock_process(
+            pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+
+        with (
+            patch(
+                "pql_test.runner._get_pbi_process_window_titles",
+                return_value={pbi_pid: "Component 4 - Daily Results Dashboard"},
+            ),
+            patch("pql_test.runner._psutil.process_iter", return_value=[msmdsrv_proc]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "Component 4 - Daily Results Dashboard"
+
+    def test_model_name_containing_hyphen_strips_suffix_when_present(self):
+        """
+        When the legacy " - Power BI Desktop" suffix IS present, it must
+        still be stripped even if the model name itself contains " - ".
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        pbi_pid = 100
+        port = _MOCK_AS_PORT_A
+
+        msmdsrv_proc = _make_mock_process(
+            pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
+        )
+
+        with (
+            patch(
+                "pql_test.runner._get_pbi_process_window_titles",
+                return_value={
+                    pbi_pid: "Component 4 - Daily Results Dashboard - Power BI Desktop"
+                },
+            ),
+            patch("pql_test.runner._psutil.process_iter", return_value=[msmdsrv_proc]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner._get_catalog_from_local_port", return_value=""),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert len(instances) == 1
+        assert instances[0].model_name == "Component 4 - Daily Results Dashboard"
+
+    def test_does_not_probe_adomd_for_any_enumerated_instance(self):
+        """
+        Enumeration must never open an ADOMD/MSOLAP connection or run a DAX
+        query against detected msmdsrv ports.  The probe adds a cold
+        pythonnet/ADOMD load + N XMLA handshakes per invocation, its return
+        value is discarded (catalog is always empty on success), and callers
+        that need real connectivity verification open their own connection
+        later.  See tasks/speed-up-local-pbi-detection-epic.md.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+
+        proc_a = _make_mock_process(
+            pid=10, name="msmdsrv.exe", ppid=100, listen_port=_MOCK_AS_PORT_A,
+        )
+        proc_b = _make_mock_process(
+            pid=20, name="msmdsrv.exe", ppid=200, listen_port=_MOCK_AS_PORT_B,
+        )
+        with (
+            patch(
+                "pql_test.runner._get_pbi_process_window_titles",
+                return_value={
+                    100: "ModelA - Power BI Desktop",
+                    200: "ModelB - Power BI Desktop",
+                },
+            ),
+            patch("pql_test.runner._psutil.process_iter", return_value=[proc_a, proc_b]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+            patch("pql_test.runner.local_pbi._get_catalog_from_local_port") as probe,
+        ):
+            instances = get_pbi_files_opened()
+
+        assert probe.call_count == 0
+        assert len(instances) == 2
+        assert all(inst.catalog == "" for inst in instances)
+
 
 # ---------------------------------------------------------------------------
 # resolve_local_xmla_connection — mirrors Pester -Local flag tests
@@ -2419,6 +2519,26 @@ class TestResolveLocalXmlaConnectionByName:
             "silently misleading users into running against the wrong model."
         )
 
+    def test_matches_model_name_containing_hyphen(self):
+        """A model whose display name itself contains " - " must resolve
+        by its full name, not just the text before the first/last hyphen.
+
+        Regression test for tasks/local-model-name-hyphen-truncation-epic.md:
+        'local/Component 4 - Daily Results Dashboard' was silently truncated
+        to 'Component 4' by the window-title parser, so the full name never
+        matched.
+        """
+        inst = LocalPbiInstance(
+            model_name="Component 4 - Daily Results Dashboard",
+            server=f"localhost:{_MOCK_AS_PORT_A}",
+            catalog="",
+        )
+        with patch("pql_test.runner.get_pbi_files_opened", return_value=[inst]):
+            conn = resolve_local_xmla_connection_by_name(
+                "Component 4 - Daily Results Dashboard"
+            )
+        assert conn is not None
+        assert conn.server == inst.server
 
 # ---------------------------------------------------------------------------
 # resolve_xmla_connection — local/<model_name> routing (regression tests)

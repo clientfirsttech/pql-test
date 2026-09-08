@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
+# Promptfoo eval suite for pql-test skills.
+#
+# Local run (requires GITHUB_TOKEN with models:read):
+#   python run_eval.py
+#
+# With external promptfoo (Node.js):
+#   npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+
+description: pql-test skill LLM evaluation
+
+prompts:
+  - file://prompts/skill_prompt.txt
+
+providers:
+  - id: file://providers/skill_provider.py
+    label: github-models-sonnet-4
+    config:
+      model: anthropic/claude-sonnet-4
+      temperature: 0
+
+defaultTest:
+  options:
+    # Grader model for llm-rubric assertions
+    provider:
+      id: file://providers/skill_provider.py
+      config:
+        model: anthropic/claude-sonnet-4
+        temperature: 0
+
+tests:
+  - file://tests/run-tests.yaml
+  - file://tests/retrieve-tests.yaml
+  - file://tests/retrieve-test.yaml
+  - file://tests/check-prereqs.yaml
+  - file://tests/skill-command.yaml

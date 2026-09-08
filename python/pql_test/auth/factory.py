@@ -8,6 +8,7 @@ import os
 from typing import TYPE_CHECKING
 
 try:
+    from azure.core.credentials import TokenCredential
     from azure.identity import (
         AuthenticationRecord,
         CertificateCredential,
@@ -17,7 +18,6 @@ try:
         ManagedIdentityCredential,
         TokenCachePersistenceOptions,
     )
-    from azure.core.credentials import TokenCredential
     HAS_AZURE_IDENTITY = True
 except ImportError:
     HAS_AZURE_IDENTITY = False
@@ -29,7 +29,6 @@ except ImportError:
 from pql_test.auth.cloud_config import CloudConfig
 from pql_test.auth.exceptions import CredentialConfigError
 from pql_test.auth.models import AuthMethod, CredentialConfig
-
 
 # ---------------------------------------------------------------------------
 # Default interactive client_id
