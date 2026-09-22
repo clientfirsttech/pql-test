@@ -13,6 +13,8 @@ modules with clear separation of concerns:
 - resolver.py — XMLA connection resolution
 - discovery.py — Test file discovery
 - execution.py — Test execution engine
+- coverage.py — Direct test-UDF coverage evidence model
+- coverage_collector.py — XMLA-backed direct test-UDF coverage collection
 
 For backward compatibility, all public symbols are re-exported from this
 __init__.py so existing imports continue to work:
@@ -42,6 +44,24 @@ from pql_test.runner.adomd import (
 # Import auth bridge from auth.py
 from pql_test.runner.auth import (
     _resolve_authentication_with_stored_credentials,
+)
+
+# Import coverage evidence model from coverage.py
+from pql_test.runner.coverage import (
+    ClassificationResult,
+    CoverageEvidence,
+    CoverageGap,
+    CoverageObjectType,
+    EligibleObject,
+    ExclusionRecord,
+    classify_coverage,
+)
+
+# Import the coverage collector from coverage_collector.py
+from pql_test.runner.coverage_collector import (
+    CoverageReport,
+    UnavailableCategory,
+    collect_coverage,
 )
 
 # Import test discovery from discovery.py
@@ -143,6 +163,18 @@ __all__ = [
     "ResolvedXmlaConnection",
     "LocalPbiInstance",
     "get_api_endpoints",
+    # Re-exported from coverage
+    "ClassificationResult",
+    "CoverageEvidence",
+    "CoverageGap",
+    "CoverageObjectType",
+    "EligibleObject",
+    "ExclusionRecord",
+    "classify_coverage",
+    # Re-exported from coverage_collector
+    "CoverageReport",
+    "UnavailableCategory",
+    "collect_coverage",
     # Re-exported from adomd
     "HAS_PYADOMD",
     "get_adomd_connection_class",
