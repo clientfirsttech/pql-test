@@ -1075,18 +1075,30 @@ pql-test code-coverage local/SampleModel
 ```
 
 ```
-Direct Test-UDF Coverage: local/SampleModel
+Local XMLA connection: localhost:56622 / catalog:
+
+======================= coverage session starts ========================
+model: local/SampleModel
+
 Tests discovered: 4
 
 Overall: 10/23 covered (43.48%)
 
 By category:
-  CALC_COLUMN    0/6  (0.0%)
-  MEASURE        3/6  (50.0%)
-  PARTITION      excluded (8)
-  RELATIONSHIP   3/3  (100.0%)
-  TABLE          4/8  (50.0%)
+┌──────────────┬─────────┬──────────┬──────────────┐
+│ Category     │ Covered │ Eligible │            % │
+├──────────────┼─────────┼──────────┼──────────────┤
+│ CALC_COLUMN  │       0 │        6 │         0.0% │
+│ MEASURE      │       3 │        6 │        50.0% │
+│ PARTITION    │       - │        - │ excluded (8) │
+│ RELATIONSHIP │       3 │        3 │       100.0% │
+│ TABLE        │       4 │        8 │        50.0% │
+└──────────────┴─────────┴──────────┴──────────────┘
 ```
+
+Categories at 100% render green, 0% render red, and partial coverage renders
+yellow — the same PASS/FAIL/SKIP color convention `run-tests` uses (see
+[CLI Output Conventions](CONTRIBUTING.md#cli-output-conventions)).
 
 **Verbose report** (adds per-object evidence and AI-ready gap hints):
 

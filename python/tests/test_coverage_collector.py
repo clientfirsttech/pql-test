@@ -312,3 +312,19 @@ class TestCollectCoverage:
             report = collect_coverage("local/NoSuchModel")
 
         assert report is None
+
+    def test_given_a_pre_resolved_connection_should_thread_it_onto_the_report(self):
+        given = "a pre-resolved ResolvedXmlaConnection passed into collect_coverage"
+        should = (
+            "the returned CoverageReport carries that same connection so the CLI can "
+            "print the server/catalog diagnostic line without a second resolve call"
+        )
+        with patch("pql_test.runner.retrieve_tests", return_value=[]), patch(
+            "pql_test.runner._execute_dax_query", side_effect=_fake_execute()
+        ):
+            report = collect_coverage(
+                "local/SampleModel", connection=_CONN, connection_pre_resolved=True
+            )
+
+        assert report is not None
+        assert report.connection is _CONN, f"{given}: {should}"

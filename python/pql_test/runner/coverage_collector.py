@@ -90,6 +90,9 @@ class CoverageReport:
     test_count: int
     result: ClassificationResult
     unavailable: tuple[UnavailableCategory, ...]
+    connection: Optional[ResolvedXmlaConnection] = None
+    """The resolved XMLA connection used to collect this report, so callers
+    can print the same "server / catalog" diagnostic line run-tests shows."""
 
 
 def _safe_query(
@@ -336,4 +339,5 @@ def collect_coverage(
         test_count=len(tests),
         result=result,
         unavailable=tuple(unavailable),
+        connection=connection,
     )

@@ -23,9 +23,10 @@ from pql_test.runner.coverage import (
     ExclusionRecord,
 )
 from pql_test.runner.coverage_collector import CoverageReport, UnavailableCategory
+from pql_test.runner.models import ResolvedXmlaConnection
 
 
-def _report():
+def _report(connection=None):
     return CoverageReport(
         model_path="local/SampleModel",
         test_count=2,
@@ -35,6 +36,7 @@ def _report():
             excluded=(ExclusionRecord(CoverageObjectType.PARTITION, "P1", "no assertion surface"),),
         ),
         unavailable=(UnavailableCategory(CoverageObjectType.RELATIONSHIP, "query failed"),),
+        connection=connection,
     )
 
 
@@ -62,6 +64,53 @@ class TestCodeCoverageTextOutput:
         assert result.exit_code == 0
         assert "MarvelFact — tested by: T1, T2" in result.output
         assert "MarvelFact[X] — Add a test" in result.output
+
+    def test_shows_connection_line_and_session_banner_matching_run_tests(self, monkeypatch):
+        given = "a report carrying the resolved XMLA connection collect_coverage used"
+        should = (
+            "the text output shows the same 'Local XMLA connection: server / catalog:' "
+            "diagnostic and 'session starts' banner that run-tests shows, for CLI consistency"
+        )
+        conn = ResolvedXmlaConnection(server="localhost:56622", catalog="")
+        monkeypatch.setattr(
+            cli_module, "collect_coverage", MagicMock(return_value=_report(connection=conn))
+        )
+
+        result = CliRunner().invoke(cli_module.cli, ["code-coverage", "local/SampleModel"])
+
+        assert result.exit_code == 0
+        assert "Local XMLA connection: localhost:56622 / catalog:" in result.output, f"{given}: {should}"
+        assert "coverage session starts" in result.output, f"{given}: {should}"
+        assert "model: local/SampleModel" in result.output, f"{given}: {should}"
+
+    def test_no_connection_line_when_report_has_no_connection(self, monkeypatch):
+        given = "a report with no connection attached (e.g. a test double built without one)"
+        should = "no connection-diagnostic line is printed, rather than crashing or printing 'None'"
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+
+        result = CliRunner().invoke(cli_module.cli, ["code-coverage", "local/SampleModel"])
+
+        assert result.exit_code == 0
+        assert "XMLA connection" not in result.output, f"{given}: {should}"
+
+    def test_category_table_colors_full_coverage_green_and_zero_coverage_red(self, monkeypatch):
+        given = "a category at 100% coverage and one at 0% coverage"
+        should = (
+            "the table colors the fully-covered row's percent green (like a PASS) and the "
+            "zero-covered row's percent red (like a FAIL) -- the same vocabulary run-tests uses"
+        )
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+
+        result = CliRunner().invoke(
+            cli_module.cli, ["code-coverage", "local/SampleModel"], color=True
+        )
+        lines = result.output.splitlines()
+        green_line = next(line for line in lines if "TABLE" in line)
+        red_line = next(line for line in lines if "MEASURE" in line)
+
+        assert result.exit_code == 0
+        assert "\x1b[32m" in green_line, f"{given}: {should}"  # ANSI green (STATUS_COLORS['PASS'])
+        assert "\x1b[31m" in red_line, f"{given}: {should}"  # ANSI red (STATUS_COLORS['FAIL'])
 
 
 class TestCodeCoverageJsonOutput:

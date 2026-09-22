@@ -33,6 +33,15 @@
 
 ## Completed Work
 
+### 2026-09-22 — Consistent CLI output between `run-tests` and `code-coverage`
+
+- **Unify CLI presentation** — See [tasks/archive/2026-09-22-consistent-cli-output.md](tasks/archive/2026-09-22-consistent-cli-output.md)
+  - `run-tests` and `code-coverage` had drifted into two different presentation styles (banner + bordered color table + connection diagnostic vs. plain indented text with no connection line) because presentation logic lived as ad hoc closures inside `cli.py` next to each command's business logic, with no shared module and no written contract.
+  - Extracted [python/pql_test/runner/cli_format.py](python/pql_test/runner/cli_format.py) (`banner`, `pad`, `truncate`, `table_top`/`table_mid`/`table_bottom`/`table_row`, `STATUS_COLORS`) and retrofitted `run-tests`' `_print_results` onto it — behavior-preserving refactor, existing tests unchanged.
+  - `code-coverage`'s `collect_coverage()` now threads its resolved `ResolvedXmlaConnection` onto `CoverageReport`; the CLI prints the same `Local XMLA connection: ... / catalog: ...` line and a `coverage session starts` banner `run-tests` shows, and its "By category" section renders as a bordered table colored green/red/yellow (full/none/partial coverage) using the same `STATUS_COLORS` vocabulary as PASS/FAIL/SKIP.
+  - Documented the convention in [CONTRIBUTING.md](CONTRIBUTING.md#cli-output-conventions) and pointed [aidd-custom/AGENTS.md](aidd-custom/AGENTS.md) at it so a future command reuses `cli_format.py` instead of reinventing a third style. Updated `README.md`'s `code-coverage` sample output to match.
+  - 19 new/updated tests (14 in `test_cli_format.py`, 5 across `test_coverage_collector.py`/`test_code_coverage_cli.py`); full suite at 550 passed / 2 skipped under `pytest -m "not live"`.
+
 ### 2026-09-22 — Direct test-UDF semantic-model code coverage
 
 - **Add `pql-test code-coverage`** — See [tasks/archive/2026-09-22-direct-udf-code-coverage.md](tasks/archive/2026-09-22-direct-udf-code-coverage.md)
