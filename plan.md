@@ -4,6 +4,7 @@
 
 ## Active Work
 
+- **Add direct test-UDF semantic-model code coverage** — report calculation and metadata coverage, AI-ready gaps, and an optional CI threshold. See [tasks/direct-udf-code-coverage-epic.md](tasks/direct-udf-code-coverage-epic.md).
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)

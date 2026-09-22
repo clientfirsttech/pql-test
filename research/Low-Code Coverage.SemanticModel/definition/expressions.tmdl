@@ -1,0 +1,219 @@
+/// Base URL for the SharePoint site that stores the Low-Code Coverage data.  The URL should not end with a '/'.
+expression SharePointSiteURL = "https://kerski.sharepoint.com/sites/DataOpsDemo" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 9369eed6-b568-41bf-aae7-cdf6ca3fc060
+	queryGroup: Parameters
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Text
+
+expression GetNextLink =
+		(jsonResults) =>
+		let
+		    #"Converted to Table" = Record.ToTable(jsonResults),
+		    #"Expanded Value" = Table.ExpandRecordColumn(#"Converted to Table", "Value", {"__next"}, {"Value.__next"}),
+		    #"Removed Columns" = Table.RemoveColumns(#"Expanded Value",{"Name"})
+		in
+		    Table.FirstValue(#"Removed Columns")
+	lineageTag: 2ab62c3b-d879-46bf-8a27-c2d13e6be60c
+	queryGroup: Functions
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Function
+
+expression GetJsonFromSharePoint = ```
+		(url) =>
+		let 
+		    //Set Options and odata/json response
+		    Options = [RelativePath=url,Headers=[Accept="application/json;odata=verbose"]],
+		    RawData = Web.Contents(SharePointSiteURL, Options),
+		    Json    = Json.Document(RawData)
+		in  Json
+		```
+	lineageTag: 9f2bd10d-1e10-46b5-b706-56ff888e141a
+	queryGroup: Functions
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Function
+
+expression ConvertSharePointJsonToTable =
+		(Json) =>
+		let
+		    d = Json[d],
+		    #"Converted to Table" = Record.ToTable(d),
+		    Value = #"Converted to Table"{0}[Value],
+		    #"Converted to Table1" = Table.FromList(Value, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+		    Result = Table.ExpandRecordColumn(#"Converted to Table1", "Column1", {"ID","Title", "CalculationDependencies", "Tables", "Columns", "Measures","Created"}, {"SharePoint List ID","Build ID", "Calculation Dependencies", "Tables", "Columns", "Measures","Created"})
+		in
+		    Result
+	lineageTag: a7f26d81-8892-48a7-b7d1-99b2fda192aa
+	queryGroup: Functions
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Function
+
+expression GetLowCodeCoverageData = ```
+		(Source, Url, Count) => 
+		let 
+		    Json  = GetJsonFromSharePoint(Url),
+		    NextLink = GetNextLink(Json),
+		    Tbl = ConvertSharePointJsonToTable(Json),
+		    NewTbl = if Source is null then Tbl else Table.Combine({Source,Tbl}),
+		    BaseUrlLength = Text.Length(SharePointSiteURL),
+		    Result = if NextLink is null then NewTbl else GetLowCodeCoverageData(NewTbl,Text.Range(NextLink,BaseUrlLength),Count + 1)
+		in
+		    Result
+		```
+	lineageTag: ed2c9c1a-2fc6-432e-a8ed-102575b10eec
+	queryGroup: Functions
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Function
+
+expression 'Build Information' =
+		let
+		    Source = #"Calculation Dependencies",
+		    #"Replaced Value" = Table.ReplaceValue(Source,each [Build ID],"",Replacer.ReplaceText,{"Database_Name"}),
+		    #"Removed Other Columns" = Table.SelectColumns(#"Replaced Value",{"Database_Name", "Build ID", "SharePoint List ID"}),
+		    #"Removed Duplicates" = Table.Distinct(#"Removed Other Columns", {"SharePoint List ID"}),
+		    #"Reordered Columns" = Table.ReorderColumns(#"Removed Duplicates",{"SharePoint List ID", "Build ID", "Database_Name"}),
+		    #"Renamed Columns2" = Table.RenameColumns(#"Reordered Columns",{{"Database_Name", "Power BI Dataset Name"}})
+		in
+		    #"Renamed Columns2"
+	lineageTag: 60246d59-43af-4b4e-8abf-cc0b5f9c1eff
+	queryGroup: 'Base Queries'
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression 'Calculation Dependencies' =
+		let
+		    Source = #"Low-Code Coverage Source",
+		    #"Removed Other Columns" = Table.SelectColumns(Source,{"Calculation Dependencies", "Build ID", "SharePoint List ID"}),
+		    #"Reordered Columns" = Table.ReorderColumns(#"Removed Other Columns",{"SharePoint List ID","Build ID","Calculation Dependencies"}),
+		    #"Parsed XML" = Table.TransformColumns(#"Reordered Columns",{{"Calculation Dependencies", Xml.Tables}}),
+		    #"Expanded Calculation Dependencies" = Table.ExpandTableColumn(#"Parsed XML", "Calculation Dependencies", {"Name", "Table"}, {"Level1.Name", "Level1.Table"}),
+		    #"Expanded Level1.Table" = Table.ExpandTableColumn(#"Expanded Calculation Dependencies", "Level1.Table", {"Name", "Table"}, {"Level2.Name", "Level2.Table"}),
+		    #"Expanded Level2.Table" = Table.ExpandTableColumn(#"Expanded Level1.Table", "Level2.Table", {"Name", "Table"}, {"Level3.Name", "Level3.Table"}),
+		    #"Expanded Level3.Table" = Table.ExpandTableColumn(#"Expanded Level2.Table", "Level3.Table", {"Name", "Table"}, {"Level4.Name", "Level4.Table"}),
+		    #"Expanded Level4.Table" = Table.ExpandTableColumn(#"Expanded Level3.Table", "Level4.Table", {"element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault", "Database_Name", "Object_Type", "Table", "Object", "Referenced_Object_type", "Referenced_Table", "Referenced_Object", "Expression", "Referenced_Expression"}, {"element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault", "Database_Name", "Object_Type", "Table", "Object", "Referenced_Object_type", "Referenced_Table", "Referenced_Object", "Expression", "Referenced_Expression"}),
+		    #"Filtered Rows" = Table.SelectRows(#"Expanded Level4.Table", each ([Level4.Name] = "row")),
+		    #"Removed Columns" = Table.RemoveColumns(#"Filtered Rows",{"Level1.Name", "Level2.Name", "Level3.Name", "Level4.Name", "element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault"})
+		in
+		    #"Removed Columns"
+	lineageTag: 244a66b8-0821-4937-ba4c-cbd3a82a22f3
+	queryGroup: 'Base Queries'
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression 'Low-Code Coverage Source' =
+		let
+		    Source = GetLowCodeCoverageData(null, "/_api/web/lists/getbytitle('Low-Code%20Coverage')/items?$select=ID,Title,CalculationDependencies,Tables,Columns,Measures,Created", 0),
+		    #"Changed Type" = Table.TransformColumnTypes(Source,{{"SharePoint List ID", Int64.Type}, {"Created", type datetimezone}})
+		in
+		    #"Changed Type"
+	lineageTag: 93df4da6-2648-4906-ac0d-d03f168f3c0d
+	queryGroup: 'Base Queries'
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression 'Measures Table' =
+		let
+		    Source = #"Low-Code Coverage Source",
+		    #"Removed Other Columns" = Table.SelectColumns(Source,{"Measures", "Build ID", "SharePoint List ID","Created"}),
+		    #"Reordered Columns" = Table.ReorderColumns(#"Removed Other Columns",{"Build ID", "SharePoint List ID", "Created", "Measures"}),
+		    #"Parsed XML" = Table.TransformColumns(#"Reordered Columns",{{"Measures", Xml.Tables}}),
+		    #"Expanded Measures" = Table.ExpandTableColumn(#"Parsed XML", "Measures", {"Name", "Table"}, {"Level1.Name", "Level1.Table"}),
+		    #"Expanded Level1.Table" = Table.ExpandTableColumn(#"Expanded Measures", "Level1.Table", {"Name", "Table"}, {"Level2.Name", "Level2.Table"}),
+		    #"Expanded Level2.Table" = Table.ExpandTableColumn(#"Expanded Level1.Table", "Level2.Table", {"Name", "Table"}, {"Level3.Name", "Level3.Table"}),
+		    #"Expanded Level3.Table" = Table.ExpandTableColumn(#"Expanded Level2.Table", "Level3.Table", {"Name", "Table"}, {"Level4.Name", "Level4.Table"}),
+		    #"Filter by Row" = Table.SelectRows(#"Expanded Level3.Table", each ([Level4.Name] = "row")),
+		    #"Expanded Level4.Table" = Table.ExpandTableColumn(#"Filter by Row", "Level4.Table", {"ID", "TableID", "Name", "DataType", "Expression", "FormatString", "IsHidden", "State", "ModifiedTime", "StructureModifiedTime", "LineageTag"}, {"Level4.Table.ID", "Level4.Table.TableID", "Level4.Table.Name", "Level4.Table.DataType", "Level4.Table.Expression", "Level4.Table.FormatString", "Level4.Table.IsHidden", "Level4.Table.State", "Level4.Table.ModifiedTime", "Level4.Table.StructureModifiedTime", "Level4.Table.LineageTag"}),
+		    #"Filter out Hidden Measures" = Table.SelectRows(#"Expanded Level4.Table", each true),
+		    #"Removed Other Columns1" = Table.SelectColumns(#"Filter out Hidden Measures",{"Build ID", "SharePoint List ID", "Created","Level4.Table.Name"}),
+		    #"Add Type" = Table.AddColumn(#"Removed Other Columns1", "Type", each "Measure"),
+		    #"Merge with Build Information" = Table.NestedJoin(#"Add Type", {"SharePoint List ID"}, #"Build Information", {"SharePoint List ID"}, "Build Information", JoinKind.LeftOuter),
+		    #"Expanded Build Information" = Table.ExpandTableColumn(#"Merge with Build Information", "Build Information", {"Power BI Dataset Name"}, {"Power BI Dataset Name"}),
+		    #"Renamed Columns" = Table.RenameColumns(#"Expanded Build Information",{{"Level4.Table.Name", "Name"}}),
+		    #"Reordered Columns1" = Table.ReorderColumns(#"Renamed Columns",{"SharePoint List ID", "Build ID", "Power BI Dataset Name", "Name", "Type"}),
+		    #"Added Custom" = Table.AddColumn(#"Reordered Columns1", "Test Bridge Key", each Number.ToText([SharePoint List ID])&"|"&[Build ID]&"|"&[Power BI Dataset Name]&"|"&[Name]&"|"&[Type])
+		in
+		    #"Added Custom"
+	lineageTag: caad69ed-92cb-447c-b8f2-f795b146277b
+	queryGroup: DMVs
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression CalculatedColumns =
+		let
+		    Source = #"Low-Code Coverage Source",
+		    #"Removed Other Columns" = Table.SelectColumns(Source,{"Columns", "Build ID", "SharePoint List ID","Created"}),
+		    #"Reordered Columns" = Table.ReorderColumns(#"Removed Other Columns",{"Build ID", "SharePoint List ID", "Created", "Columns"}),
+		    #"Parsed XML" = Table.TransformColumns(#"Reordered Columns",{{"Columns", Xml.Tables}}),
+		    #"Expanded Columns" = Table.ExpandTableColumn(#"Parsed XML", "Columns", {"Name", "Table"}, {"Level1.Name", "Level1.Table"}),
+		    #"Expanded Level1.Table" = Table.ExpandTableColumn(#"Expanded Columns", "Level1.Table", {"Name", "Table"}, {"Level2.Name", "Level2.Table"}),
+		    #"Expanded Level2.Table" = Table.ExpandTableColumn(#"Expanded Level1.Table", "Level2.Table", {"Name", "Table"}, {"Level3.Name", "Level3.Table"}),
+		    #"Expanded Level3.Table" = Table.ExpandTableColumn(#"Expanded Level2.Table", "Level3.Table", {"Name", "Table"}, {"Level4.Name", "Level4.Table"}),
+		    #"Filter by Row" = Table.SelectRows(#"Expanded Level3.Table", each ([Level4.Name] = "row")),
+		    #"Expanded Level4.Table" = Table.ExpandTableColumn(#"Filter by Row", "Level4.Table", {"ID", "TableID", "ExplicitName", "ExplicitDataType", "InferredDataType", "IsHidden", "State", "IsUnique", "IsKey", "IsNullable", "Alignment", "TableDetailPosition", "IsDefaultLabel", "IsDefaultImage", "SummarizeBy", "ColumnStorageID", "Type", "IsAvailableInMDX", "AttributeHierarchyID", "ModifiedTime", "StructureModifiedTime", "RefreshedTime", "SystemFlags", "KeepUniqueRows", "DisplayOrdinal", "EncodingHint", "SourceColumn", "FormatString", "LineageTag", "Expression", "SortByColumnID", "InferredName"}, {"ID", "TableID", "ExplicitName", "ExplicitDataType", "InferredDataType", "IsHidden", "State", "IsUnique", "IsKey", "IsNullable", "Alignment", "TableDetailPosition", "IsDefaultLabel", "IsDefaultImage", "SummarizeBy", "ColumnStorageID", "Type", "IsAvailableInMDX", "AttributeHierarchyID", "ModifiedTime", "StructureModifiedTime", "RefreshedTime", "SystemFlags", "KeepUniqueRows", "DisplayOrdinal", "EncodingHint", "SourceColumn", "FormatString", "LineageTag", "Expression", "SortByColumnID", "InferredName"}),
+		    #"Add Type" = Table.AddColumn(#"Expanded Level4.Table", "Type.1", each if [Expression] <> null then "Calc_Column" else "Column"),
+		    #"Filter By Calculated Columns" = Table.SelectRows(#"Add Type", each ([Type.1] = "Calc_Column")),
+		    #"Filter Empty Explicit Names" = Table.SelectRows(#"Filter By Calculated Columns", each ([ExplicitName] <> null)),
+		    #"Filter Out Hidden Columns" = Table.SelectRows(#"Filter Empty Explicit Names", each ([IsHidden] = "false")),
+		    #"Removed Other Columns1" = Table.SelectColumns(#"Filter Out Hidden Columns",{"Build ID", "SharePoint List ID", "Created","ExplicitName","Type.1"}),
+		    #"Merge with Build Information" = Table.NestedJoin(#"Removed Other Columns1", {"SharePoint List ID"}, #"Build Information", {"SharePoint List ID"}, "Build Information", JoinKind.LeftOuter),
+		    #"Expanded Build Information" = Table.ExpandTableColumn(#"Merge with Build Information", "Build Information", {"Power BI Dataset Name"}, {"Power BI Dataset Name"}),
+		    #"Renamed Columns" = Table.RenameColumns(#"Expanded Build Information",{{"ExplicitName", "Name"}, {"Type.1", "Type"}}),
+		    #"Reordered Columns1" = Table.ReorderColumns(#"Renamed Columns",{"SharePoint List ID", "Build ID", "Power BI Dataset Name", "Name", "Type"}),
+		    #"Added Custom" = Table.AddColumn(#"Reordered Columns1", "Test Bridge Key", each Number.ToText([SharePoint List ID])&"|"&[Build ID]&"|"&[Power BI Dataset Name]&"|"&[Name]&"|"&[Type])
+		in
+		    #"Added Custom"
+	lineageTag: 9bc47ec9-71c8-4b21-a0e7-db5bec8abe96
+	queryGroup: DMVs
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
+expression Tables =
+		let
+		    Source = #"Low-Code Coverage Source",
+		    #"Removed Other Columns" = Table.SelectColumns(Source,{"Tables", "Build ID", "SharePoint List ID","Created"}),
+		    #"Reordered Columns" = Table.ReorderColumns(#"Removed Other Columns",{"Build ID", "SharePoint List ID", "Tables"}),
+		    #"Parsed XML" = Table.TransformColumns(#"Reordered Columns",{{"Tables", Xml.Tables}}),
+		    #"Expanded Tables" = Table.ExpandTableColumn(#"Parsed XML", "Tables", {"Name", "Table"}, {"Level1.Name", "Level1.Table"}),
+		    #"Expanded Level1.Table" = Table.ExpandTableColumn(#"Expanded Tables", "Level1.Table", {"Name", "Table"}, {"Level2.Name", "Level2.Table"}),
+		    #"Expanded Level2.Table" = Table.ExpandTableColumn(#"Expanded Level1.Table", "Level2.Table", {"Name", "Table"}, {"Level3.Name", "Level3.Table"}),
+		    #"Expanded Level3.Table" = Table.ExpandTableColumn(#"Expanded Level2.Table", "Level3.Table", {"Name", "Table"}, {"Level4.Name", "Level4.Table"}),
+		    #"Expanded Level4.Table" = Table.ExpandTableColumn(#"Expanded Level3.Table", "Level4.Table", {"element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault", "ID", "ModelID", "Name", "IsHidden", "TableStorageID", "ModifiedTime", "StructureModifiedTime", "SystemFlags", "ShowAsVariationsONly", "IsPrivate", "AlternateSourcePrecedence", "ExcludeFromModelRefresh", "LineageTag"}, {"element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault", "ID.1", "ModelID", "Name", "IsHidden", "TableStorageID", "ModifiedTime", "StructureModifiedTime", "SystemFlags", "ShowAsVariationsONly", "IsPrivate", "AlternateSourcePrecedence", "ExcludeFromModelRefresh", "LineageTag"}),
+		    #"Filtered Rows" = Table.SelectRows(#"Expanded Level4.Table", each ([Level4.Name] = "row")),
+		    #"Removed Columns" = Table.RemoveColumns(#"Filtered Rows",{"Level1.Name", "Level2.Name", "Level3.Name", "Level4.Name", "element", "simpleType", "complexType", "Attribute:targetNamespace", "Attribute:elementFormDefault", "ID.1", "ModelID"}),
+		    #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"ModifiedTime", type datetime}, {"StructureModifiedTime", type datetime}, {"ExcludeFromModelRefresh", type logical}, {"IsPrivate", type logical}, {"TableStorageID", Int64.Type}, {"IsHidden", type logical}, {"SystemFlags", Int64.Type}, {"ShowAsVariationsONly", type logical}, {"AlternateSourcePrecedence", Int64.Type}}),
+		    #"Remove Coverage Tables" = Table.SelectRows(#"Changed Type", each not Text.StartsWith([Name], "TestCoverage_Tbl")),
+		    #"Remove Hidden Tables" = Table.SelectRows(#"Remove Coverage Tables", each ([IsHidden] = false)),
+		    #"Add Type" = Table.AddColumn(#"Remove Hidden Tables", "Type", each "Table"),
+		    #"Merge with Build Information" = Table.NestedJoin(#"Add Type", {"SharePoint List ID"}, #"Build Information", {"SharePoint List ID"}, "Build Information", JoinKind.LeftOuter),
+		    #"Expanded Build Information" = Table.ExpandTableColumn(#"Merge with Build Information", "Build Information", {"Power BI Dataset Name"}, {"Power BI Dataset Name"}),
+		    #"Removed Columns1" = Table.RemoveColumns(#"Expanded Build Information",{"IsHidden", "TableStorageID", "ModifiedTime", "StructureModifiedTime", "SystemFlags", "ShowAsVariationsONly", "IsPrivate", "AlternateSourcePrecedence", "ExcludeFromModelRefresh", "LineageTag"}),
+		    #"Reordered Columns1" = Table.ReorderColumns(#"Removed Columns1",{"SharePoint List ID", "Build ID", "Power BI Dataset Name", "Name", "Type"}),
+		    #"Added Custom" = Table.AddColumn(#"Reordered Columns1", "Test Bridge Key", each Number.ToText([SharePoint List ID])&"|"&[Build ID]&"|"&[Power BI Dataset Name]&"|"&[Name]&"|"&[Type])
+		in
+		    #"Added Custom"
+	lineageTag: 4e10ddb3-d5bb-47b9-a574-9aeca1c1ee30
+	queryGroup: DMVs
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
