@@ -1046,7 +1046,7 @@ pql-test skill [name] [--list] [--format {markdown,json}] [--version]
 
 | Argument | Required | Description |
 |---|---|---|
-| `name` | ❌ | Skill name to print (check-prereqs, retrieve-test, retrieve-tests, run-tests) |
+| `name` | ❌ | Skill name to print (check-prereqs, code-coverage, retrieve-test, retrieve-tests, run-tests) |
 | `--list`, `-l` | ❌ | List all available skills (names only) |
 | `--format {markdown,json}` | ❌ | Output format (default: markdown) |
 | `--version` | ❌ | Show installed skill version |
@@ -1065,6 +1065,7 @@ pql-test skill --list
 
 ```
 check-prereqs
+code-coverage
 retrieve-test
 retrieve-tests
 run-tests

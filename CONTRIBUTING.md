@@ -405,11 +405,13 @@ Skills live in both **source** (`skills/`) and **packaged** (`python/pql_test/sk
 pql-test/
 ├── skills/                          ← source skills (maintained by contributors)
 │   ├── check-prereqs/SKILL.md
+│   ├── code-coverage/SKILL.md
 │   ├── retrieve-test/SKILL.md
 │   ├── retrieve-tests/SKILL.md
 │   └── run-tests/SKILL.md
 └── python/pql_test/skills/          ← packaged skills (distributed in wheel)
     ├── check-prereqs/SKILL.md
+    ├── code-coverage/SKILL.md
     ├── retrieve-test/SKILL.md
     ├── retrieve-tests/SKILL.md
     └── run-tests/SKILL.md

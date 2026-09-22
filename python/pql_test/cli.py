@@ -86,6 +86,9 @@ from pql_test.runner import (
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
+    category_counts,
+    collect_coverage,
+    coverage_report_to_dict,
     get_pbi_files_opened,
     has_pyadomd,
     parse_model_identifier,
@@ -95,7 +98,10 @@ from pql_test.runner import (
     retrieve_test_by_name,
     retrieve_tests,
     run_tests_from_model,
+    summarize_coverage,
 )
+from pql_test.runner.coverage_collector import CoverageReport
+from pql_test.runner.coverage_report import CoverageSummary
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -1128,6 +1134,149 @@ def cmd_run_tests(
     has_failures = suite.failed > 0
     all_skipped = suite.total > 0 and suite.skipped == suite.total
     sys.exit(1 if has_failures or all_skipped else 0)
+
+
+# ---------------------------------------------------------------------------
+# code-coverage
+# ---------------------------------------------------------------------------
+
+def _print_coverage_report(
+    report: CoverageReport, summary: CoverageSummary, verbose: bool
+) -> None:
+    click.echo(f"\nDirect Test-UDF Coverage: {report.model_path}")
+    click.echo(f"Tests discovered: {report.test_count}")
+    click.echo(f"\nOverall: {summary.covered}/{summary.eligible} covered ({summary.percent}%)")
+
+    counts = category_counts(report)
+    excluded_counts: dict = {}
+    for exclusion in report.result.excluded:
+        excluded_counts[exclusion.object_type] = excluded_counts.get(exclusion.object_type, 0) + 1
+    all_types = sorted(set(counts) | set(excluded_counts), key=lambda t: t.value)
+
+    if all_types:
+        click.echo("\nBy category:")
+        for object_type in all_types:
+            covered, eligible = counts.get(object_type, (0, 0))
+            excluded_n = excluded_counts.get(object_type, 0)
+            if eligible:
+                pct = round(covered / eligible * 100, 2)
+                click.echo(f"  {object_type.value:<14} {covered}/{eligible}  ({pct}%)")
+            elif excluded_n:
+                click.echo(f"  {object_type.value:<14} excluded ({excluded_n})")
+            else:
+                click.echo(f"  {object_type.value:<14} 0/0")
+
+    if report.unavailable:
+        click.echo("\nUnavailable categories (not counted as covered or uncovered):")
+        for u in report.unavailable:
+            click.echo(f"  {u.object_type.value} — {u.reason}")
+
+    if verbose:
+        if report.result.covered:
+            click.echo("\nCovered objects:")
+            for e in sorted(report.result.covered, key=lambda e: (e.object_type.value, e.identifier)):
+                click.echo(f"  {e.object_type.value} {e.identifier} — tested by: {', '.join(e.test_names)}")
+        if report.result.gaps:
+            click.echo("\nUncovered objects (AI test targets):")
+            for g in sorted(report.result.gaps, key=lambda g: (g.object_type.value, g.identifier)):
+                click.echo(f"  {g.object_type.value} {g.identifier} — {g.test_target_hint}")
+        if report.result.excluded:
+            click.echo("\nExcluded objects:")
+            for ex in sorted(report.result.excluded, key=lambda e: (e.object_type.value, e.identifier)):
+                click.echo(f"  {ex.object_type.value} {ex.identifier} — {ex.reason}")
+
+
+@cli.command("code-coverage")
+@click.argument("model_path", metavar="MODEL_PATH")
+@click.option(
+    "--verbose", "-v", is_flag=True,
+    help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
+)
+@click.option(
+    "--format", "output_format",
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    default="text",
+    help="Output format: human-readable text (default) or a stable JSON report.",
+)
+@click.option(
+    "--output", "output",
+    default=None, metavar="FILE",
+    help="Write the JSON report to FILE. Requires --format json.",
+)
+@click.option(
+    "--min-coverage", "min_coverage",
+    type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
+    help="Exit non-zero when overall eligible coverage is below PERCENT.",
+)
+@conn_options
+def cmd_code_coverage(
+    model_path: str,
+    verbose: bool,
+    output_format: str,
+    output: str | None,
+    min_coverage: float | None,
+    tenant_id: str | None,
+    workspace_id: str | None,
+    dataset_id: str | None,
+    client_id: str | None,
+    client_secret: str | None,
+) -> None:
+    """Report direct test-UDF coverage for a PBIP model via XMLA.
+
+    A calculated column, measure, or table counts as covered only when a
+    discovered test UDF has a direct INFO.CALCDEPENDENCY() edge to it; a
+    relationship or role only from evidence explicitly attributable to a
+    discovered test UDF (a parsed PQL.Assert.Relationship.ShouldExist call,
+    or the test's PQLAssert_RoleName annotation). Partitions have no
+    PQL.Assert assertion surface and are always excluded — never counted
+    covered or uncovered. See
+    tasks/direct-udf-code-coverage-metadata-contract.md for the full
+    contract and its limits.
+
+    MODEL_PATH accepts the same three formats as run-tests: a filesystem
+    PBIP path, local/<model_name>, or the Fabric-style service path.
+
+    \b
+    Examples:
+      pql-test code-coverage local/SampleModel
+      pql-test code-coverage ../examples/SampleModel.SemanticModel --verbose
+      pql-test code-coverage local/SampleModel --format json --output coverage.json
+      pql-test code-coverage local/SampleModel --min-coverage 60
+    """
+    output_format = output_format.lower()
+    if output and output_format != "json":
+        raise click.UsageError("--output requires --format json.")
+
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
+    report = collect_coverage(model_path, opts)
+    if report is None:
+        click.echo(
+            f"Error: No XMLA connection detected for '{model_path}'. "
+            "Pass local/<model_name> with the model open in Power BI Desktop, "
+            "or supply --tenant-id, --workspace-id, and --dataset-id.",
+            err=True,
+        )
+        sys.exit(1)
+
+    summary = summarize_coverage(report)
+
+    if output_format == "json":
+        payload = coverage_report_to_dict(report)
+        text = json.dumps(payload, indent=2)
+        if output:
+            Path(output).write_text(text, encoding="utf-8")
+            click.echo(f"Coverage report written to: {output}")
+        else:
+            click.echo(text)
+    else:
+        _print_coverage_report(report, summary, verbose)
+
+    if min_coverage is not None and summary.percent < min_coverage:
+        click.echo(
+            f"\nError: coverage {summary.percent}% is below the required {min_coverage}% threshold.",
+            err=True,
+        )
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

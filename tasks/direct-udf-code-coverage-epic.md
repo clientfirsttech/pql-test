@@ -50,9 +50,11 @@ Add isolated runner functionality that retrieves the test-UDF set, inventories e
 
 ---
 
-## Add Code Coverage Command
+## Add Code Coverage Command ✅ (2026-09-22)
 
 Expose terse human output, verbose evidence and gaps, JSON output, and a CI threshold through the Click CLI.
+
+**Implemented** — `pql-test code-coverage MODEL_PATH` in [python/pql_test/cli.py](../python/pql_test/cli.py), backed by [python/pql_test/runner/coverage_report.py](../python/pql_test/runner/coverage_report.py) (pure summary/JSON-shape helpers, unit-tested independent of Click). `--output` without `--format json` and a malformed/out-of-range `--min-coverage` both fail via Click validation before any XMLA query (verified live and with a mocked spy in tests). Added the `code-coverage` skill (`skills/code-coverage/SKILL.md`, synced byte-for-byte to `python/pql_test/skills/`) and bumped the package version to `0.1.18` across `pyproject.toml` and all 5 skill files, per the project's skill-versioning convention in CONTRIBUTING.md. Covered by [python/tests/test_coverage_report.py](../python/tests/test_coverage_report.py) (6 tests) and [python/tests/test_code_coverage_cli.py](../python/tests/test_code_coverage_cli.py) (9 tests), plus 7 new skill-content/packaging tests.
 
 **Requirements**:
 - Given `pql-test code-coverage MODEL_PATH`, should print the overall percentage and covered/eligible counts by object type

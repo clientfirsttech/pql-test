@@ -15,6 +15,7 @@ modules with clear separation of concerns:
 - execution.py — Test execution engine
 - coverage.py — Direct test-UDF coverage evidence model
 - coverage_collector.py — XMLA-backed direct test-UDF coverage collection
+- coverage_report.py — Text/JSON presentation for coverage reports
 
 For backward compatibility, all public symbols are re-exported from this
 __init__.py so existing imports continue to work:
@@ -62,6 +63,14 @@ from pql_test.runner.coverage_collector import (
     CoverageReport,
     UnavailableCategory,
     collect_coverage,
+)
+
+# Import coverage report presentation from coverage_report.py
+from pql_test.runner.coverage_report import (
+    CoverageSummary,
+    category_counts,
+    coverage_report_to_dict,
+    summarize_coverage,
 )
 
 # Import test discovery from discovery.py
@@ -175,6 +184,11 @@ __all__ = [
     "CoverageReport",
     "UnavailableCategory",
     "collect_coverage",
+    # Re-exported from coverage_report
+    "CoverageSummary",
+    "category_counts",
+    "coverage_report_to_dict",
+    "summarize_coverage",
     # Re-exported from adomd
     "HAS_PYADOMD",
     "get_adomd_connection_class",
