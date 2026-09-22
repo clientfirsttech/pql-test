@@ -4,7 +4,6 @@
 
 ## Active Work
 
-- **Add direct test-UDF semantic-model code coverage** — report calculation and metadata coverage, AI-ready gaps, and an optional CI threshold. See [tasks/direct-udf-code-coverage-epic.md](tasks/direct-udf-code-coverage-epic.md). Tasks 1–4 of 5 are done: metadata contract validation, the evidence data model, the live XMLA collector, and the `pql-test code-coverage` CLI command (with a new `code-coverage` skill and a package version bump to `0.1.18`). Next up is "Cover And Document The Workflow" — live-model regression test against the metadata contract, plus README documentation distinguishing direct dependency coverage from full behavioral validation.
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -33,6 +32,16 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-09-22 — Direct test-UDF semantic-model code coverage
+
+- **Add `pql-test code-coverage`** — See [tasks/archive/2026-09-22-direct-udf-code-coverage.md](tasks/archive/2026-09-22-direct-udf-code-coverage.md)
+  - Validated live against SampleModel, RLS_Model, and OLS_Model which object categories `INFO.CALCDEPENDENCY()` can directly evidence from a test UDF (tables, calculated columns, measures) versus which need indirect evidence (roles via `PQLAssert_RoleName`, relationships via DAX expression-text parsing) or have none at all (partitions) — recorded in [tasks/direct-udf-code-coverage-metadata-contract.md](tasks/direct-udf-code-coverage-metadata-contract.md).
+  - Added [python/pql_test/runner/coverage.py](python/pql_test/runner/coverage.py) (evidence/exclusion/gap types + `classify_coverage()`), [python/pql_test/runner/coverage_collector.py](python/pql_test/runner/coverage_collector.py) (the live XMLA-backed collector, `collect_coverage()`), and [python/pql_test/runner/coverage_report.py](python/pql_test/runner/coverage_report.py) (summary/JSON presentation) — each independently unit-tested (25 tests) before being wired together.
+  - Added the `pql-test code-coverage MODEL_PATH` CLI command: terse and `--verbose` text output, `--format json` with `--output`, and `--min-coverage` for CI gating. Malformed `--output`/`--format` combinations and out-of-range `--min-coverage` fail via Click validation before any XMLA query.
+  - Added the `code-coverage` skill (source + packaged, byte-identical) and bumped the package version to `0.1.18` across `pyproject.toml` and all 5 skills, per the existing skill-versioning convention.
+  - Added a live regression test ([python/tests/test_coverage_live.py](python/tests/test_coverage_live.py), `@pytest.mark.live`) pinning the exact evidence recorded in the metadata contract, and documented the command in [README.md](README.md) with an explicit dependency-coverage-vs-assertion-coverage caveat.
+  - 44 new tests total; full suite at 532 passed / 2 skipped under `pytest -m "not live"`, coverage gate at 82.81% (new modules individually at 96-100%).
 
 ### 2026-09-04 — Fix `local/<model_name>` truncation for names containing " - "
 

@@ -56,6 +56,7 @@ Microsoft Fabric workspace endpoint.
     - [retrieve-tests](#retrieve-tests)
     - [retrieve-test](#retrieve-test)
     - [run-tests](#run-tests)
+    - [code-coverage](#code-coverage)
   - [Connection Options](#connection-options)
     - [Local Power BI Desktop (auto-detected)](#local-power-bi-desktop-auto-detected)
     - [Remote Power BI Premium / Fabric Workspace](#remote-power-bi-premium--fabric-workspace)
@@ -1033,6 +1034,80 @@ ssss
 
 ---
 
+### code-coverage
+
+Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps.
+
+```bash
+pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output <file>]
+                                   [--min-coverage <percent>]
+                                   [--tenant-id <id>] [--workspace-id <id>] [--dataset-id <id>]
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+|---|---|---|
+| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
+| `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
+| `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
+| `--output <file>` | ❌ | Write the JSON report to `<file>`. Requires `--format json` — otherwise fails as a usage error before any XMLA query |
+| `--min-coverage <percent>` | ❌ | Exit non-zero when overall eligible coverage is below `<percent>` (0-100). A malformed or out-of-range value also fails before any XMLA query |
+| `--tenant-id <id>` | ❌ | Azure AD tenant ID (or set `PQL_TENANT_ID`) |
+| `--workspace-id <id>` | ❌ | Power BI workspace GUID (or set `PQL_WORKSPACE_ID`) |
+| `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (or set `PQL_DATASET_ID`) |
+| `--client-id <id>` | ❌ | Service-principal client ID (or set `PQL_CLIENT_ID`) |
+| `--client-secret <secret>` | ❌ | Service-principal client secret (or set `PQL_CLIENT_SECRET`) |
+
+**What "covered" means — and what it doesn't**
+
+This is **dependency coverage**, not **assertion coverage**. An object counts as covered when a discovered test UDF has direct, verifiable evidence linking it to that object — never inferred from transitive dependencies, and never presented as covered just because *some* test happens to touch it indirectly through a PQL.Assert helper. But direct evidence only proves a test *references* the object, not that the test's assertion meaningfully validates its behavior: a test that checks a table has more than zero rows and a test that validates every business rule on that table both count as "covered" the same way. Treat a low score as "nothing here has been tested at all" and a high score as "these objects are at least referenced by a test" — not as a correctness guarantee. See [tasks/direct-udf-code-coverage-metadata-contract.md](tasks/direct-udf-code-coverage-metadata-contract.md) for the full verified evidence contract per category, including:
+
+- **Tables, calculated columns, measures** — covered via a direct `INFO.CALCDEPENDENCY()` edge from a discovered test UDF. The strongest evidence category: the DAX engine itself reports the reference.
+- **Relationships** — covered only when a test UDF's own DAX expression text contains a `PQL.Assert.Relationship.ShouldExist(...)` call matching a real relationship. `INFO.CALCDEPENDENCY()` can't see this at all, because the helper takes the relationship as string arguments, not a compiled reference — so this is parsed out of the expression text instead.
+- **Roles** — covered only when a test UDF carries a `PQLAssert_RoleName` annotation matching a real role (the same annotation `PQL.Assert.RetrieveTestsV2()` already surfaces for RLS impersonation). Role application happens through the XMLA connection string, not a DAX dependency, so this is annotation-driven rather than edge-driven.
+- **Partitions** — always excluded, never counted covered or uncovered. No `PQL.Assert` helper targets partitions at all, so there is no assertion surface to have evidence from.
+
+**Terse report:**
+
+```bash
+pql-test code-coverage local/SampleModel
+```
+
+```
+Direct Test-UDF Coverage: local/SampleModel
+Tests discovered: 4
+
+Overall: 10/23 covered (43.48%)
+
+By category:
+  CALC_COLUMN    0/6  (0.0%)
+  MEASURE        3/6  (50.0%)
+  PARTITION      excluded (8)
+  RELATIONSHIP   3/3  (100.0%)
+  TABLE          4/8  (50.0%)
+```
+
+**Verbose report** (adds per-object evidence and AI-ready gap hints):
+
+```bash
+pql-test code-coverage local/SampleModel --verbose
+```
+
+**JSON report for CI artifacts or an AI agent to read:**
+
+```bash
+pql-test code-coverage local/SampleModel --format json --output coverage.json
+```
+
+**Fail CI when overall eligible coverage drops below a threshold:**
+
+```bash
+pql-test code-coverage local/SampleModel --min-coverage 60
+```
+
+---
+
 ### skill
 
 Manage AI assistant skill files packaged with pql-test.
@@ -1521,6 +1596,15 @@ The "all skipped → exit 1" rule catches CI matrix entries whose
 the workflow would silently report green even though no tests actually ran
 against the model.
 
+`code-coverage` uses its own exit codes, since "no tests ran" and "coverage
+is below your threshold" are different failure modes from `run-tests`:
+
+| Code | Meaning |
+|---|---|
+| `0` | Report produced, and coverage is at/above `--min-coverage` (or no threshold was set) |
+| `1` | No XMLA connection could be established, or coverage is below `--min-coverage` |
+| `2` | Click usage error — malformed/out-of-range `--min-coverage`, or `--output` without `--format json`. Fails before any XMLA query is made |
+
 CI pipelines can rely on these codes directly:
 
 ```powershell
@@ -1545,7 +1629,7 @@ The `pql-test` runner is organized as a modular Python package under `python/pql
 
 | Module | Lines | Purpose |
 |--------|-------|---------|
-| `__init__.py` | 150 | Public API re-exports for backward compatibility |
+| `__init__.py` | 224 | Public API re-exports for backward compatibility |
 | `models.py` | 204 | Pure data classes and enums (Environment, PqlTest, TestResult, etc.) |
 | `adomd.py` | 253 | ADOMD.NET assembly loading and NuGet auto-install |
 | `auth.py` | 159 | Authentication credential resolution bridge |
@@ -1556,8 +1640,11 @@ The `pql-test` runner is organized as a modular Python package under `python/pql
 | `xmla.py` | 117 | XMLA query execution via ADOMD.NET |
 | `discovery.py` | 248 | Test discovery (live XMLA + filesystem) |
 | `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
+| `coverage.py` | 149 | Direct test-UDF coverage evidence model (types + `classify_coverage`) |
+| `coverage_collector.py` | 339 | XMLA-backed direct test-UDF coverage collection |
+| `coverage_report.py` | 104 | Text/JSON presentation for coverage reports |
 
-**Total**: 2,298 lines across 11 modules (average 209 lines per module)
+**Total**: ~2,900 lines across 14 modules
 
 All modules follow a 400-line soft budget (800-line hard budget) to keep code maintainable. Each module has minimal coupling to others, making the codebase easier to understand, test, and modify.
 

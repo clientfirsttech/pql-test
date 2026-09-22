@@ -1,6 +1,6 @@
 # Direct Test-UDF Code Coverage Epic
 
-**Status**: 📋 PLANNED
+**Status**: ✅ COMPLETED (2026-09-22)
 **Goal**: Add a `pql-test code-coverage` command that reports coverage from direct `.Test` and `.Tests` UDF evidence, identifies test gaps, and can enforce a minimum coverage threshold in CI
 
 ## Overview
@@ -13,7 +13,7 @@ WHY Power BI and Fabric developers need an actionable view of which calculated c
 
 Run live XMLA queries against an example model to record the object-type values and direct edges returned by `INFO.CALCDEPENDENCY()` for discovered `.Test` and `.Tests` UDFs.
 
-**Validated** — see [direct-udf-code-coverage-metadata-contract.md](direct-udf-code-coverage-metadata-contract.md) for the recorded evidence (live against SampleModel, RLS_Model, OLS_Model). Headline finding: tables, columns/calc-columns, and measures have a true direct-edge path; relationships, partitions, and roles do not and need the exclusion/indirect-evidence behavior documented there.
+**Validated** — see [direct-udf-code-coverage-metadata-contract.md](../direct-udf-code-coverage-metadata-contract.md) for the recorded evidence (live against SampleModel, RLS_Model, OLS_Model). Headline finding: tables, columns/calc-columns, and measures have a true direct-edge path; relationships, partitions, and roles do not and need the exclusion/indirect-evidence behavior documented there.
 
 **Requirements**:
 - Given test UDFs returned by `PQL.Assert.RetrieveTestsV2()`, should capture their direct calculation-dependency edges without including dependencies that originate only from PQL.Assert helper functions
@@ -26,7 +26,7 @@ Run live XMLA queries against an example model to record the object-type values 
 
 Define the normalized inventory, direct-test evidence, exclusions, and AI-ready gap records for calculation and metadata object categories.
 
-**Implemented** — [python/pql_test/runner/coverage.py](../python/pql_test/runner/coverage.py) defines `CoverageObjectType`, `EligibleObject`, `CoverageEvidence`, `ExclusionRecord`, `CoverageGap`, and the pure `classify_coverage()` rule (exclusion beats evidence; evidence with no contributing test names doesn't count; gaps carry an AI-ready hint). No XMLA calls here — inputs are built by "Implement Coverage Collection" next. Covered by [python/tests/test_coverage.py](../python/tests/test_coverage.py) (8 tests, 100% line coverage on the new module) using synthetic data, not a live connection.
+**Implemented** — [python/pql_test/runner/coverage.py](../../python/pql_test/runner/coverage.py) defines `CoverageObjectType`, `EligibleObject`, `CoverageEvidence`, `ExclusionRecord`, `CoverageGap`, and the pure `classify_coverage()` rule (exclusion beats evidence; evidence with no contributing test names doesn't count; gaps carry an AI-ready hint). No XMLA calls here — inputs are built by "Implement Coverage Collection" next. Covered by [python/tests/test_coverage.py](../../python/tests/test_coverage.py) (8 tests, 100% line coverage on the new module) using synthetic data, not a live connection.
 
 **Requirements**:
 - Given a calculated column, measure, or table in the eligible inventory, should mark it covered only when a discovered test UDF has a direct `INFO.CALCDEPENDENCY()` edge to it
@@ -40,7 +40,7 @@ Define the normalized inventory, direct-test evidence, exclusions, and AI-ready 
 
 Add isolated runner functionality that retrieves the test-UDF set, inventories eligible model objects, and produces normalized direct-coverage evidence.
 
-**Implemented** — [python/pql_test/runner/coverage_collector.py](../python/pql_test/runner/coverage_collector.py) adds `collect_coverage(model_path, ...)`, reusing `resolve_xmla_connection`/`retrieve_tests` exactly like `run_tests_from_model`. Direct `INFO.CALCDEPENDENCY()` edges cover tables/calc-columns/measures; `PQLAssert_RoleName` (already on each discovered `PqlTest`) joined against the role inventory covers roles; `PQL.Assert.Relationship.ShouldExist(...)` calls are regex-parsed out of each test UDF's own DAX expression text (`INFO.USERDEFINEDFUNCTIONS()[Expression]`) and matched against `INFO.VIEW.RELATIONSHIPS()` for relationships; partitions are always excluded (no PQL.Assert helper targets them). Each category's XMLA query is wrapped independently so a failure reports that category `unavailable` with its cause rather than presenting it as zero coverage — including the case where an inventory query succeeds but the evidence query for the same category fails (verified with a regression test). Verified live against SampleModel, RLS_Model, and OLS_Model — output matches the metadata contract exactly. Covered by [python/tests/test_coverage_collector.py](../python/tests/test_coverage_collector.py) (11 tests, mocked XMLA, 96% line coverage).
+**Implemented** — [python/pql_test/runner/coverage_collector.py](../../python/pql_test/runner/coverage_collector.py) adds `collect_coverage(model_path, ...)`, reusing `resolve_xmla_connection`/`retrieve_tests` exactly like `run_tests_from_model`. Direct `INFO.CALCDEPENDENCY()` edges cover tables/calc-columns/measures; `PQLAssert_RoleName` (already on each discovered `PqlTest`) joined against the role inventory covers roles; `PQL.Assert.Relationship.ShouldExist(...)` calls are regex-parsed out of each test UDF's own DAX expression text (`INFO.USERDEFINEDFUNCTIONS()[Expression]`) and matched against `INFO.VIEW.RELATIONSHIPS()` for relationships; partitions are always excluded (no PQL.Assert helper targets them). Each category's XMLA query is wrapped independently so a failure reports that category `unavailable` with its cause rather than presenting it as zero coverage — including the case where an inventory query succeeds but the evidence query for the same category fails (verified with a regression test). Verified live against SampleModel, RLS_Model, and OLS_Model — output matches the metadata contract exactly. Covered by [python/tests/test_coverage_collector.py](../../python/tests/test_coverage_collector.py) (11 tests, mocked XMLA, 96% line coverage).
 
 **Requirements**:
 - Given any supported `MODEL_PATH` with a resolved XMLA connection, should reuse existing connection resolution and test discovery to collect coverage without reading secrets from files
@@ -54,7 +54,7 @@ Add isolated runner functionality that retrieves the test-UDF set, inventories e
 
 Expose terse human output, verbose evidence and gaps, JSON output, and a CI threshold through the Click CLI.
 
-**Implemented** — `pql-test code-coverage MODEL_PATH` in [python/pql_test/cli.py](../python/pql_test/cli.py), backed by [python/pql_test/runner/coverage_report.py](../python/pql_test/runner/coverage_report.py) (pure summary/JSON-shape helpers, unit-tested independent of Click). `--output` without `--format json` and a malformed/out-of-range `--min-coverage` both fail via Click validation before any XMLA query (verified live and with a mocked spy in tests). Added the `code-coverage` skill (`skills/code-coverage/SKILL.md`, synced byte-for-byte to `python/pql_test/skills/`) and bumped the package version to `0.1.18` across `pyproject.toml` and all 5 skill files, per the project's skill-versioning convention in CONTRIBUTING.md. Covered by [python/tests/test_coverage_report.py](../python/tests/test_coverage_report.py) (6 tests) and [python/tests/test_code_coverage_cli.py](../python/tests/test_code_coverage_cli.py) (9 tests), plus 7 new skill-content/packaging tests.
+**Implemented** — `pql-test code-coverage MODEL_PATH` in [python/pql_test/cli.py](../../python/pql_test/cli.py), backed by [python/pql_test/runner/coverage_report.py](../../python/pql_test/runner/coverage_report.py) (pure summary/JSON-shape helpers, unit-tested independent of Click). `--output` without `--format json` and a malformed/out-of-range `--min-coverage` both fail via Click validation before any XMLA query (verified live and with a mocked spy in tests). Added the `code-coverage` skill (`skills/code-coverage/SKILL.md`, synced byte-for-byte to `python/pql_test/skills/`) and bumped the package version to `0.1.18` across `pyproject.toml` and all 5 skill files, per the project's skill-versioning convention in CONTRIBUTING.md. Covered by [python/tests/test_coverage_report.py](../../python/tests/test_coverage_report.py) (6 tests) and [python/tests/test_code_coverage_cli.py](../../python/tests/test_code_coverage_cli.py) (9 tests), plus 7 new skill-content/packaging tests.
 
 **Requirements**:
 - Given `pql-test code-coverage MODEL_PATH`, should print the overall percentage and covered/eligible counts by object type
@@ -65,9 +65,11 @@ Expose terse human output, verbose evidence and gaps, JSON output, and a CI thre
 
 ---
 
-## Cover And Document The Workflow
+## Cover And Document The Workflow ✅ (2026-09-22)
 
 Add unit and live-model validation for the coverage contract, then document the command and the limits of dependency-based evidence.
+
+**Implemented** — Unit coverage across classification, dedup, unavailable categories, gap generation, JSON serialization, and CLI threshold/exit behavior was already built test-first in the prior three tasks (44 tests across `test_coverage.py`, `test_coverage_collector.py`, `test_coverage_report.py`, `test_code_coverage_cli.py`). Added [python/tests/test_coverage_live.py](../../python/tests/test_coverage_live.py) (`@pytest.mark.live`, gated on the same `python/tests/.env` service credentials as `test_live_service.py`) pinning the exact evidence recorded in the metadata contract against the deployed SampleModel — table/measure/relationship coverage, partitions always excluded, and no unavailable categories against a healthy connection. Documented the command in [README.md](../../README.md) (`### code-coverage` section, Table of Contents, Exit Codes table, Architecture module table), with an explicit "dependency coverage vs. assertion coverage" explanation so users and AI agents don't mistake a high score for a correctness guarantee.
 
 **Requirements**:
 - Given mocked XMLA metadata rows, should test coverage classification, deduplication, unavailable categories, gap generation, output serialization, and threshold exit behavior without a live service

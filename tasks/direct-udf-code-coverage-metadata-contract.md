@@ -1,7 +1,7 @@
 # Direct Test-UDF Metadata Contract
 
 **Status**: ✅ VALIDATED (2026-09-22)
-**Task**: [Validate Direct Test-UDF Metadata Contract](direct-udf-code-coverage-epic.md#validate-direct-test-udf-metadata-contract)
+**Task**: [Validate Direct Test-UDF Metadata Contract](archive/2026-09-22-direct-udf-code-coverage.md#validate-direct-test-udf-metadata-contract)
 
 Live XMLA evidence recorded against three local Power BI Desktop sessions:
 `examples/SampleModel.SemanticModel`, `examples/RLS_Model.SemanticModel`,
