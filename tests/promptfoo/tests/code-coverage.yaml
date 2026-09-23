@@ -1,0 +1,56 @@
+# Mode B LLM evaluations for the code-coverage skill.
+
+- description: Basic coverage report
+  vars:
+    skill: code-coverage
+    task: How do I see which measures and tables in my local Power BI model SampleModel have DAX tests?
+  assert:
+    - type: contains
+      value: pql-test code-coverage local/SampleModel
+
+- description: Fail the CI build below a coverage threshold
+  vars:
+    skill: code-coverage
+    task: I want my GitHub Actions build to fail when DAX test coverage for my model drops below 70%. What do I run?
+  assert:
+    - type: contains
+      value: --min-coverage 70
+    - type: llm-rubric
+      value: |
+        The response should use `pql-test code-coverage ... --min-coverage 70` and
+        explain that the command exits 1 when overall coverage is below the
+        threshold, which fails the CI step. It should NOT invent a separate
+        flag like --fail-under or --threshold.
+
+- description: JSON report for an AI agent or CI artifact
+  vars:
+    skill: code-coverage
+    task: How do I save the coverage report as a JSON file so another tool can read it?
+  assert:
+    - type: contains
+      value: --format json
+    - type: llm-rubric
+      value: |
+        The response should use `--format json --output <file>` and note that
+        --output requires --format json.
+
+- description: Find untested objects to write tests for
+  vars:
+    skill: code-coverage
+    task: Which objects in local/SampleModel have no tests, and what should I test next?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response should recommend `pql-test code-coverage local/SampleModel --verbose`
+        to list uncovered objects with AI-ready test-target hints.
+
+- description: What counts as covered (llm-graded)
+  vars:
+    skill: code-coverage
+    task: If my test calls a helper function that reads a table, does that table count as covered?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must say no — coverage is never inferred from transitive
+        dependencies; a table is covered only by a direct INFO.CALCDEPENDENCY()
+        edge from a discovered test UDF.

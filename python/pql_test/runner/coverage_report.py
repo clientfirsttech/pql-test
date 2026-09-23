@@ -15,11 +15,19 @@ from pql_test.runner.coverage import CoverageObjectType
 from pql_test.runner.coverage_collector import CoverageReport
 
 __all__ = [
+    "DEFAULT_WATERMARKS",
     "CoverageSummary",
     "category_counts",
+    "coverage_percent",
     "coverage_report_to_dict",
+    "coverage_status",
     "summarize_coverage",
 ]
+
+# (low, high) watermarks used to grade a percentage when no --min-coverage
+# threshold is set -- the same defaults Istanbul/nyc/Jest use: below 50% is
+# FAIL (red), 50% up to 80% is SKIP (yellow), 80% and above is PASS (green).
+DEFAULT_WATERMARKS = (50.0, 80.0)
 
 
 @dataclass(frozen=True)
@@ -46,14 +54,49 @@ def category_counts(
     return {t: (covered.get(t, 0), eligible.get(t, 0)) for t in all_types}
 
 
+def coverage_percent(covered: int, eligible: int) -> float:
+    """Percentage rounded to 2 decimals; zero eligible objects reports 100%.
+
+    Like coverage.py's ``fail_under`` handling, the rounded value is what gets
+    displayed *and* compared against ``--min-coverage``, but a percentage
+    only rounds to 100 when every eligible object is covered -- 99,999 of
+    100,000 reports 99.99%, not 100.0%, so ``--min-coverage 100`` still fails.
+    """
+    if not eligible:
+        return 100.0
+    percent = round(covered / eligible * 100, 2)
+    if percent >= 100 and covered < eligible:
+        return 99.99
+    return percent
+
+
+def coverage_status(percent: float, min_coverage: float | None = None) -> str:
+    """Grade *percent* as a ``STATUS_COLORS`` key: ``"PASS"``, ``"SKIP"``, or ``"FAIL"``.
+
+    With a ``--min-coverage`` threshold the grade is binary and matches the
+    exit code: at/above the threshold is PASS, below is FAIL. Without one,
+    ``DEFAULT_WATERMARKS`` grade it: below low is FAIL, below high is SKIP
+    (partial), otherwise PASS.
+    """
+    if min_coverage is not None:
+        return "PASS" if percent >= min_coverage else "FAIL"
+    low, high = DEFAULT_WATERMARKS
+    if percent < low:
+        return "FAIL"
+    if percent < high:
+        return "SKIP"
+    return "PASS"
+
+
 def summarize_coverage(report: CoverageReport) -> CoverageSummary:
     """Overall covered/eligible/percent. A model with zero eligible objects reports 100%."""
     counts = category_counts(report)
     total_covered = sum(c for c, _ in counts.values())
     total_eligible = sum(e for _, e in counts.values())
-    percent = (total_covered / total_eligible * 100) if total_eligible else 100.0
     return CoverageSummary(
-        covered=total_covered, eligible=total_eligible, percent=round(percent, 2)
+        covered=total_covered,
+        eligible=total_eligible,
+        percent=coverage_percent(total_covered, total_eligible),
     )
 
 

@@ -111,7 +111,7 @@ from pql_test.runner.cli_format import (
     truncate,
 )
 from pql_test.runner.coverage_collector import CoverageReport
-from pql_test.runner.coverage_report import CoverageSummary
+from pql_test.runner.coverage_report import CoverageSummary, coverage_percent, coverage_status
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -1123,7 +1123,11 @@ def cmd_run_tests(
 # ---------------------------------------------------------------------------
 
 def _print_coverage_report(
-    report: CoverageReport, summary: CoverageSummary, verbose: bool, ident_kind: str = "path"
+    report: CoverageReport,
+    summary: CoverageSummary,
+    verbose: bool,
+    ident_kind: str = "path",
+    min_coverage: float | None = None,
 ) -> None:
     if report.connection:
         label = "Local XMLA connection" if ident_kind == "local" else "XMLA connection"
@@ -1133,7 +1137,9 @@ def _print_coverage_report(
     click.echo(f"model: {report.model_path}")
     click.echo("")
     click.echo(f"Tests discovered: {report.test_count}")
-    click.echo(f"\nOverall: {summary.covered}/{summary.eligible} covered ({summary.percent}%)")
+    overall_color = STATUS_COLORS[coverage_status(summary.percent, min_coverage)]
+    overall = f"{summary.covered}/{summary.eligible} covered ({summary.percent}%)"
+    click.echo(f"\nOverall: {click.style(overall, fg=overall_color)}")
 
     counts = category_counts(report)
     excluded_counts: dict = {}
@@ -1150,13 +1156,8 @@ def _print_coverage_report(
             covered, eligible = counts.get(object_type, (0, 0))
             excluded_n = excluded_counts.get(object_type, 0)
             if eligible:
-                pct = round(covered / eligible * 100, 2)
-                if pct >= 100:
-                    color = STATUS_COLORS["PASS"]
-                elif pct <= 0:
-                    color = STATUS_COLORS["FAIL"]
-                else:
-                    color = STATUS_COLORS["SKIP"]
+                pct = coverage_percent(covered, eligible)
+                color = STATUS_COLORS[coverage_status(pct, min_coverage)]
                 rows.append((object_type.value, str(covered), str(eligible), f"{pct}%", color))
             elif excluded_n:
                 rows.append((object_type.value, "-", "-", f"excluded ({excluded_n})", None))
@@ -1302,14 +1303,21 @@ def cmd_code_coverage(
         else:
             click.echo(text)
     else:
-        _print_coverage_report(report, summary, verbose, ident.kind)
+        _print_coverage_report(report, summary, verbose, ident.kind, min_coverage)
 
-    if min_coverage is not None and summary.percent < min_coverage:
+    if min_coverage is not None:
+        if summary.percent < min_coverage:
+            click.echo(
+                f"\nError: coverage {summary.percent}% is below the required {min_coverage}% threshold.",
+                err=True,
+            )
+            sys.exit(1)
+        # Mirror pytest-cov's "Required test coverage of N% reached" so CI logs
+        # show the gate was evaluated. Goes to stderr when JSON is on stdout.
         click.echo(
-            f"\nError: coverage {summary.percent}% is below the required {min_coverage}% threshold.",
-            err=True,
+            f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%",
+            err=output_format == "json" and not output,
         )
-        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

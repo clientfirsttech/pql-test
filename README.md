@@ -1052,7 +1052,7 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 | `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
 | `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
 | `--output <file>` | ❌ | Write the JSON report to `<file>`. Requires `--format json` — otherwise fails as a usage error before any XMLA query |
-| `--min-coverage <percent>` | ❌ | Exit non-zero when overall eligible coverage is below `<percent>` (0-100). A malformed or out-of-range value also fails before any XMLA query |
+| `--min-coverage <percent>` | ❌ | Exit `1` when overall eligible coverage is below `<percent>` (0-100); prints `Required coverage of N% reached` when met (like pytest-cov's `--cov-fail-under`). Also switches the report colors to pass/fail against the threshold. A malformed or out-of-range value fails before any XMLA query |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (or set `PQL_WORKSPACE_ID`) |
 | `--dataset-id <id>` | ❌ | Dataset / semantic model GUID (or set `PQL_DATASET_ID`) |
@@ -1096,9 +1096,17 @@ By category:
 └──────────────┴─────────┴──────────┴──────────────┘
 ```
 
-Categories at 100% render green, 0% render red, and partial coverage renders
-yellow — the same PASS/FAIL/SKIP color convention `run-tests` uses (see
-[CLI Output Conventions](CONTRIBUTING.md#cli-output-conventions)).
+The overall line and each category's percentage are colored with the same
+PASS/FAIL/SKIP (green/red/yellow) vocabulary `run-tests` uses (see
+[CLI Output Conventions](CONTRIBUTING.md#cli-output-conventions)):
+
+| Mode | Green | Yellow | Red |
+|---|---|---|---|
+| No `--min-coverage` (default watermarks, same as Istanbul/nyc/Jest) | ≥ 80% | 50% – < 80% | < 50% |
+| `--min-coverage N` | ≥ N | — | < N |
+
+With a threshold the colors match the exit code: anything red is what's
+holding the build below the gate.
 
 **Verbose report** (adds per-object evidence and AI-ready gap hints):
 
@@ -1117,6 +1125,12 @@ pql-test code-coverage local/SampleModel --format json --output coverage.json
 ```bash
 pql-test code-coverage local/SampleModel --min-coverage 60
 ```
+
+The threshold behaves like pytest-cov's `--cov-fail-under` / coverage.py's
+`fail_under`: the report (text, or the JSON `--output` file) is always
+written first, then the command exits `1` if the rounded overall percentage
+is below the threshold. A percentage only rounds to 100% when every eligible
+object is covered, so `--min-coverage 100` can't pass with a gap.
 
 ---
 
@@ -1633,6 +1647,24 @@ if ($LASTEXITCODE -ne 0) {
 }
 ```
 
+A coverage gate in GitHub Actions needs no extra scripting — the non-zero
+exit fails the step, and `if: always()` still uploads the report:
+
+```yaml
+- name: Enforce DAX test coverage
+  shell: pwsh
+  run: |
+    pql-test code-coverage "MyWorkspace.Workspace/MyModel.SemanticModel" `
+      --format json --output coverage.json --min-coverage 60
+
+- name: Upload coverage report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: dax-coverage
+    path: coverage.json
+```
+
 ---
 
 ## Architecture
@@ -1654,7 +1686,7 @@ The `pql-test` runner is organized as a modular Python package under `python/pql
 | `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
 | `coverage.py` | 149 | Direct test-UDF coverage evidence model (types + `classify_coverage`) |
 | `coverage_collector.py` | 339 | XMLA-backed direct test-UDF coverage collection |
-| `coverage_report.py` | 104 | Text/JSON presentation for coverage reports |
+| `coverage_report.py` | 147 | Text/JSON presentation for coverage reports |
 
 **Total**: ~2,900 lines across 14 modules
 

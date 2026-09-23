@@ -113,6 +113,37 @@ class TestCodeCoverageTextOutput:
         assert "\x1b[31m" in red_line, f"{given}: {should}"  # ANSI red (STATUS_COLORS['FAIL'])
 
 
+    def test_category_colors_follow_min_coverage_threshold(self, monkeypatch):
+        given = "a 50% overall report run with --min-coverage 40"
+        should = (
+            "the 50% overall line is green (at/above the threshold) instead of the "
+            "default-watermark yellow, so color agrees with the exit code"
+        )
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+
+        result = CliRunner().invoke(
+            cli_module.cli,
+            ["code-coverage", "local/SampleModel", "--min-coverage", "40"],
+            color=True,
+        )
+        overall_line = next(line for line in result.output.splitlines() if "Overall:" in line)
+
+        assert result.exit_code == 0
+        assert "[32m" in overall_line, f"{given}: {should}"
+
+    def test_overall_colored_by_default_watermarks_without_threshold(self, monkeypatch):
+        given = "a 50% overall report with no --min-coverage"
+        should = "the overall line is yellow (50% is between the 50/80 default watermarks)"
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+
+        result = CliRunner().invoke(
+            cli_module.cli, ["code-coverage", "local/SampleModel"], color=True
+        )
+        overall_line = next(line for line in result.output.splitlines() if "Overall:" in line)
+
+        assert "[33m" in overall_line, f"{given}: {should}"
+
+
 class TestCodeCoverageJsonOutput:
     def test_format_json_prints_stable_report_to_stdout(self, monkeypatch):
         monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
@@ -161,7 +192,8 @@ class TestCodeCoverageMinThreshold:
             cli_module.cli, ["code-coverage", "local/SampleModel", "--min-coverage", "90"]
         )
 
-        assert result.exit_code != 0
+        assert result.exit_code == 1
+        assert "below the required 90.0% threshold" in result.output
 
     def test_min_coverage_at_or_below_actual_exits_zero(self, monkeypatch):
         monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
@@ -171,6 +203,42 @@ class TestCodeCoverageMinThreshold:
         )
 
         assert result.exit_code == 0
+        assert "Required coverage of 50.0% reached. Total coverage: 50.0%" in result.output
+
+    def test_pass_message_keeps_json_stdout_parseable(self, monkeypatch):
+        given = "--format json on stdout with a met --min-coverage"
+        should = "the pass message goes to stderr so stdout stays valid JSON"
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+
+        try:
+            runner = CliRunner(mix_stderr=False)  # Click < 8.2
+        except TypeError:
+            runner = CliRunner()  # Click >= 8.2 always separates stderr
+        result = runner.invoke(
+            cli_module.cli,
+            ["code-coverage", "local/SampleModel", "--format", "json", "--min-coverage", "50"],
+        )
+
+        assert result.exit_code == 0
+        json.loads(result.stdout)
+        assert "Required coverage of 50.0% reached" in result.stderr, f"{given}: {should}"
+
+    def test_json_output_file_still_written_when_below_threshold(self, monkeypatch, tmp_path):
+        given = "--format json --output with coverage below --min-coverage"
+        should = "write the report and then exit 1, like pytest-cov reports before failing"
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+        out_file = tmp_path / "coverage.json"
+
+        result = CliRunner().invoke(
+            cli_module.cli,
+            [
+                "code-coverage", "local/SampleModel", "--format", "json",
+                "--output", str(out_file), "--min-coverage", "90",
+            ],
+        )
+
+        assert result.exit_code == 1, f"{given}: {should}"
+        assert json.loads(out_file.read_text(encoding="utf-8"))["summary"]["percent"] == 50.0
 
     def test_malformed_min_coverage_fails_before_any_xmla_query(self, monkeypatch):
         spy = MagicMock(return_value=_report())

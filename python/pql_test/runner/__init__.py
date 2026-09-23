@@ -67,9 +67,12 @@ from pql_test.runner.coverage_collector import (
 
 # Import coverage report presentation from coverage_report.py
 from pql_test.runner.coverage_report import (
+    DEFAULT_WATERMARKS,
     CoverageSummary,
     category_counts,
+    coverage_percent,
     coverage_report_to_dict,
+    coverage_status,
     summarize_coverage,
 )
 
@@ -185,9 +188,12 @@ __all__ = [
     "UnavailableCategory",
     "collect_coverage",
     # Re-exported from coverage_report
+    "DEFAULT_WATERMARKS",
     "CoverageSummary",
     "category_counts",
+    "coverage_percent",
     "coverage_report_to_dict",
+    "coverage_status",
     "summarize_coverage",
     # Re-exported from adomd
     "HAS_PYADOMD",

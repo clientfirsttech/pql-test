@@ -33,6 +33,14 @@
 
 ## Completed Work
 
+### 2026-09-23 — `--min-coverage` parity with pytest-cov, threshold-aware colors, version alignment
+
+- **CI-gate semantics** — `--min-coverage` already exited 1 below the threshold (same as pytest-cov `--cov-fail-under`, Jest, nyc). Added coverage.py's guard so a percentage only rounds to 100% when every eligible object is covered (`coverage_percent()` in [python/pql_test/runner/coverage_report.py](python/pql_test/runner/coverage_report.py)), and a pytest-cov-style `Required coverage of N% reached` line when the gate passes (stderr when JSON is on stdout).
+- **Colors** — replaced the hard-coded 100%/0%/partial coloring with `coverage_status()`: default 50/80 watermarks (Istanbul/Jest), or binary pass/fail against `--min-coverage` when set. The overall line is now colored too.
+- **Version alignment** — `plugin.json` bumped from its never-updated `0.1.0` to `0.1.18`. New [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md) lists every file that carries the version; [python/tests/test_version_alignment.py](python/tests/test_version_alignment.py) and a new validate-plugin CI step fail on drift.
+- **Docs/evals** — `code-coverage` promptfoo eval added; skill exit codes and color rules documented; README GitHub Actions coverage-gate example; vision.md command list updated.
+- Full suite at 573 passed / 2 skipped under `pytest -m "not live"`.
+
 ### 2026-09-22 — Consistent CLI output between `run-tests` and `code-coverage`
 
 - **Unify CLI presentation** — See [tasks/archive/2026-09-22-consistent-cli-output.md](tasks/archive/2026-09-22-consistent-cli-output.md)

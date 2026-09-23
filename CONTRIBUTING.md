@@ -60,6 +60,9 @@ follows one shared style, defined in
   new color meaning for a new command — reuse this vocabulary, e.g. a new
   category or threshold should map onto green/yellow/red rather than a
   fourth color.
+  `code-coverage` grades percentages with `coverage_status()` in
+  `coverage_report.py`: default 50/80 watermarks (red/yellow/green, as
+  Istanbul/Jest do), or binary red/green against `--min-coverage` when set.
 - **JSON output stays presentation-free.** None of the above applies to
   `--format json` output — the JSON payload is the stable, machine-readable
   shape and must not gain banner/table text.
@@ -591,8 +594,9 @@ Before opening a PR:
 4. If you touched `cli.py` output — verify it works in a default PowerShell
    session (the CLI forces UTF-8 stdout to avoid `cp1252` `UnicodeEncodeError`
    on emoji output; don't undo that without a replacement)
-5. Bump `version` in [python/pyproject.toml](python/pyproject.toml) if shipping
-   user-visible changes
+5. Bump the version if shipping user-visible changes — follow
+   [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md)
+   (`pyproject.toml`, `plugin.json`, and every SKILL.md move together)
 
 ---
 
@@ -616,8 +620,11 @@ anywhere in the repo.
 
 **Per-release checklist:**
 
-1. Bump `version` in [python/pyproject.toml](python/pyproject.toml) per
-   [PEP 440](https://peps.python.org/pep-0440/) / semver.
+1. Bump the version per [PEP 440](https://peps.python.org/pep-0440/) / semver
+   in [python/pyproject.toml](python/pyproject.toml), [plugin.json](plugin.json),
+   and every source + packaged SKILL.md — see
+   [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md).
+   `tests/test_version_alignment.py` and the validate-plugin workflow fail on drift.
 2. Update the README's "What's New" / a `CHANGELOG.md` if you keep one.
 3. Optional rehearsal against TestPyPI before tagging:
    - GitHub → Actions → Publish to PyPI → Run workflow → target `testpypi`

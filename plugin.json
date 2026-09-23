@@ -1,7 +1,7 @@
 {
   "name": "pql-test",
   "description": "Discover and run DAX unit tests stored inside a Power BI / Microsoft Fabric PBIP semantic model's DAXQueries/ folder via the XMLA endpoint.",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "author": {
     "name": "clientfirsttech"
   },

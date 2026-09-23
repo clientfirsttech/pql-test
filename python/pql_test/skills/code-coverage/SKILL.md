@@ -12,12 +12,17 @@ Run `pql-test code-coverage MODEL_PATH` to report which model objects have direc
 Interface CodeCoverage {
   exit_code: 0 | 1 | 2
     // 0 = report produced, coverage at/above --min-coverage (or no threshold set)
-    // 1 = no XMLA connection, or coverage below --min-coverage
+    // 1 = no XMLA connection, or coverage below --min-coverage (report is still written first)
     // 2 = Click usage error (malformed --min-coverage / --output without --format json) — fails BEFORE any XMLA query
 
   output_format: "text" | "json"
     // text (default): overall percentage + covered/eligible counts by object type
     // json: stable report (summary, categories, evidence, gaps, exclusions, unavailable) — requires --format json for --output
+
+  colors: "PASS" (green) | "SKIP" (yellow) | "FAIL" (red)
+    // overall line + each category percentage
+    // no --min-coverage: default watermarks (Istanbul/Jest) — >= 80 green, 50..<80 yellow, < 50 red
+    // --min-coverage N: binary — >= N green, < N red (matches the exit code)
 }
 
 Constraints {
@@ -35,6 +40,12 @@ Constraints {
   Coverage is NEVER inferred from transitive dependencies (e.g. a test that only
   reaches a helper FUNCTION, which itself reaches a table, does not count as
   covering that table)
+
+  // Threshold (same semantics as pytest-cov --cov-fail-under / coverage.py fail_under)
+  --min-coverage compares the 2-decimal rounded overall percent; it only rounds to
+    100 when every eligible object is covered, so --min-coverage 100 cannot pass with a gap
+  When met, prints "Required coverage of N% reached. Total coverage: X%"
+    (to stderr when JSON is on stdout, so stdout stays parseable)
 
   // Failure handling
   A category whose XMLA metadata query fails is reported as "unavailable" with
@@ -55,14 +66,14 @@ Options:
 - `--verbose` — List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets. Without it, only the overall percentage and per-category counts are printed.
 - `--format text|json` — Output format. `text` (default) is human-readable; `json` emits the stable report shape.
 - `--output FILE` — Write the JSON report to FILE. Requires `--format json` — otherwise the CLI fails with a usage error before making any XMLA query.
-- `--min-coverage PERCENT` — Exit non-zero (1) when overall eligible coverage is below PERCENT (0-100). A malformed or out-of-range value fails with a Click usage error (exit 2) before any XMLA query.
+- `--min-coverage PERCENT` — Exit `1` when overall eligible coverage is below PERCENT (0-100), after the report is written; prints `Required coverage of N% reached` when met. Also colors the report pass/fail against PERCENT instead of the default 50/80 watermarks. A malformed or out-of-range value fails with a Click usage error (exit 2) before any XMLA query.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
 - `--client-id ID` — Service principal client ID (or set `PQL_CLIENT_ID` env var).
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
 
-Exit codes: `0` = report produced (and coverage at/above `--min-coverage` if set), `1` = no XMLA connection detected, or coverage below `--min-coverage`.
+Exit codes: `0` = report produced (and coverage at/above `--min-coverage` if set), `1` = no XMLA connection detected, or coverage below `--min-coverage`, `2` = Click usage error (malformed `--min-coverage`, or `--output` without `--format json`) before any XMLA query.
 
 ## JSON Report Shape
 

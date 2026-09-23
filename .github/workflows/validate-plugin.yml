@@ -19,11 +19,15 @@ on:
     paths:
       - 'plugin.json'
       - 'skills/**'
+      - 'python/pyproject.toml'
+      - 'python/pql_test/skills/**'
       - '.github/workflows/validate-plugin.yml'
   pull_request:
     paths:
       - 'plugin.json'
       - 'skills/**'
+      - 'python/pyproject.toml'
+      - 'python/pql_test/skills/**'
       - '.github/workflows/validate-plugin.yml'
   workflow_dispatch:
   # Called by ci.yml to participate in the sequential pipeline
@@ -169,7 +173,31 @@ jobs:
           PYEOF
 
       # -----------------------------------------------------------------------
-      # 1e. Plugin name in plugin.json must not contain spaces or uppercase
+      # 1e. plugin.json and every SKILL.md version must match pyproject.toml
+      #     (see aidd-custom/skills/pql-test-version-bump/SKILL.md)
+      # -----------------------------------------------------------------------
+      - name: Versions aligned with pyproject.toml
+        run: |
+          expected=$(sed -n 's/^version *= *"\(.*\)"/\1/p' python/pyproject.toml | head -1)
+          echo "pyproject.toml version: $expected"
+          errors=0
+          plugin_version=$(jq -r '.version' plugin.json)
+          if [ "$plugin_version" != "$expected" ]; then
+            echo "::error file=plugin.json::plugin.json version '$plugin_version' != pyproject.toml version '$expected'"
+            errors=$((errors + 1))
+          fi
+          for f in skills/*/SKILL.md python/pql_test/skills/*/SKILL.md; do
+            v=$(sed -n 's/^version: *//p' "$f" | head -1)
+            if [ "$v" != "$expected" ]; then
+              echo "::error file=$f::$f version '$v' != pyproject.toml version '$expected'"
+              errors=$((errors + 1))
+            fi
+          done
+          [ $errors -eq 0 ] || exit 1
+          echo "All manifests at version $expected"
+
+      # -----------------------------------------------------------------------
+      # 1f. Plugin name in plugin.json must not contain spaces or uppercase
       #     (gh copilot plugin uninstall uses the name as an identifier)
       # -----------------------------------------------------------------------
       - name: Plugin name is a valid identifier
