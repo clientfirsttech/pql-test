@@ -2114,6 +2114,34 @@ class TestRetrieveTestsViaDax:
         # No stderr pollution into stdout
         assert "Authentication failed" not in captured.out
 
+    def test_stderr_warning_truncates_to_first_line_of_exception(self, capsys):
+        """A multi-line exception message (e.g. an ADOMD.NET exception whose
+        str() embeds a full .NET stack trace) must not blow up the warning
+        into multiple lines — only the first line is kept."""
+        conn = MagicMock()
+        conn.server = "localhost:57422"
+        conn.catalog = ""
+        multiline_message = (
+            "Query (1, 10) Failed to resolve name 'PQL.Assert.RetrieveTests'. "
+            "It is not a valid table, variable, or function name.\n"
+            "   at Microsoft.AnalysisServices.AdomdClient.XmlaClient."
+            "CheckForSoapFault(XmlReader reader, XmlaResult xmlaResult, "
+            "Boolean throwIfError)\n"
+            "   at Microsoft.AnalysisServices.AdomdClient.XmlaClient.Execute(...)"
+        )
+        with patch(
+            "pql_test.runner._execute_dax_query",
+            side_effect=RuntimeError(multiline_message),
+        ):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is None
+        captured = capsys.readouterr()
+        warning_lines = captured.err.splitlines()
+        assert len(warning_lines) == 1
+        assert "Failed to resolve name" in warning_lines[0]
+        assert "CheckForSoapFault" not in captured.err
+
     def test_emits_no_warning_when_v2_succeeds(self, capsys):
         """The happy path must remain silent on stderr."""
         v2_rows = [

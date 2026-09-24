@@ -15,6 +15,7 @@
 - Given V2 succeeds but V1 isn't called, should not emit any warning (clean path)
 - Given V2 fails but V1 succeeds (older model without V2), should not emit any warning (legitimate fallback path)
 - Given the warning fires, should write to stderr only — never stdout — so JSON output remains parseable
+- Given the last discovery exception's `str(exc)` spans multiple lines (e.g. an ADOMD.NET exception whose message embeds a full .NET stack trace), the warning should include only the first line of that message so the warning itself stays a single line as intended, instead of truncating the raw multi-line string to 300 characters
 
 ## Make `local/<model_name>` Strict — No Silent Fallback to Wrong Instance
 

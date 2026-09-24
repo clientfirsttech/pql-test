@@ -120,9 +120,10 @@ def _retrieve_tests_via_dax(
                 if connection
                 else "<unknown>"
             )
+            first_line = (str(exc).splitlines() or [""])[0][:300]
             print(
                 f"Warning: live test discovery failed against {target}: "
-                f"{type(exc).__name__}: {str(exc)[:300]}",
+                f"{type(exc).__name__}: {first_line}",
                 file=sys.stderr,
             )
             return None  # neither function available — fall back to file scan
