@@ -1137,6 +1137,12 @@ def _print_coverage_report(
     click.echo(f"model: {report.model_path}")
     click.echo("")
     click.echo(f"Tests discovered: {report.test_count}")
+    if report.test_count == 0:
+        click.echo(
+            "No tests discovered. If PQL.Assert isn't installed in this "
+            "model, coverage cannot be measured until it is (see any "
+            "discovery warning above)."
+        )
     overall_color = STATUS_COLORS[coverage_status(summary.percent, min_coverage)]
     overall = f"{summary.covered}/{summary.eligible} covered ({summary.percent}%)"
     click.echo(f"\nOverall: {click.style(overall, fg=overall_color)}")

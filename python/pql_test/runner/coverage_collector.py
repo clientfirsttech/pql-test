@@ -104,8 +104,9 @@ def _safe_query(
     try:
         return _execute_dax_query(connection, query)
     except Exception as exc:  # noqa: BLE001
+        first_line = (str(exc).splitlines() or [""])[0][:300]
         unavailable.append(
-            UnavailableCategory(category, f"{type(exc).__name__}: {str(exc)[:300]}")
+            UnavailableCategory(category, f"{type(exc).__name__}: {first_line}")
         )
         return None
 

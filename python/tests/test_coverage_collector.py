@@ -273,6 +273,39 @@ class TestCollectCoverage:
             e.object_type == CoverageObjectType.RELATIONSHIP for e in report.result.covered
         )
 
+    def test_unavailable_reason_truncates_to_first_line_of_multiline_exception(self):
+        """A multi-line exception message (e.g. an ADOMD.NET exception whose
+        str() embeds a full .NET stack trace) must not blow the recorded
+        UnavailableCategory.reason up into multiple lines."""
+        multiline_message = (
+            "The operation cannot be performed because it references an "
+            "object or property that is unavailable in the current edition "
+            "of the server or the compatibility level of the database.\n"
+            "   at Microsoft.AnalysisServices.AdomdClient.XmlaClient."
+            "CheckForSoapFault(XmlReader reader, XmlaResult xmlaResult, "
+            "Boolean throwIfError)"
+        )
+
+        def _boom(conn, query):
+            if "INFO.VIEW.RELATIONSHIPS" in query:
+                raise RuntimeError(multiline_message)
+            return _fake_execute()(conn, query)
+
+        with patch("pql_test.runner.retrieve_tests", return_value=[]), patch(
+            "pql_test.runner._execute_dax_query", side_effect=_boom
+        ):
+            report = collect_coverage(
+                "local/SampleModel", connection=_CONN, connection_pre_resolved=True
+            )
+
+        relationship_reasons = [
+            u.reason for u in report.unavailable
+            if u.object_type == CoverageObjectType.RELATIONSHIP
+        ]
+        assert relationship_reasons
+        assert "\n" not in relationship_reasons[0]
+        assert "CheckForSoapFault" not in relationship_reasons[0]
+
     def test_given_info_tables_query_fails_should_report_dependent_categories_unavailable_not_gaps(
         self,
     ):

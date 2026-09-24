@@ -26,10 +26,10 @@ from pql_test.runner.coverage_collector import CoverageReport, UnavailableCatego
 from pql_test.runner.models import ResolvedXmlaConnection
 
 
-def _report(connection=None):
+def _report(connection=None, test_count=2):
     return CoverageReport(
         model_path="local/SampleModel",
-        test_count=2,
+        test_count=test_count,
         result=ClassificationResult(
             covered=(CoverageEvidence(CoverageObjectType.TABLE, "MarvelFact", ("T1", "T2")),),
             gaps=(CoverageGap(CoverageObjectType.MEASURE, "MarvelFact[X]", "Add a test"),),
@@ -92,6 +92,35 @@ class TestCodeCoverageTextOutput:
 
         assert result.exit_code == 0
         assert "XMLA connection" not in result.output, f"{given}: {should}"
+
+    def test_zero_tests_discovered_shows_pql_assert_install_hint(self, monkeypatch):
+        given = "collect_coverage returns a report with test_count == 0"
+        should = (
+            "the text output prints a hint that coverage can't be measured "
+            "until PQL.Assert is installed, so the user isn't left reading "
+            "a bare 0% table with no explanation"
+        )
+        monkeypatch.setattr(
+            cli_module, "collect_coverage", MagicMock(return_value=_report(test_count=0))
+        )
+
+        result = CliRunner().invoke(cli_module.cli, ["code-coverage", "local/SampleModel"])
+
+        assert result.exit_code == 0
+        assert "Tests discovered: 0" in result.output, f"{given}: {should}"
+        assert "PQL.Assert" in result.output, f"{given}: {should}"
+
+    def test_no_pql_assert_hint_when_tests_were_discovered(self, monkeypatch):
+        given = "collect_coverage returns a report with test_count > 0"
+        should = "no install hint is printed since tests were actually found"
+        monkeypatch.setattr(
+            cli_module, "collect_coverage", MagicMock(return_value=_report(test_count=2))
+        )
+
+        result = CliRunner().invoke(cli_module.cli, ["code-coverage", "local/SampleModel"])
+
+        assert result.exit_code == 0
+        assert "PQL.Assert" not in result.output, f"{given}: {should}"
 
     def test_category_table_colors_full_coverage_green_and_zero_coverage_red(self, monkeypatch):
         given = "a category at 100% coverage and one at 0% coverage"
