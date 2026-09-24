@@ -1,7 +1,7 @@
 ---
 name: retrieve-test
 description: Show details for a single DAX test suite by name. Returns a JSON object by default; use --human for formatted text and --verbose to include the full DAX source.
-version: 0.1.18
+version: 0.1.18b1
 ---
 
 Run `pql-test retrieve-test MODEL_PATH NAME` to fetch the definition of a specific DAX test suite from a Power BI Project (PBIP) semantic model.

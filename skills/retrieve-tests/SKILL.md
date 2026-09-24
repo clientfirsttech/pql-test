@@ -1,7 +1,7 @@
 ---
 name: retrieve-tests
 description: List all DAX test suites (*.Tests.dax files) found in a PBIP semantic model's DAXQueries/ folder. Returns a JSON array by default.
-version: 0.1.18
+version: 0.1.18b1
 ---
 
 Run `pql-test retrieve-tests MODEL_PATH` to discover all DAX test suites stored in a Power BI Project (PBIP) semantic model.
