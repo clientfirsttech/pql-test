@@ -31,6 +31,8 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
+- **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
+
 ## Completed Work
 
 ### 2026-09-23 — `--min-coverage` parity with pytest-cov, threshold-aware colors, version alignment
