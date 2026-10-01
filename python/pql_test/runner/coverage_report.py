@@ -54,16 +54,22 @@ def category_counts(
     return {t: (covered.get(t, 0), eligible.get(t, 0)) for t in all_types}
 
 
-def coverage_percent(covered: int, eligible: int) -> float:
+def coverage_percent(covered: int, eligible: int, *, data_unavailable: bool = False) -> float:
     """Percentage rounded to 2 decimals; zero eligible objects reports 100%.
 
     Like coverage.py's ``fail_under`` handling, the rounded value is what gets
     displayed *and* compared against ``--min-coverage``, but a percentage
     only rounds to 100 when every eligible object is covered -- 99,999 of
     100,000 reports 99.99%, not 100.0%, so ``--min-coverage 100`` still fails.
+
+    ``data_unavailable=True`` means zero eligible objects is NOT a genuinely
+    empty model -- every category was dropped from scope because its XMLA
+    metadata source failed, not because nothing exists to cover. Reporting
+    that as 100% would let ``--min-coverage 100`` pass on a report that
+    collected no evidence at all, so this returns 0.0 instead.
     """
     if not eligible:
-        return 100.0
+        return 0.0 if data_unavailable else 100.0
     percent = round(covered / eligible * 100, 2)
     if percent >= 100 and covered < eligible:
         return 99.99
@@ -89,14 +95,19 @@ def coverage_status(percent: float, min_coverage: float | None = None) -> str:
 
 
 def summarize_coverage(report: CoverageReport) -> CoverageSummary:
-    """Overall covered/eligible/percent. A model with zero eligible objects reports 100%."""
+    """Overall covered/eligible/percent. A model with zero eligible objects reports 100%
+    -- unless every category was dropped because its metadata source was unavailable,
+    in which case zero eligible is unknown data, not "nothing to cover", and reports 0%.
+    """
     counts = category_counts(report)
     total_covered = sum(c for c, _ in counts.values())
     total_eligible = sum(e for _, e in counts.values())
     return CoverageSummary(
         covered=total_covered,
         eligible=total_eligible,
-        percent=coverage_percent(total_covered, total_eligible),
+        percent=coverage_percent(
+            total_covered, total_eligible, data_unavailable=bool(report.unavailable)
+        ),
     )
 
 

@@ -2748,3 +2748,38 @@ class TestResolveXmlaConnectionServiceToLocalFallback:
         assert conn.catalog == "DS"
         assert conn.access_token == "bearer-tok"
         get_pbi.assert_not_called()
+
+
+class TestResolveXmlaConnectionServiceRouting:
+    """Regression tests for the canonical <workspace>.Workspace/<model>.SemanticModel
+    path in resolve_xmla_connection.  Previously this fell through to the
+    GUID-based remote-service check (which requires opts.workspace_id and
+    opts.dataset_id/dataset_name) and then to filesystem-based local
+    detection, so a caller passing display names with only --tenant-id,
+    --client-id, --client-secret (per the documented example for code-coverage
+    and run-tests) got "no XMLA connection" instead of a resolved connection.
+    """
+
+    def test_service_path_routes_to_name_based_resolver(self):
+        """resolve_xmla_connection must resolve a canonical service path by
+        workspace/model display name, not require --workspace-id/--dataset-id."""
+        opts = XmlaConnectionOptions(tenant_id="t", client_id="c", client_secret="s")
+        with patch("pql_test.runner._acquire_service_principal_token", return_value="tok"):
+            conn = resolve_xmla_connection(
+                "MyWorkspace.Workspace/MyModel.SemanticModel", opts,
+            )
+        assert conn is not None
+        assert "MyWorkspace" in conn.server
+        assert conn.catalog == "MyModel"
+
+    def test_service_path_does_not_fall_back_to_local(self):
+        """A named service path should never silently redirect to an unrelated
+        local Power BI Desktop instance when resolution fails."""
+        opts = XmlaConnectionOptions()  # no credentials at all
+        with patch("pql_test.runner.get_pbi_files_opened") as get_pbi:
+            conn = resolve_xmla_connection(
+                "MyWorkspace.Workspace/MyModel.SemanticModel", opts,
+            )
+        assert conn is None
+        get_pbi.assert_not_called()
+

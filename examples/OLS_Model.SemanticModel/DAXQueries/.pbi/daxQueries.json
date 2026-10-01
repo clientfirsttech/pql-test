@@ -1,9 +1,9 @@
 {
   "version": "1.0.0",
   "tabOrder": [
-    "OLS_West",
-    "OLS Admin",
+    "OLS_West.ANY.Tests",
+    "OLS_Admin.ANY.Tests",
     "Query 1"
   ],
-  "defaultTab": "OLS Admin"
+  "defaultTab": "OLS_Admin.ANY.Tests"
 }

@@ -1048,7 +1048,7 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 
 | Argument | Required | Description |
 |---|---|---|
-| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
+| `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `<workspace>.Workspace/<semantic_model>.SemanticModel` (see [Model Path Formats](#model-path-formats)) |
 | `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
 | `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
 | `--output <file>` | ❌ | Write the JSON report to `<file>`. Requires `--format json` — otherwise fails as a usage error before any XMLA query |
@@ -1684,11 +1684,12 @@ The `pql-test` runner is organized as a modular Python package under `python/pql
 | `xmla.py` | 117 | XMLA query execution via ADOMD.NET |
 | `discovery.py` | 248 | Test discovery (live XMLA + filesystem) |
 | `execution.py` | 195 | Test execution engine with RLS/OLS impersonation |
+| `cli_format.py` | 82 | Shared CLI presentation primitives (banners, tables, PASS/FAIL/SKIP colors) |
 | `coverage.py` | 149 | Direct test-UDF coverage evidence model (types + `classify_coverage`) |
 | `coverage_collector.py` | 339 | XMLA-backed direct test-UDF coverage collection |
 | `coverage_report.py` | 147 | Text/JSON presentation for coverage reports |
 
-**Total**: ~2,900 lines across 14 modules
+**Total**: ~2,980 lines across 15 modules
 
 All modules follow a 400-line soft budget (800-line hard budget) to keep code maintainable. Each module has minimal coupling to others, making the codebase easier to understand, test, and modify.
 

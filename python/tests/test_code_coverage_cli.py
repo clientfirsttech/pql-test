@@ -280,6 +280,19 @@ class TestCodeCoverageMinThreshold:
         assert result.exit_code != 0
         spy.assert_not_called()
 
+    def test_nan_min_coverage_fails_before_any_xmla_query(self, monkeypatch):
+        given = "click.FloatRange(0, 100) alone accepts nan (comparisons against the bounds are false)"
+        should = "an explicit finite-value check rejects it as a usage error, same as an out-of-range value"
+        spy = MagicMock(return_value=_report())
+        monkeypatch.setattr(cli_module, "collect_coverage", spy)
+
+        result = CliRunner().invoke(
+            cli_module.cli, ["code-coverage", "local/SampleModel", "--min-coverage", "nan"]
+        )
+
+        assert result.exit_code != 0, f"{given}: {should}"
+        spy.assert_not_called()
+
 
 class TestCodeCoverageNoConnection:
     def test_no_connection_reports_error_and_exits_non_zero(self, monkeypatch):
@@ -289,3 +302,17 @@ class TestCodeCoverageNoConnection:
 
         assert result.exit_code != 0
         assert "No XMLA connection detected" in result.output
+
+    def test_missing_filesystem_path_reports_clear_error(self, monkeypatch):
+        given = "a filesystem MODEL_PATH that does not exist on disk"
+        should = "report 'Model path not found', matching run-tests/retrieve-tests, not the generic no-connection message"
+        spy = MagicMock(return_value=_report())
+        monkeypatch.setattr(cli_module, "collect_coverage", spy)
+
+        result = CliRunner().invoke(
+            cli_module.cli, ["code-coverage", "./no/such/path.SemanticModel"]
+        )
+
+        assert result.exit_code != 0, f"{given}: {should}"
+        assert "Model path not found" in result.output, f"{given}: {should}"
+        spy.assert_not_called()

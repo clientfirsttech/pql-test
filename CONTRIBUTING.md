@@ -71,7 +71,7 @@ This convention exists because `run-tests` and `code-coverage` drifted apart
 once already — `run-tests` grew a pytest-style banner, bordered table, and
 color coding, while `code-coverage` was implemented separately with plain
 indented text and no connection diagnostic. See
-[`tasks/consistent-cli-output-epic.md`](tasks/consistent-cli-output-epic.md)
+[`tasks/archive/2026-09-22-consistent-cli-output.md`](tasks/archive/2026-09-22-consistent-cli-output.md)
 (archived once complete) for the fix.
 
 ---

@@ -95,6 +95,18 @@ def resolve_xmla_connection(
         # ``pql_test.runner.resolve_local_xmla_connection_by_name``.
         return runner.resolve_local_xmla_connection_by_name(ident.model_name)
 
+    if ident.kind == "service":
+        if hermetic:
+            return None
+        # Canonical <workspace>.Workspace/<model>.SemanticModel path —
+        # resolve by display name via REST, same as cmd_run_tests.  Short-
+        # circuits like the local branch above: a caller who names a
+        # specific workspace/model should never silently fall back to an
+        # unrelated local PBI Desktop instance or GUID-based resolution.
+        return runner.resolve_service_xmla_connection_by_name(
+            ident.workspace_name, ident.model_name, opts,
+        )
+
     # Option 2 — remote workspace (service principal).
     # If the service path raises (bad creds, dead workspace, unreachable
     # endpoint, etc.) we fall through to local detection instead of letting

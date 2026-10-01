@@ -6,7 +6,7 @@ knowledge -- session banners, bordered tables, and the PASS/FAIL/SKIP color
 vocabulary used across every `pql-test` command that prints a report to a
 terminal. Extracted so `run-tests` and `code-coverage` (and any future
 command) render through one shared style instead of each reinventing its own
-presentation, per tasks/consistent-cli-output-epic.md.
+presentation, per tasks/archive/2026-09-22-consistent-cli-output.md.
 """
 
 from __future__ import annotations

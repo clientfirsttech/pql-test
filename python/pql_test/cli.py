@@ -60,6 +60,7 @@ Environment variables (loaded from .env when python-dotenv is installed):
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -1225,6 +1226,21 @@ def _print_coverage_report(
                 click.echo(f"  {ex.object_type.value} {ex.identifier} — {ex.reason}")
 
 
+def _validate_finite_min_coverage(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Reject non-finite --min-coverage values that FloatRange(0, 100) lets through.
+
+    math.nan compares False against both bounds, so click.FloatRange(0, 100)
+    accepts "nan" even though the skill promises malformed thresholds fail
+    before any XMLA query; the later ``summary.percent < min_coverage``
+    check is also False for NaN, which would silently report success.
+    """
+    if value is not None and math.isnan(value):
+        raise click.BadParameter("must be a finite number between 0 and 100", ctx=ctx, param=param)
+    return value
+
+
 @cli.command("code-coverage")
 @click.argument("model_path", metavar="MODEL_PATH")
 @click.option(
@@ -1245,6 +1261,7 @@ def _print_coverage_report(
 @click.option(
     "--min-coverage", "min_coverage",
     type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
+    callback=_validate_finite_min_coverage,
     help="Exit non-zero when overall eligible coverage is below PERCENT.",
 )
 @conn_options
@@ -1288,12 +1305,33 @@ def cmd_code_coverage(
 
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
-    report = collect_coverage(model_path, opts)
+    abs_path = model_path
+
+    if ident.kind not in ("local", "service"):
+        # Traditional filesystem path — fail clearly instead of falling
+        # through to the generic "No XMLA connection detected" message,
+        # matching cmd_run_tests/cmd_retrieve_tests/cmd_retrieve_test.
+        abs_path = str(Path(model_path).resolve())
+        if not Path(abs_path).exists():
+            click.echo(f"Error: Model path not found: {abs_path}", err=True)
+            sys.exit(1)
+
+        # Derive the dataset display name from the .SemanticModel directory
+        # stem, same as cmd_run_tests, so the resolver can look it up by
+        # name when no --dataset-id is provided.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+
+    report = collect_coverage(abs_path, opts)
     if report is None:
         click.echo(
             f"Error: No XMLA connection detected for '{model_path}'. "
             "Pass local/<model_name> with the model open in Power BI Desktop, "
-            "or supply --tenant-id, --workspace-id, and --dataset-id.",
+            "or supply --tenant-id, --workspace-id, and --dataset-id "
+            "(or --tenant-id, --client-id, --client-secret with the canonical "
+            "<workspace>.Workspace/<model>.SemanticModel path).",
             err=True,
         )
         sys.exit(1)

@@ -67,6 +67,18 @@ class TestSummarizeCoverage:
         assert summary.covered == 1
         assert summary.eligible == 1
 
+    def test_given_all_categories_unavailable_should_report_0_percent_not_100(self):
+        given = "every category's metadata query failed, leaving zero eligible objects"
+        should = "report 0%, not the empty-model 100%, so a CI gate can't pass on an incomplete report"
+        report = _report(
+            unavailable=[UnavailableCategory(CoverageObjectType.TABLE, "query failed")],
+        )
+
+        summary = summarize_coverage(report)
+
+        assert summary.eligible == 0
+        assert summary.percent == 0.0, f"{given}: {should}"
+
 
 class TestCategoryCounts:
     def test_groups_covered_and_gap_counts_per_object_type(self):
@@ -131,6 +143,11 @@ class TestCoveragePercent:
 
     def test_rounds_to_two_decimals(self):
         assert coverage_percent(2, 3) == 66.67
+
+    def test_given_zero_eligible_and_data_unavailable_should_report_0_not_100(self):
+        given = "every category was dropped from scope because its metadata source failed"
+        should = "report 0%, not the empty-model 100%, so --min-coverage can't pass on no evidence"
+        assert coverage_percent(0, 0, data_unavailable=True) == 0.0, f"{given}: {should}"
 
 
 class TestCoverageStatus:
