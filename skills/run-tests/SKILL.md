@@ -1,7 +1,7 @@
 ---
 name: run-tests
 description: Execute all DAX test suites in a PBIP semantic model against the XMLA endpoint. Connects to a locally-open Power BI Desktop instance or to a remote Power BI Premium / Fabric workspace.
-version: 0.1.17
+version: 0.1.18b1
 ---
 
 Run `pql-test run-tests MODEL_PATH` to execute all DAX test suites found in a Power BI Project (PBIP) semantic model and report results in a pytest-style format.

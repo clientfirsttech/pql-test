@@ -1,0 +1,11 @@
+// Welcome to DAX query view! Learn more about DAX queries at https://aka.ms/dax-queries.
+// Right-click on tables, columns, or measures in the data pane to access quick queries, or ask Copilot for help writing DAX.
+DEFINE
+    FUNCTION DataQuality.ANY.Tests = () => 
+
+         UNION(
+        PQL.Assert.Col.ShouldNotBeNullOrBlank("Fact ID shouldn't be blank",Fact_Table[Fact ID]),
+        
+         PQL.Assert.Relationship.ShouldExist("Date_Dim to Fact should exist one to main","Fact_Table","Date ID","Date_Dim","Date ID"))
+    
+EVALUATE DataQuality.ANY.Tests()

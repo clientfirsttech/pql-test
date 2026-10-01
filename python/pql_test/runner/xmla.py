@@ -17,6 +17,7 @@ __all__ = [
     "_build_connection_string",
     "_execute_dax_query",
     "_get_col",
+    "summarize_xmla_exception",
 ]
 
 
@@ -134,3 +135,38 @@ def _execute_dax_query(
             reader.Close()
     finally:
         adomd_conn.Close()
+
+
+# Power BI / ADOMD.NET error codes that mean something actionable but are
+# buried several lines into a multi-line .NET exception message -- e.g.
+# AdomdConnectionException's own message is just "PowerBI Request Failed.",
+# with the actual REST error code (and the one-line fix) further down in
+# the "Description: {...}" JSON blob.  First-line-only truncation throws
+# this away, so these are matched anywhere in the full message text.
+_KNOWN_XMLA_ERROR_HINTS = {
+    "PowerBINotLicensedException": (
+        "workspace lacks Premium/Fabric capacity -- XMLA and INFO DAX "
+        "functions require Premium-per-capacity or Fabric, not Pro-only. "
+        "Check the capacity assignment in the Fabric/Power BI admin portal."
+    ),
+    "PowerBINotProvisionedException": (
+        "workspace or capacity is not yet provisioned/activated. Wait for "
+        "provisioning to finish or check the capacity's status."
+    ),
+}
+
+
+def summarize_xmla_exception(exc: Exception, *, max_len: int = 300) -> str:
+    """One-line, actionable summary of an XMLA/ADOMD exception.
+
+    Checks the full exception text for a known Power BI error code first
+    (see ``_KNOWN_XMLA_ERROR_HINTS``) and returns an actionable hint when
+    found; otherwise falls back to the previous behavior of the first line,
+    truncated to *max_len* characters.
+    """
+    text = str(exc)
+    for code, hint in _KNOWN_XMLA_ERROR_HINTS.items():
+        if code in text:
+            return f"{type(exc).__name__}: {code} -- {hint}"
+    first_line = (text.splitlines() or [""])[0][:max_len]
+    return f"{type(exc).__name__}: {first_line}"

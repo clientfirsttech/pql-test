@@ -941,6 +941,40 @@ class TestBuildConnectionStringEffectiveUserName:
 
 
 # ---------------------------------------------------------------------------
+# summarize_xmla_exception
+# ---------------------------------------------------------------------------
+
+class TestSummarizeXmlaException:
+    """Regression tests for surfacing known Power BI error codes that are
+    buried several lines into a multi-line ADOMD.NET exception message,
+    instead of losing them to first-line-only truncation."""
+
+    def test_surfaces_power_bi_not_licensed_hint_even_when_buried(self):
+        given = "an AdomdConnectionException whose first line is just 'PowerBI Request Failed.'"
+        should = "surface the PowerBINotLicensedException code and an actionable capacity hint"
+        from pql_test.runner.xmla import summarize_xmla_exception
+        buried_message = (
+            "PowerBI Request Failed.\r\n\r\nAction: Generating MWC token\r\n\r\n"
+            'Description: {"error":{"code":"PowerBINotLicensedException"}}\r\n\r\n'
+            "Technical Details:\r\nRootActivityId: fake-id --"
+        )
+
+        summary = summarize_xmla_exception(RuntimeError(buried_message))
+
+        assert "PowerBINotLicensedException" in summary, f"{given}: {should}"
+        assert "Premium/Fabric capacity" in summary, f"{given}: {should}"
+
+    def test_falls_back_to_first_line_for_unknown_errors(self):
+        given = "an exception with no recognized Power BI error code"
+        should = "fall back to the exception type plus its first line, unchanged from before"
+        from pql_test.runner.xmla import summarize_xmla_exception
+
+        summary = summarize_xmla_exception(RuntimeError("Network timeout\nstack line 2"))
+
+        assert summary == "RuntimeError: Network timeout", f"{given}: {should}"
+
+
+# ---------------------------------------------------------------------------
 # run_tests (multiple tests)
 # ---------------------------------------------------------------------------
 
@@ -2114,6 +2148,34 @@ class TestRetrieveTestsViaDax:
         # No stderr pollution into stdout
         assert "Authentication failed" not in captured.out
 
+    def test_stderr_warning_truncates_to_first_line_of_exception(self, capsys):
+        """A multi-line exception message (e.g. an ADOMD.NET exception whose
+        str() embeds a full .NET stack trace) must not blow up the warning
+        into multiple lines — only the first line is kept."""
+        conn = MagicMock()
+        conn.server = "localhost:57422"
+        conn.catalog = ""
+        multiline_message = (
+            "Query (1, 10) Failed to resolve name 'PQL.Assert.RetrieveTests'. "
+            "It is not a valid table, variable, or function name.\n"
+            "   at Microsoft.AnalysisServices.AdomdClient.XmlaClient."
+            "CheckForSoapFault(XmlReader reader, XmlaResult xmlaResult, "
+            "Boolean throwIfError)\n"
+            "   at Microsoft.AnalysisServices.AdomdClient.XmlaClient.Execute(...)"
+        )
+        with patch(
+            "pql_test.runner._execute_dax_query",
+            side_effect=RuntimeError(multiline_message),
+        ):
+            result = _retrieve_tests_via_dax(conn)
+
+        assert result is None
+        captured = capsys.readouterr()
+        warning_lines = captured.err.splitlines()
+        assert len(warning_lines) == 1
+        assert "Failed to resolve name" in warning_lines[0]
+        assert "CheckForSoapFault" not in captured.err
+
     def test_emits_no_warning_when_v2_succeeds(self, capsys):
         """The happy path must remain silent on stderr."""
         v2_rows = [
@@ -2720,3 +2782,46 @@ class TestResolveXmlaConnectionServiceToLocalFallback:
         assert conn.catalog == "DS"
         assert conn.access_token == "bearer-tok"
         get_pbi.assert_not_called()
+
+
+class TestResolveXmlaConnectionServiceRouting:
+    """Regression tests for the canonical <workspace>.Workspace/<model>.SemanticModel
+    path in resolve_xmla_connection.  Previously this fell through to the
+    GUID-based remote-service check (which requires opts.workspace_id and
+    opts.dataset_id/dataset_name) and then to filesystem-based local
+    detection, so a caller passing display names with only --tenant-id,
+    --client-id, --client-secret (per the documented example for code-coverage
+    and run-tests) got "no XMLA connection" instead of a resolved connection.
+    """
+
+    def test_service_path_routes_to_name_based_resolver(self):
+        """resolve_xmla_connection must resolve a canonical service path by
+        workspace/model display name, not require --workspace-id/--dataset-id."""
+        opts = XmlaConnectionOptions(tenant_id="t", client_id="c", client_secret="s")
+        with patch("pql_test.runner._acquire_service_principal_token", return_value="tok"):
+            conn = resolve_xmla_connection(
+                "MyWorkspace.Workspace/MyModel.SemanticModel", opts,
+            )
+        assert conn is not None
+        assert "MyWorkspace" in conn.server
+        assert conn.catalog == "MyModel"
+
+    def test_service_path_does_not_fall_back_to_local(self, monkeypatch):
+        """A named service path should never silently redirect to an unrelated
+        local Power BI Desktop instance when resolution fails.
+
+        Hermetic mode is required here: CI exports real PQL_* secrets at the
+        job level for the live-service tests, and without it this test's
+        "no credentials" opts would get silently backfilled from the
+        environment (see _resolve_authentication_with_stored_credentials),
+        making token acquisition succeed instead of returning None.
+        """
+        monkeypatch.setenv("PQL_TEST_HERMETIC", "1")
+        opts = XmlaConnectionOptions()  # no credentials at all
+        with patch("pql_test.runner.get_pbi_files_opened") as get_pbi:
+            conn = resolve_xmla_connection(
+                "MyWorkspace.Workspace/MyModel.SemanticModel", opts,
+            )
+        assert conn is None
+        get_pbi.assert_not_called()
+

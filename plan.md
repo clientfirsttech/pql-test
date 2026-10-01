@@ -31,7 +31,37 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
+- **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
+
 ## Completed Work
+
+### 2026-09-23 — `--min-coverage` parity with pytest-cov, threshold-aware colors, version alignment
+
+- See [tasks/archive/2026-09-23-min-coverage-parity-version-alignment.md](tasks/archive/2026-09-23-min-coverage-parity-version-alignment.md)
+- **CI-gate semantics** — `--min-coverage` already exited 1 below the threshold (same as pytest-cov `--cov-fail-under`, Jest, nyc). Added coverage.py's guard so a percentage only rounds to 100% when every eligible object is covered (`coverage_percent()` in [python/pql_test/runner/coverage_report.py](python/pql_test/runner/coverage_report.py)), and a pytest-cov-style `Required coverage of N% reached` line when the gate passes (stderr when JSON is on stdout).
+- **Colors** — replaced the hard-coded 100%/0%/partial coloring with `coverage_status()`: default 50/80 watermarks (Istanbul/Jest), or binary pass/fail against `--min-coverage` when set. The overall line is now colored too.
+- **Version alignment** — `plugin.json` bumped from its never-updated `0.1.0` to `0.1.18b1`. New [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md) lists every file that carries the version; [python/tests/test_version_alignment.py](python/tests/test_version_alignment.py) and a new validate-plugin CI step fail on drift.
+- **Docs/evals** — `code-coverage` promptfoo eval added; skill exit codes and color rules documented; README GitHub Actions coverage-gate example; vision.md command list updated.
+- Full suite at 573 passed / 2 skipped under `pytest -m "not live"`.
+
+### 2026-09-22 — Consistent CLI output between `run-tests` and `code-coverage`
+
+- **Unify CLI presentation** — See [tasks/archive/2026-09-22-consistent-cli-output.md](tasks/archive/2026-09-22-consistent-cli-output.md)
+  - `run-tests` and `code-coverage` had drifted into two different presentation styles (banner + bordered color table + connection diagnostic vs. plain indented text with no connection line) because presentation logic lived as ad hoc closures inside `cli.py` next to each command's business logic, with no shared module and no written contract.
+  - Extracted [python/pql_test/runner/cli_format.py](python/pql_test/runner/cli_format.py) (`banner`, `pad`, `truncate`, `table_top`/`table_mid`/`table_bottom`/`table_row`, `STATUS_COLORS`) and retrofitted `run-tests`' `_print_results` onto it — behavior-preserving refactor, existing tests unchanged.
+  - `code-coverage`'s `collect_coverage()` now threads its resolved `ResolvedXmlaConnection` onto `CoverageReport`; the CLI prints the same `Local XMLA connection: ... / catalog: ...` line and a `coverage session starts` banner `run-tests` shows, and its "By category" section renders as a bordered table colored green/red/yellow (full/none/partial coverage) using the same `STATUS_COLORS` vocabulary as PASS/FAIL/SKIP.
+  - Documented the convention in [CONTRIBUTING.md](CONTRIBUTING.md#cli-output-conventions) and pointed [aidd-custom/AGENTS.md](aidd-custom/AGENTS.md) at it so a future command reuses `cli_format.py` instead of reinventing a third style. Updated `README.md`'s `code-coverage` sample output to match.
+  - 19 new/updated tests (14 in `test_cli_format.py`, 5 across `test_coverage_collector.py`/`test_code_coverage_cli.py`); full suite at 550 passed / 2 skipped under `pytest -m "not live"`.
+
+### 2026-09-22 — Direct test-UDF semantic-model code coverage
+
+- **Add `pql-test code-coverage`** — See [tasks/archive/2026-09-22-direct-udf-code-coverage.md](tasks/archive/2026-09-22-direct-udf-code-coverage.md)
+  - Validated live against SampleModel, RLS_Model, and OLS_Model which object categories `INFO.CALCDEPENDENCY()` can directly evidence from a test UDF (tables, calculated columns, measures) versus which need indirect evidence (roles via `PQLAssert_RoleName`, relationships via DAX expression-text parsing) or have none at all (partitions) — recorded in [tasks/direct-udf-code-coverage-metadata-contract.md](tasks/direct-udf-code-coverage-metadata-contract.md).
+  - Added [python/pql_test/runner/coverage.py](python/pql_test/runner/coverage.py) (evidence/exclusion/gap types + `classify_coverage()`), [python/pql_test/runner/coverage_collector.py](python/pql_test/runner/coverage_collector.py) (the live XMLA-backed collector, `collect_coverage()`), and [python/pql_test/runner/coverage_report.py](python/pql_test/runner/coverage_report.py) (summary/JSON presentation) — each independently unit-tested (25 tests) before being wired together.
+  - Added the `pql-test code-coverage MODEL_PATH` CLI command: terse and `--verbose` text output, `--format json` with `--output`, and `--min-coverage` for CI gating. Malformed `--output`/`--format` combinations and out-of-range `--min-coverage` fail via Click validation before any XMLA query.
+  - Added the `code-coverage` skill (source + packaged, byte-identical) and bumped the package version to `0.1.18` across `pyproject.toml` and all 5 skills, per the existing skill-versioning convention.
+  - Added a live regression test ([python/tests/test_coverage_live.py](python/tests/test_coverage_live.py), `@pytest.mark.live`) pinning the exact evidence recorded in the metadata contract, and documented the command in [README.md](README.md) with an explicit dependency-coverage-vs-assertion-coverage caveat.
+  - 44 new tests total; full suite at 532 passed / 2 skipped under `pytest -m "not live"`, coverage gate at 82.81% (new modules individually at 96-100%).
 
 ### 2026-09-04 — Fix `local/<model_name>` truncation for names containing " - "
 

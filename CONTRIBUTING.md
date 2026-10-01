@@ -34,6 +34,48 @@ There is **no** package source outside `python/`. The CI workflow installs from
 
 ---
 
+## CLI Output Conventions
+
+Every `pql-test` command that prints a human-readable report to a terminal
+follows one shared style, defined in
+[`python/pql_test/runner/cli_format.py`](python/pql_test/runner/cli_format.py):
+
+- **Shared presentation module.** Session banners (`banner()`), bordered
+  tables (`table_top`/`table_mid`/`table_bottom`/`table_row`), and cell
+  padding/truncation (`pad()`/`truncate()`) live in `cli_format.py`, not as
+  per-command closures inside `cli.py`. If you're adding a new command that
+  prints a status table or a session header, import from there instead of
+  writing a new implementation — see `_print_results` (`run-tests`) and
+  `_print_coverage_report` (`code-coverage`) for the calling pattern.
+- **Connection diagnostic + session banner.** Any command that resolves an
+  XMLA connection and prints text output opens with a `Local XMLA
+  connection: <server> / catalog: <catalog>` (or `XMLA connection: ...` for
+  non-local connections) line, followed by a `===== <command> session starts
+  =====` banner and a `model: <path>` line, before any report content. This
+  mirrors pytest's own session banner and gives every command the same
+  "what did I connect to, what am I running" opening.
+- **One status-color vocabulary.** `STATUS_COLORS` in `cli_format.py` is the
+  only status-color mapping in the CLI: PASS/fully-covered = green,
+  FAIL/uncovered = red, SKIP/partially-covered = yellow. Don't introduce a
+  new color meaning for a new command — reuse this vocabulary, e.g. a new
+  category or threshold should map onto green/yellow/red rather than a
+  fourth color.
+  `code-coverage` grades percentages with `coverage_status()` in
+  `coverage_report.py`: default 50/80 watermarks (red/yellow/green, as
+  Istanbul/Jest do), or binary red/green against `--min-coverage` when set.
+- **JSON output stays presentation-free.** None of the above applies to
+  `--format json` output — the JSON payload is the stable, machine-readable
+  shape and must not gain banner/table text.
+
+This convention exists because `run-tests` and `code-coverage` drifted apart
+once already — `run-tests` grew a pytest-style banner, bordered table, and
+color coding, while `code-coverage` was implemented separately with plain
+indented text and no connection diagnostic. See
+[`tasks/archive/2026-09-22-consistent-cli-output.md`](tasks/archive/2026-09-22-consistent-cli-output.md)
+(archived once complete) for the fix.
+
+---
+
 ## Prerequisites
 
 | Requirement | Why | How to install |
@@ -405,11 +447,13 @@ Skills live in both **source** (`skills/`) and **packaged** (`python/pql_test/sk
 pql-test/
 ├── skills/                          ← source skills (maintained by contributors)
 │   ├── check-prereqs/SKILL.md
+│   ├── code-coverage/SKILL.md
 │   ├── retrieve-test/SKILL.md
 │   ├── retrieve-tests/SKILL.md
 │   └── run-tests/SKILL.md
 └── python/pql_test/skills/          ← packaged skills (distributed in wheel)
     ├── check-prereqs/SKILL.md
+    ├── code-coverage/SKILL.md
     ├── retrieve-test/SKILL.md
     ├── retrieve-tests/SKILL.md
     └── run-tests/SKILL.md
@@ -550,8 +594,9 @@ Before opening a PR:
 4. If you touched `cli.py` output — verify it works in a default PowerShell
    session (the CLI forces UTF-8 stdout to avoid `cp1252` `UnicodeEncodeError`
    on emoji output; don't undo that without a replacement)
-5. Bump `version` in [python/pyproject.toml](python/pyproject.toml) if shipping
-   user-visible changes
+5. Bump the version if shipping user-visible changes — follow
+   [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md)
+   (`pyproject.toml`, `plugin.json`, and every SKILL.md move together)
 
 ---
 
@@ -575,8 +620,11 @@ anywhere in the repo.
 
 **Per-release checklist:**
 
-1. Bump `version` in [python/pyproject.toml](python/pyproject.toml) per
-   [PEP 440](https://peps.python.org/pep-0440/) / semver.
+1. Bump the version per [PEP 440](https://peps.python.org/pep-0440/) / semver
+   in [python/pyproject.toml](python/pyproject.toml), [plugin.json](plugin.json),
+   and every source + packaged SKILL.md — see
+   [aidd-custom/skills/pql-test-version-bump/SKILL.md](aidd-custom/skills/pql-test-version-bump/SKILL.md).
+   `tests/test_version_alignment.py` and the validate-plugin workflow fail on drift.
 2. Update the README's "What's New" / a `CHANGELOG.md` if you keep one.
 3. Optional rehearsal against TestPyPI before tagging:
    - GitHub → Actions → Publish to PyPI → Run workflow → target `testpypi`

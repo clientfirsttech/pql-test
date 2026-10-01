@@ -1,0 +1,46 @@
+/// Power BI Components (Plural & Singular)
+table 'Power BI Component Types'
+	lineageTag: 60d488fb-0ab0-451a-9615-0cfe57e91e25
+
+	/// A Calculated Column, Measure, or Table in a Power BI dataset.
+	column Type
+		dataType: string
+		lineageTag: 583e11de-7944-4e15-84f0-961e4baa2dd8
+		summarizeBy: none
+		sourceColumn: Type
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isText":true}
+
+	/// Plural of Type (Calculated, Measures, Tables).
+	column 'Component Name'
+		dataType: string
+		lineageTag: 48a242c6-b0af-463a-99ee-c8886883f4f6
+		summarizeBy: none
+		sourceColumn: Component Name
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isText":true}
+
+	partition 'Power BI Component Types-ceed2199-12d3-44f0-8238-a54dcc03374b' = m
+		mode: import
+		queryGroup: 'Low-Code Coverage'
+		source =
+				let
+				    Source = #"Power BI Dataset Components",
+				    #"Removed Other Columns" = Table.SelectColumns(Source,{"Type"}),
+				    #"Removed Duplicates" = Table.Distinct(#"Removed Other Columns"),
+				    #"Duplicated Column" = Table.DuplicateColumn(#"Removed Duplicates", "Type", "Type - Copy"),
+				    #"Added Suffix" = Table.TransformColumns(#"Duplicated Column", {{"Type - Copy", each _ & "s", type text}}),
+				    #"Renamed Columns" = Table.RenameColumns(#"Added Suffix",{{"Type - Copy", "Component Name"}})
+				in
+				    #"Renamed Columns"
+
+	changedProperty = Description
+
+	annotation PBI_NavigationStepName = Navigation
+
+	annotation PBI_ResultType = Table
+
