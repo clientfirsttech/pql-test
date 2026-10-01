@@ -27,8 +27,13 @@ SKILL_FILES = sorted(
 
 
 def _pyproject_version() -> str:
-    match = re.search(r'^version\s*=\s*"([^"]+)"', PYPROJECT.read_text(encoding="utf-8"), re.MULTILINE)
-    assert match, f"No version found in {PYPROJECT}"
+    text = PYPROJECT.read_text(encoding="utf-8")
+    # Scope the search to the [project] table so a `version = "..."` key in
+    # some other table (e.g. a future [tool.x]) can't be picked up instead.
+    table = re.search(r"^\[project\]\n(.*?)(?=^\[|\Z)", text, re.MULTILINE | re.DOTALL)
+    assert table, f"No [project] table found in {PYPROJECT}"
+    match = re.search(r'^version\s*=\s*"([^"]+)"', table.group(1), re.MULTILINE)
+    assert match, f"No version found in the [project] table of {PYPROJECT}"
     return match.group(1)
 
 

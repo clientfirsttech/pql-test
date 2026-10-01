@@ -1,0 +1,4 @@
+relationship f57f6cc8-0574-5b6c-8484-4d7b2d1703a1
+	fromColumn: Fact_Table.'Date ID'
+	toColumn: Date_Dim.'Date ID'
+

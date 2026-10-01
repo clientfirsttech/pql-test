@@ -45,6 +45,28 @@ Constraints {
 }
 ```
 
+## Pre-release (beta) versions
+
+The `X.Y.Z` in the table above is the common case, but every guard (the pytest
+alignment test, the CI step, and `release.yml`'s tag check) does a plain
+string comparison — not a semver/format check — so a PEP 440 pre-release
+suffix is a valid value everywhere `X.Y.Z` is, as long as it's applied
+identically across all files:
+
+- Append a suffix directly to the base version, e.g. `0.1.18b1` (beta 1),
+  `0.1.18rc1` (release candidate 1). No dot before the suffix — that's what
+  PEP 440 expects and what PyPI parses.
+- A beta tagged and pushed as `v0.1.18b1` publishes to PyPI as a pre-release:
+  `pip install pql-test` skips it unless the installer passes `--pre` or pins
+  the exact version. This is the mechanism for a rehearsal/beta release
+  without affecting the default install.
+- To promote a beta to the real release, bump every file in the table above
+  from the pre-release value (e.g. `0.1.18b1`) to the plain `X.Y.Z` value
+  (e.g. `0.1.18`) — drop the suffix — as a normal version bump, then tag
+  `vX.Y.Z`. Don't skip straight to the next patch/minor — the beta and its
+  stable release should carry the same base version unless new changes
+  landed in between.
+
 ## Guards
 
 - `python/tests/test_version_alignment.py` fails pytest when `plugin.json` or

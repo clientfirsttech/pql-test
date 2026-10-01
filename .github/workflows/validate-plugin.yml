@@ -178,7 +178,15 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Versions aligned with pyproject.toml
         run: |
-          expected=$(sed -n 's/^version *= *"\(.*\)"/\1/p' python/pyproject.toml | head -1)
+          # Scope the extraction to the [project] table (via awk) so a
+          # `version = "..."` key in some other table (e.g. a future
+          # [tool.x]) can't be picked up instead of the real one.
+          expected=$(awk '/^\[project\]/{f=1; next} /^\[/{f=0} f' python/pyproject.toml \
+            | sed -n 's/^version *= *"\(.*\)"/\1/p' | head -1)
+          if [ -z "$expected" ]; then
+            echo "::error file=python/pyproject.toml::No version found in the [project] table"
+            exit 1
+          fi
           echo "pyproject.toml version: $expected"
           errors=0
           plugin_version=$(jq -r '.version' plugin.json)

@@ -1036,7 +1036,7 @@ ssss
 
 ### code-coverage
 
-Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps.
+Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps. See [docs/code-coverage-explained.md](docs/code-coverage-explained.md) for a one-page walkthrough with diagrams.
 
 ```bash
 pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output <file>]
