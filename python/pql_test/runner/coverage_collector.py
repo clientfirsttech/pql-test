@@ -43,6 +43,7 @@ from pql_test.runner.models import (
     ResolvedXmlaConnection,
     XmlaConnectionOptions,
 )
+from pql_test.runner.xmla import summarize_xmla_exception
 
 if TYPE_CHECKING:
     from pql_test.runner.discovery import retrieve_tests
@@ -104,9 +105,8 @@ def _safe_query(
     try:
         return _execute_dax_query(connection, query)
     except Exception as exc:  # noqa: BLE001
-        first_line = (str(exc).splitlines() or [""])[0][:300]
         unavailable.append(
-            UnavailableCategory(category, f"{type(exc).__name__}: {first_line}")
+            UnavailableCategory(category, summarize_xmla_exception(exc))
         )
         return None
 
@@ -291,7 +291,7 @@ def collect_coverage(
         )
     except Exception as exc:  # noqa: BLE001
         calcdep_rows = None
-        cause = f"{type(exc).__name__}: {str(exc)[:300]}"
+        cause = summarize_xmla_exception(exc)
         for object_type in (
             CoverageObjectType.TABLE,
             CoverageObjectType.CALC_COLUMN,

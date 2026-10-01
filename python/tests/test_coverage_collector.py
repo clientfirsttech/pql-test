@@ -306,6 +306,35 @@ class TestCollectCoverage:
         assert "\n" not in relationship_reasons[0]
         assert "CheckForSoapFault" not in relationship_reasons[0]
 
+    def test_unavailable_reason_surfaces_known_power_bi_error_code_despite_being_buried(self):
+        given = "an AdomdConnectionException whose real cause is several lines into the message"
+        should = "surface the PowerBINotLicensedException code and an actionable hint, not just the generic first line"
+        buried_message = (
+            "PowerBI Request Failed.\r\n\r\nAction: Generating MWC token\r\n\r\n"
+            'Description: {"error":{"code":"PowerBINotLicensedException"}}\r\n\r\n'
+            "Technical Details:\r\nRootActivityId: fake-id --"
+        )
+
+        def _boom(conn, query):
+            if "INFO.VIEW.RELATIONSHIPS" in query:
+                raise RuntimeError(buried_message)
+            return _fake_execute()(conn, query)
+
+        with patch("pql_test.runner.retrieve_tests", return_value=[]), patch(
+            "pql_test.runner._execute_dax_query", side_effect=_boom
+        ):
+            report = collect_coverage(
+                "local/SampleModel", connection=_CONN, connection_pre_resolved=True
+            )
+
+        relationship_reasons = [
+            u.reason for u in report.unavailable
+            if u.object_type == CoverageObjectType.RELATIONSHIP
+        ]
+        assert relationship_reasons
+        assert "PowerBINotLicensedException" in relationship_reasons[0], f"{given}: {should}"
+        assert "Premium/Fabric capacity" in relationship_reasons[0], f"{given}: {should}"
+
     def test_given_info_tables_query_fails_should_report_dependent_categories_unavailable_not_gaps(
         self,
     ):

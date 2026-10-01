@@ -21,6 +21,7 @@ from pql_test.runner.model_path import (
     _parse_dax_test_file,
 )
 from pql_test.runner.models import PqlTest, ResolvedXmlaConnection
+from pql_test.runner.xmla import summarize_xmla_exception
 
 if TYPE_CHECKING:
     from pql_test import runner
@@ -120,10 +121,9 @@ def _retrieve_tests_via_dax(
                 if connection
                 else "<unknown>"
             )
-            first_line = (str(exc).splitlines() or [""])[0][:300]
             print(
                 f"Warning: live test discovery failed against {target}: "
-                f"{type(exc).__name__}: {first_line}",
+                f"{summarize_xmla_exception(exc)}",
                 file=sys.stderr,
             )
             return None  # neither function available — fall back to file scan
