@@ -1,6 +1,6 @@
 # pql-test — DAX Test Runner for PBIP Models
 
-[![pytest](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml)
+[![pytest](https://github.com/clientfirsttech/pql-test/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/pql-test/actions/workflows/pytest.yml)
 ![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
 [![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
 

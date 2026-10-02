@@ -1,19 +1,21 @@
 # pql-test — DAX Test Runner for PBIP Models
 
-[![pytest](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml/badge.svg)](https://github.com/clientfirsttech/PQL.Assert/actions/workflows/pytest.yml)
 ![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
 [![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
 
-`pql-test` is a command-line tool bundled with the Power Query Lint VS Code
-extension. It discovers and executes DAX unit-test suites stored inside a
-**Power BI Project (PBIP)** semantic model, mirroring the
-[`Invoke-DQVTesting`](https://github.com/kerski/fabric-dataops-patterns)
-execution pattern.
+## Run Your Semantic Model Tests from the Command Line
 
-Tests are plain `.dax` files that use the `PQL.Assert` family of functions.
-The runner connects to Analysis Services via XMLA — either a locally-open
-Power BI Desktop instance (auto-detected) or a remote Power BI Premium /
-Microsoft Fabric workspace endpoint.
+`pql-test` is a command-line tool that discovers and executes the DAX tests
+stored inside your Power BI Project (PBIP) semantic models, connecting to
+Analysis Services over XMLA. Tests live as `.dax` files alongside your model
+and are written with the [PQL.Assert](https://www.pqlint.com/pql-assert)
+function family.
+
+Where PQL.Assert gives you the assertions that live inside the model,
+`pql-test` is the automation half: it runs those assertions against a local
+Power BI Desktop session or a deployed Power BI Premium or Microsoft Fabric
+workspace, and reports the results in a form your terminal and your pipeline
+can both read.
 
 ---
 

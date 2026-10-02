@@ -45,10 +45,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage      = "https://github.com/clientfirsttech/PQL.Assert"
-Repository    = "https://github.com/clientfirsttech/PQL.Assert"
-Issues        = "https://github.com/clientfirsttech/PQL.Assert/issues"
-Documentation = "https://github.com/clientfirsttech/PQL.Assert#readme"
+Homepage      = "https://github.com/clientfirsttech/pql-test"
+Repository    = "https://github.com/clientfirsttech/pql-test"
+Issues        = "https://github.com/clientfirsttech/pql-test/issues"
+Documentation = "https://github.com/clientfirsttech/pql-test#readme"
 
 [project.scripts]
 pql-test = "pql_test.cli:main"
