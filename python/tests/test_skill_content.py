@@ -274,6 +274,38 @@ def test_check_prereqs_documents_python_version_floor():
 
 
 # ---------------------------------------------------------------------------
+# code-coverage skill
+# ---------------------------------------------------------------------------
+
+
+def test_code_coverage_documents_all_click_flags():
+    content = _skill_content("code-coverage")
+    flags = _click_flags("code-coverage")
+    missing = [f for f in flags if f not in content]
+    assert not missing, f"code-coverage SKILL.md is missing flags: {missing}"
+
+
+def test_code_coverage_documents_all_model_path_formats():
+    content = _skill_content("code-coverage")
+    assert "local/" in content
+    assert ".Workspace/" in content and ".SemanticModel" in content
+    assert re.search(r"[Ff]ilesystem path", content)
+
+
+def test_code_coverage_documents_exit_codes():
+    content = _skill_content("code-coverage")
+    assert re.search(r"`?0`?\s*=\s*.*(report produced)", content, re.IGNORECASE)
+    assert re.search(r"`?1`?\s*=\s*.*(connection|min-coverage)", content, re.IGNORECASE)
+
+
+def test_code_coverage_documents_output_requires_json_format():
+    """--output without --format json must be documented as a pre-query usage error."""
+    content = _skill_content("code-coverage")
+    assert "--format json" in content
+    assert re.search(r"[Rr]equires.*--format json", content)
+
+
+# ---------------------------------------------------------------------------
 # skill command (self-referential)
 # ---------------------------------------------------------------------------
 
@@ -294,7 +326,7 @@ def test_skill_command_has_documented_skill_file():
 
 @pytest.mark.parametrize(
     "skill_name",
-    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests"],
+    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests", "code-coverage"],
 )
 def test_skill_has_runnable_usage_example(skill_name: str):
     """Every skill must include at least one `pql-test <command>` example."""
@@ -307,7 +339,7 @@ def test_skill_has_runnable_usage_example(skill_name: str):
 
 @pytest.mark.parametrize(
     "skill_name",
-    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests"],
+    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests", "code-coverage"],
 )
 def test_skill_does_not_reference_removed_local_flag(skill_name: str):
     """The --local flag was removed; no skill should mention it as a valid flag."""
@@ -321,7 +353,7 @@ def test_skill_does_not_reference_removed_local_flag(skill_name: str):
 
 @pytest.mark.parametrize(
     "skill_name",
-    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests"],
+    ["check-prereqs", "retrieve-tests", "retrieve-test", "run-tests", "code-coverage"],
 )
 def test_skill_only_uses_real_command_names(skill_name: str):
     """Any `pql-test <word>` reference must be a real CLI command."""

@@ -1,0 +1,54 @@
+table Fact_Table
+	lineageTag: 035c3446-bae4-4b42-81de-28904b606da2
+
+	measure Measure
+		lineageTag: 30a5954c-c7d8-459f-9412-a61bbb9684a8
+
+	column 'Fact ID'
+		dataType: int64
+		formatString: 0
+		lineageTag: aff873cb-2246-4aa7-94bd-2a65c0abf90c
+		summarizeBy: count
+		sourceColumn: Fact ID
+
+		annotation SummarizationSetBy = Automatic
+
+	column Value
+		dataType: int64
+		formatString: 0
+		lineageTag: 054698e8-19a6-4a10-ac9c-5c4e6c5d4147
+		summarizeBy: sum
+		sourceColumn: Value
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Is Open'
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: a8cdc9d1-b0c8-4707-a72a-63c30daf5ecd
+		summarizeBy: none
+		sourceColumn: Is Open
+
+		annotation SummarizationSetBy = Automatic
+
+	column 'Date ID'
+		dataType: string
+		lineageTag: 50ff5fb7-5a59-48a2-a1cb-c296dc09e668
+		summarizeBy: none
+		sourceColumn: Date ID
+
+		annotation SummarizationSetBy = Automatic
+
+	partition Fact_Table = m
+		mode: import
+		source =
+				let
+				    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText("i45WMlTSAeO0xJziVCBtpBSrEw0kdcAYJmqoFBsLAA==", BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type nullable text) meta [Serialized.Text = true]) in type table [#"Fact ID" = _t, Value = _t, #"Is Open" = _t, #"Date ID" = _t]),
+				    #"Changed Type" = Table.TransformColumnTypes(Source,{{"Fact ID", Int64.Type}, {"Value", Int64.Type}, {"Is Open", type logical}})
+				in
+				    #"Changed Type"
+
+	annotation PBI_ResultType = Table
+
+	annotation PBI_NavigationStepName = Navigation
+

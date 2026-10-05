@@ -60,6 +60,7 @@ Environment variables (loaded from .env when python-dotenv is installed):
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -86,6 +87,9 @@ from pql_test.runner import (
     PqlTest,
     TestSuite,
     XmlaConnectionOptions,
+    category_counts,
+    collect_coverage,
+    coverage_report_to_dict,
     get_pbi_files_opened,
     has_pyadomd,
     parse_model_identifier,
@@ -95,7 +99,20 @@ from pql_test.runner import (
     retrieve_test_by_name,
     retrieve_tests,
     run_tests_from_model,
+    summarize_coverage,
 )
+from pql_test.runner.cli_format import (
+    STATUS_COLORS,
+    banner,
+    pad,
+    table_bottom,
+    table_mid,
+    table_row,
+    table_top,
+    truncate,
+)
+from pql_test.runner.coverage_collector import CoverageReport
+from pql_test.runner.coverage_report import CoverageSummary, coverage_percent, coverage_status
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -231,19 +248,8 @@ def _print_results(
     environment: str | None = None,
 ) -> None:
     """Print test results in a pytest-style format."""
-    width = 72
 
-    def _sep(title: str = "", char: str = "=", fg: str | None = None) -> str:
-        if not title:
-            line = char * width
-        else:
-            inner = f" {title} "
-            left = max(0, (width - len(inner)) // 2)
-            right = max(0, width - left - len(inner))
-            line = char * left + inner + char * right
-        return click.style(line, fg=fg) if fg else line
-
-    click.echo("\n" + _sep("test session starts"))
+    click.echo("\n" + banner("test session starts"))
     click.echo(f"model: {suite.model_path}")
     click.echo("")
 
@@ -273,41 +279,24 @@ def _print_results(
             min(SUITE_MAX, max(len(sn) for sn in by_suite)),
         )
 
-        def _trunc(s: str, n: int) -> str:
-            return s if len(s) <= n else s[: n - 1] + "…"
-
-        def _pad(text: str, width: int, align: str = "left") -> str:
-            return text.rjust(width) if align == "right" else text.ljust(width)
-
-        def _row(c1: str, c2: str, c3: str, c4: str, c5: str) -> str:
-            # Each cell gets 1 space of inner padding on each side.
-            return f"│ {c1} │ {c2} │ {c3} │ {c4} │ {c5} │"
-
-        def _hline(left: str, mid: str, right: str) -> str:
-            parts = [
-                "─" * (STATUS_W + 2),
-                "─" * (suite_width + 2),
-                "─" * (COUNT_W + 2),
-                "─" * (COUNT_W + 2),
-                "─" * (COUNT_W + 2),
-            ]
-            return left + mid.join(parts) + right
+        widths = [STATUS_W, suite_width, COUNT_W, COUNT_W, COUNT_W]
 
         # ---- top border + header row ----
-        click.echo(_hline("┌", "┬", "┐"))
+        click.echo(table_top(widths))
         click.echo(
-            _row(
-                _pad("Stat", STATUS_W),
-                _pad("Suite", suite_width),
-                _pad("Pass", COUNT_W),
-                _pad("Fail", COUNT_W),
-                _pad("Skip", COUNT_W),
+            table_row(
+                [
+                    pad("Stat", STATUS_W),
+                    pad("Suite", suite_width),
+                    pad("Pass", COUNT_W),
+                    pad("Fail", COUNT_W),
+                    pad("Skip", COUNT_W),
+                ]
             )
         )
-        click.echo(_hline("├", "┼", "┤"))
+        click.echo(table_mid(widths))
 
         # ---- data rows ----
-        tag_color = {"PASS": "green", "FAIL": "red", "SKIP": "yellow"}
         for sn, results in by_suite.items():
             n_pass = sum(1 for r in results if r.passed and not r.skipped)
             n_fail = sum(1 for r in results if not r.passed and not r.skipped)
@@ -321,37 +310,37 @@ def _print_results(
             # Pad cells using the raw text length first; THEN colorize so
             # ANSI escape codes stay outside the visible-width math and
             # don't break alignment with the borders.
-            stat_cell = click.style(_pad(tag, STATUS_W), fg=tag_color[tag])
-            suite_cell = _pad(_trunc(sn, suite_width), suite_width)
+            stat_cell = click.style(pad(tag, STATUS_W), fg=STATUS_COLORS[tag])
+            suite_cell = pad(truncate(sn, suite_width), suite_width)
             pass_str = str(n_pass) if n_pass else "-"
             fail_str = str(n_fail) if n_fail else "-"
             skip_str = str(n_skip) if n_skip else "-"
-            pass_cell = _pad(pass_str, COUNT_W, align="right")
+            pass_cell = pad(pass_str, COUNT_W, align="right")
             # Tint Fail red and Skip yellow when non-zero so the eye snaps
             # to the actionable cells.
-            fail_cell = _pad(fail_str, COUNT_W, align="right")
+            fail_cell = pad(fail_str, COUNT_W, align="right")
             if n_fail:
-                fail_cell = click.style(fail_cell, fg="red")
-            skip_cell = _pad(skip_str, COUNT_W, align="right")
+                fail_cell = click.style(fail_cell, fg=STATUS_COLORS["FAIL"])
+            skip_cell = pad(skip_str, COUNT_W, align="right")
             if n_skip:
-                skip_cell = click.style(skip_cell, fg="yellow")
-            click.echo(_row(stat_cell, suite_cell, pass_cell, fail_cell, skip_cell))
+                skip_cell = click.style(skip_cell, fg=STATUS_COLORS["SKIP"])
+            click.echo(table_row([stat_cell, suite_cell, pass_cell, fail_cell, skip_cell]))
 
-        click.echo(_hline("└", "┴", "┘"))
+        click.echo(table_bottom(widths))
         click.echo("")
 
         # ---- verbose: per-suite expansion of every assertion ----
         if verbose:
-            click.echo(_sep("Details", "-"))
+            click.echo(banner("Details", "-"))
             for sn, results in by_suite.items():
                 click.echo(f"\n  {click.style(sn, bold=True)}")
                 for r in results:
                     if r.skipped:
-                        rtag = click.style("SKIP", fg="yellow")
+                        rtag = click.style("SKIP", fg=STATUS_COLORS["SKIP"])
                     elif r.passed:
-                        rtag = click.style("PASS", fg="green")
+                        rtag = click.style("PASS", fg=STATUS_COLORS["PASS"])
                     else:
-                        rtag = click.style("FAIL", fg="red")
+                        rtag = click.style("FAIL", fg=STATUS_COLORS["FAIL"])
                     rline = f"    {rtag} {r.test_name}"
                     if r.message:
                         rline += f" -- {r.message}"
@@ -365,7 +354,7 @@ def _print_results(
     # everything else, the user opts in with --verbose.
     if verbose:
         if failures:
-            click.echo(_sep("FAILURES", "-", fg="red"))
+            click.echo(banner("FAILURES", "-", fg=STATUS_COLORS["FAIL"]))
             # Group failures by suite so related failures cluster together —
             # much easier to scan than a flat list when several suites fail.
             failures_by_suite: dict[str, list] = {}
@@ -375,10 +364,10 @@ def _print_results(
             for sn, fs in failures_by_suite.items():
                 click.echo(
                     f"\n  {click.style(sn, bold=True)}  "
-                    f"({click.style(f'{len(fs)} failed', fg='red')})"
+                    f"({click.style(f'{len(fs)} failed', fg=STATUS_COLORS['FAIL'])})"
                 )
                 for r in fs:
-                    mark = click.style("✗", fg="red")
+                    mark = click.style("✗", fg=STATUS_COLORS["FAIL"])
                     msg = r.message or ""
                     if msg:
                         click.echo(f"    {mark} {r.test_name} — {msg}")
@@ -399,16 +388,16 @@ def _print_results(
                 seen.add(msg)
 
         if warn_msgs:
-            click.echo(_sep("warnings summary", "-", fg="yellow"))
+            click.echo(banner("warnings summary", "-", fg=STATUS_COLORS["SKIP"]))
             for msg in warn_msgs:
-                click.echo(f"  {click.style('WARN', fg='yellow')} {msg}")
+                click.echo(f"  {click.style('WARN', fg=STATUS_COLORS['SKIP'])} {msg}")
             click.echo("")
 
     # When discovery returned nothing, make it obvious instead of producing
     # a confusing "0 passed, 0 failed, 0 total" line that looks like success.
     # See tasks/surface-silent-test-discovery-failures-epic.md.
     if suite.total == 0:
-        click.echo(_sep("No tests found.", fg="yellow"))
+        click.echo(banner("No tests found.", fg=STATUS_COLORS["SKIP"]))
         causes = (
             "  Possible causes:\n"
             "    • The model has no PQL.Assert tests defined.\n"
@@ -422,7 +411,7 @@ def _print_results(
                 f"(expected names like <Suite>.{environment}.Tests)."
             )
         click.echo(causes)
-        click.echo(_sep("0 passed, 0 failed, 0 total", fg="yellow"))
+        click.echo(banner("0 passed, 0 failed, 0 total", fg=STATUS_COLORS["SKIP"]))
         return
 
     summary = f"{suite.passed} passed, {suite.failed} failed, {suite.total} total"
@@ -431,12 +420,12 @@ def _print_results(
         summary += f", {suite.skipped} warning{plural}"
 
     if suite.failed > 0:
-        summary_color = "red"
+        summary_color = STATUS_COLORS["FAIL"]
     elif suite.skipped > 0:
-        summary_color = "yellow"
+        summary_color = STATUS_COLORS["SKIP"]
     else:
-        summary_color = "green"
-    click.echo(_sep(summary, fg=summary_color))
+        summary_color = STATUS_COLORS["PASS"]
+    click.echo(banner(summary, fg=summary_color))
 
 
 def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
@@ -1128,6 +1117,251 @@ def cmd_run_tests(
     has_failures = suite.failed > 0
     all_skipped = suite.total > 0 and suite.skipped == suite.total
     sys.exit(1 if has_failures or all_skipped else 0)
+
+
+# ---------------------------------------------------------------------------
+# code-coverage
+# ---------------------------------------------------------------------------
+
+def _print_coverage_report(
+    report: CoverageReport,
+    summary: CoverageSummary,
+    verbose: bool,
+    ident_kind: str = "path",
+    min_coverage: float | None = None,
+) -> None:
+    if report.connection:
+        label = "Local XMLA connection" if ident_kind == "local" else "XMLA connection"
+        click.echo(f"\n{label}: {report.connection.server} / catalog: {report.connection.catalog}")
+
+    click.echo("\n" + banner("coverage session starts"))
+    click.echo(f"model: {report.model_path}")
+    click.echo("")
+    click.echo(f"Tests discovered: {report.test_count}")
+    if report.test_count == 0:
+        click.echo(
+            "No tests discovered. If PQL.Assert isn't installed in this "
+            "model, coverage cannot be measured until it is (see any "
+            "discovery warning above)."
+        )
+    overall_color = STATUS_COLORS[coverage_status(summary.percent, min_coverage)]
+    overall = f"{summary.covered}/{summary.eligible} covered ({summary.percent}%)"
+    click.echo(f"\nOverall: {click.style(overall, fg=overall_color)}")
+
+    counts = category_counts(report)
+    excluded_counts: dict = {}
+    for exclusion in report.result.excluded:
+        excluded_counts[exclusion.object_type] = excluded_counts.get(exclusion.object_type, 0) + 1
+    all_types = sorted(set(counts) | set(excluded_counts), key=lambda t: t.value)
+
+    if all_types:
+        # Build (name, covered_str, eligible_str, pct_str, color) rows first so
+        # column widths -- including the "%" column, which must also fit
+        # "excluded (N)" -- can be sized from the actual data.
+        rows: list[tuple[str, str, str, str, str | None]] = []
+        for object_type in all_types:
+            covered, eligible = counts.get(object_type, (0, 0))
+            excluded_n = excluded_counts.get(object_type, 0)
+            if eligible:
+                pct = coverage_percent(covered, eligible)
+                color = STATUS_COLORS[coverage_status(pct, min_coverage)]
+                rows.append((object_type.value, str(covered), str(eligible), f"{pct}%", color))
+            elif excluded_n:
+                rows.append((object_type.value, "-", "-", f"excluded ({excluded_n})", None))
+            else:
+                rows.append((object_type.value, "0", "0", "-", None))
+
+        CAT_W = max(len("Category"), max(len(r[0]) for r in rows))
+        COVERED_W = len("Covered")
+        ELIGIBLE_W = len("Eligible")
+        PCT_W = max(len("%"), max(len(r[3]) for r in rows))
+        widths = [CAT_W, COVERED_W, ELIGIBLE_W, PCT_W]
+
+        click.echo("\nBy category:")
+        click.echo(table_top(widths))
+        click.echo(
+            table_row(
+                [
+                    pad("Category", CAT_W),
+                    pad("Covered", COVERED_W, align="right"),
+                    pad("Eligible", ELIGIBLE_W, align="right"),
+                    pad("%", PCT_W, align="right"),
+                ]
+            )
+        )
+        click.echo(table_mid(widths))
+        for name, covered_s, eligible_s, pct_s, color in rows:
+            pct_cell = pad(pct_s, PCT_W, align="right")
+            if color:
+                pct_cell = click.style(pct_cell, fg=color)
+            click.echo(
+                table_row(
+                    [
+                        pad(name, CAT_W),
+                        pad(covered_s, COVERED_W, align="right"),
+                        pad(eligible_s, ELIGIBLE_W, align="right"),
+                        pct_cell,
+                    ]
+                )
+            )
+        click.echo(table_bottom(widths))
+
+    if report.unavailable:
+        click.echo("\nUnavailable categories (not counted as covered or uncovered):")
+        for u in report.unavailable:
+            click.echo(f"  {u.object_type.value} — {u.reason}")
+
+    if verbose:
+        if report.result.covered:
+            click.echo("\nCovered objects:")
+            for e in sorted(report.result.covered, key=lambda e: (e.object_type.value, e.identifier)):
+                click.echo(f"  {e.object_type.value} {e.identifier} — tested by: {', '.join(e.test_names)}")
+        if report.result.gaps:
+            click.echo("\nUncovered objects (AI test targets):")
+            for g in sorted(report.result.gaps, key=lambda g: (g.object_type.value, g.identifier)):
+                click.echo(f"  {g.object_type.value} {g.identifier} — {g.test_target_hint}")
+        if report.result.excluded:
+            click.echo("\nExcluded objects:")
+            for ex in sorted(report.result.excluded, key=lambda e: (e.object_type.value, e.identifier)):
+                click.echo(f"  {ex.object_type.value} {ex.identifier} — {ex.reason}")
+
+
+def _validate_finite_min_coverage(
+    ctx: click.Context, param: click.Parameter, value: float | None
+) -> float | None:
+    """Reject non-finite --min-coverage values that FloatRange(0, 100) lets through.
+
+    math.nan compares False against both bounds, so click.FloatRange(0, 100)
+    accepts "nan" even though the skill promises malformed thresholds fail
+    before any XMLA query; the later ``summary.percent < min_coverage``
+    check is also False for NaN, which would silently report success.
+    """
+    if value is not None and math.isnan(value):
+        raise click.BadParameter("must be a finite number between 0 and 100", ctx=ctx, param=param)
+    return value
+
+
+@cli.command("code-coverage")
+@click.argument("model_path", metavar="MODEL_PATH")
+@click.option(
+    "--verbose", "-v", is_flag=True,
+    help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
+)
+@click.option(
+    "--format", "output_format",
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    default="text",
+    help="Output format: human-readable text (default) or a stable JSON report.",
+)
+@click.option(
+    "--output", "output",
+    default=None, metavar="FILE",
+    help="Write the JSON report to FILE. Requires --format json.",
+)
+@click.option(
+    "--min-coverage", "min_coverage",
+    type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
+    callback=_validate_finite_min_coverage,
+    help="Exit non-zero when overall eligible coverage is below PERCENT.",
+)
+@conn_options
+def cmd_code_coverage(
+    model_path: str,
+    verbose: bool,
+    output_format: str,
+    output: str | None,
+    min_coverage: float | None,
+    tenant_id: str | None,
+    workspace_id: str | None,
+    dataset_id: str | None,
+    client_id: str | None,
+    client_secret: str | None,
+) -> None:
+    """Report direct test-UDF coverage for a PBIP model via XMLA.
+
+    A calculated column, measure, or table counts as covered only when a
+    discovered test UDF has a direct INFO.CALCDEPENDENCY() edge to it; a
+    relationship or role only from evidence explicitly attributable to a
+    discovered test UDF (a parsed PQL.Assert.Relationship.ShouldExist call,
+    or the test's PQLAssert_RoleName annotation). Partitions have no
+    PQL.Assert assertion surface and are always excluded — never counted
+    covered or uncovered. See
+    tasks/direct-udf-code-coverage-metadata-contract.md for the full
+    contract and its limits.
+
+    MODEL_PATH accepts the same three formats as run-tests: a filesystem
+    PBIP path, local/<model_name>, or the Fabric-style service path.
+
+    \b
+    Examples:
+      pql-test code-coverage local/SampleModel
+      pql-test code-coverage ../examples/SampleModel.SemanticModel --verbose
+      pql-test code-coverage local/SampleModel --format json --output coverage.json
+      pql-test code-coverage local/SampleModel --min-coverage 60
+    """
+    output_format = output_format.lower()
+    if output and output_format != "json":
+        raise click.UsageError("--output requires --format json.")
+
+    ident = parse_model_identifier(model_path)
+    opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
+    abs_path = model_path
+
+    if ident.kind not in ("local", "service"):
+        # Traditional filesystem path — fail clearly instead of falling
+        # through to the generic "No XMLA connection detected" message,
+        # matching cmd_run_tests/cmd_retrieve_tests/cmd_retrieve_test.
+        abs_path = str(Path(model_path).resolve())
+        if not Path(abs_path).exists():
+            click.echo(f"Error: Model path not found: {abs_path}", err=True)
+            sys.exit(1)
+
+        # Derive the dataset display name from the .SemanticModel directory
+        # stem, same as cmd_run_tests, so the resolver can look it up by
+        # name when no --dataset-id is provided.
+        if not opts.dataset_id and not opts.dataset_name:
+            _sem_name = Path(abs_path).name
+            if _sem_name.endswith(".SemanticModel"):
+                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+
+    report = collect_coverage(abs_path, opts)
+    if report is None:
+        click.echo(
+            f"Error: No XMLA connection detected for '{model_path}'. "
+            "Pass local/<model_name> with the model open in Power BI Desktop, "
+            "or supply --tenant-id, --workspace-id, and --dataset-id "
+            "(or --tenant-id, --client-id, --client-secret with the canonical "
+            "<workspace>.Workspace/<model>.SemanticModel path).",
+            err=True,
+        )
+        sys.exit(1)
+
+    summary = summarize_coverage(report)
+
+    if output_format == "json":
+        payload = coverage_report_to_dict(report)
+        text = json.dumps(payload, indent=2)
+        if output:
+            Path(output).write_text(text, encoding="utf-8")
+            click.echo(f"Coverage report written to: {output}")
+        else:
+            click.echo(text)
+    else:
+        _print_coverage_report(report, summary, verbose, ident.kind, min_coverage)
+
+    if min_coverage is not None:
+        if summary.percent < min_coverage:
+            click.echo(
+                f"\nError: coverage {summary.percent}% is below the required {min_coverage}% threshold.",
+                err=True,
+            )
+            sys.exit(1)
+        # Mirror pytest-cov's "Required test coverage of N% reached" so CI logs
+        # show the gate was evaluated. Goes to stderr when JSON is on stdout.
+        click.echo(
+            f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%",
+            err=output_format == "json" and not output,
+        )
 
 
 # ---------------------------------------------------------------------------

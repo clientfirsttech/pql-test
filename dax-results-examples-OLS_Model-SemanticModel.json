@@ -1,8 +1,0 @@
-pql-test run-tests examples/OLS_Model.SemanticModel --log-format github --output dax-results-examples-OLS_Model-SemanticModel.json  --local{
-  "model_path": "C:\\Users\\giorg\\Downloads\\pql-test\\pql-test\\examples\\OLS_Model.SemanticModel",
-  "passed": 0,
-  "failed": 0,
-  "skipped": 0,
-  "total": 0,
-  "results": []
-}

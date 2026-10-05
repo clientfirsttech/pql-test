@@ -21,6 +21,14 @@ venv/
 # pytest
 .pytest_cache/
 
+# Local ad-hoc test/debug run artifacts (repo root only)
+/pytest-summary.txt
+/pytest-exitcode.txt
+/tmp-failing-*.txt
+/test.json
+/dax-results-examples-*.json
+/gitleaks-*-report.json
+
 # promptfoo eval runtime artifacts
 tests/promptfoo/results.json
 tests/promptfoo/.promptfoo/
