@@ -1,7 +1,7 @@
 ---
 name: code-coverage
 description: Report direct test-UDF coverage for a PBIP semantic model — which calculated columns, measures, tables, relationships, partitions, and roles have a discovered DAX test UDF directly evidencing them, plus AI-ready gap hints for the rest.
-version: 0.1.18b1
+version: 0.1.18
 ---
 
 Run `pql-test code-coverage MODEL_PATH` to report which model objects have direct test-UDF evidence and which don't, so an AI agent or developer can prioritize missing tests.
