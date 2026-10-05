@@ -3,7 +3,15 @@ Business Source License 1.1
 Licensor:             Client First Technologies
 Licensed Work:        pql-test
                       The Licensed Work is (c) 2026 Client First Technologies
-Additional Use Grant: None
+Additional Use Grant: You may make production use of the Licensed Work,
+                      including using it to test, validate, or monitor
+                      Power BI / Microsoft Fabric semantic models in a
+                      production environment, provided that you do not
+                      offer the Licensed Work, or any derivative work of
+                      the Licensed Work, to third parties on a hosted,
+                      managed, or embedded basis as a product or service
+                      that competes with any current or future commercial
+                      offering of the Licensor.
 Change Date:          Four years from the date the Licensed Work is published
 Change License:       GNU Affero General Public License v3.0
 

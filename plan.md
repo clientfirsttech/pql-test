@@ -120,7 +120,7 @@
 - **[python/pyproject.toml](python/pyproject.toml)** polished for PyPI: PEP 639 SPDX form (`license = "BUSL-1.1"` + `license-files`), explicit `authors`/`maintainers`, ten classifiers including the `Operating System :: Microsoft :: Windows` constraint that reflects pyadomd's reality, `[project.urls]` block, expanded `dev` extras to include `build` + `twine`, `setuptools>=77` requirement (for PEP 639 support).  No `License :: OSI Approved :: ...` classifier — BSL 1.1 is source-available, not OSI-approved.
 - **Release workflow added** — [.github/workflows/release.yml](.github/workflows/release.yml) uses PyPI Trusted Publishing (OIDC) instead of stored tokens.  Tag-triggered for real PyPI, workflow_dispatch for TestPyPI rehearsal.  Includes a tag-vs-pyproject version guard that fails fast on mismatch.
 - **Release checklist** added to [CONTRIBUTING.md](CONTRIBUTING.md) covering version bump, optional TestPyPI rehearsal, tagging, and post-publish smoke test.
-- `README.md` and `LICENSE.txt` copied into `python/` so setuptools can find them at build time without restructuring the repo.  Both copies stay in sync via the release checklist (manual until/unless we automate it).
+- `README.md` and `LICENSE.txt` copied into `python/` so setuptools can find them at build time without restructuring the repo.  Both copies must stay byte-identical to the repo-root originals; [python/tests/test_readme_sync.py](python/tests/test_readme_sync.py) fails the build when they drift.
 
 ### 2026-05-27 — Open-items + local-mode hardening
 
