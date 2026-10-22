@@ -35,6 +35,12 @@
 
 ## Completed Work
 
+### 2026-10-22 — certifi floor for PYSEC-2026-4320, bump to 0.1.20
+
+- Added `certifi>=2026.10.19` to [python/pyproject.toml](python/pyproject.toml) and [python/requirements.txt](python/requirements.txt). certifi arrives transitively via `msal`/`azure-core` → `requests`; versions before 2026.10.18 trust the `emSign ECC Root CA - G3` root whose intermediates have compromised keys, which would allow on-path interception of the Entra ID token traffic.
+- virtualenv CVE-2026-113725 / CVE-2026-113722 reviewed: not a dependency, not applicable.
+- Version bumped 0.1.19 → 0.1.20 across all manifests and skills.
+
 ### 2026-09-23 — `--min-coverage` parity with pytest-cov, threshold-aware colors, version alignment
 
 - See [tasks/archive/2026-09-23-min-coverage-parity-version-alignment.md](tasks/archive/2026-09-23-min-coverage-parity-version-alignment.md)
