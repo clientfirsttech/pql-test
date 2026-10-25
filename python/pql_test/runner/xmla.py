@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 XMLA query execution via ADOMD.NET - connection strings and DAX execution.
 

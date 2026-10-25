@@ -63,6 +63,16 @@ dev = [
     "build>=1.0.0",
     "twine>=4.0.0",
 ]
+# `pip install pql-test[contracts]` adds the `pql-test contract ...` commands.
+# pql-odcs is MIT-licensed and versioned separately (packages/pql-odcs/).
+contracts = [
+    "pql-odcs>=0.1,<0.2",
+]
+
+# In the repo's uv workspace, resolve pql-odcs from source instead of PyPI.
+# pip and setuptools ignore this table.
+[tool.uv.sources]
+pql-odcs = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["."]

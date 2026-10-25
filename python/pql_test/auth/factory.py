@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Credential factory for creating azure.identity credential objects.
 """

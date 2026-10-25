@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """Mode A skill content assertions.
 
 Verifies each SKILL.md documents the actual CLI surface so LLMs never receive

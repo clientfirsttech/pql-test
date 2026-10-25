@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Test discovery - find DAX test suites via XMLA or filesystem.
 

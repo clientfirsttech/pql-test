@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 CLI integration tests for pql_test_cli.
 

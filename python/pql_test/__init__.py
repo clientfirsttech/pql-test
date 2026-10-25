@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """pql_test package — DAX test runner for PBIP semantic models."""
 
 from __future__ import annotations

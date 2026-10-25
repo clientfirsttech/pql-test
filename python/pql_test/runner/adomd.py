@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 ADOMD.NET assembly loading and auto-install.
 

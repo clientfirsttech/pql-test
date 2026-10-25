@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """Tests for name-based dataset resolution (no GUID required).
 
 Previously the CLI required ``--dataset-id <guid>`` to talk to the Power

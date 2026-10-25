@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 XMLA-backed direct test-UDF coverage collection.
 

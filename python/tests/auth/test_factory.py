@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests for pql_test.auth.factory — Credential factory for azure.identity.
 """

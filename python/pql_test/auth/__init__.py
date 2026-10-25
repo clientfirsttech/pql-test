@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 pql_test.auth package — Authentication management for pql-test.
 

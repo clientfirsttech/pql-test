@@ -20,7 +20,7 @@ Create `packages/pql-odcs/` as its own package, and a root uv workspace that lin
 
 **Requirements**:
 - Given `uv sync` at the repo root, should install both packages editable, with pql-test resolving pql-odcs from `packages/pql-odcs/` rather than PyPI
-- Given the pql-odcs `pyproject.toml`, should declare `license = "MIT"`, `license-files = ["LICENSE"]`, `requires-python = ">=3.9"`, and runtime dependencies limited to PyYAML, jsonschema, and click
+- Given the pql-odcs `pyproject.toml`, should declare `license = "MIT"`, `license-files = ["LICENSE", "NOTICE"]`, `requires-python = ">=3.9"`, and runtime dependencies limited to PyYAML, jsonschema, and click
 - Given the existing pip-based CI (`cd python && pip install -e .`), should keep working unchanged with no uv on the runner
 - Given the version-alignment test, should pass unchanged, because pql-odcs versions independently and adds no SKILL.md under `skills/` or `python/pql_test/skills/`
 
@@ -91,7 +91,7 @@ Map the `rowCount` library metric with all its v0.1 comparators.
 
 **Requirements**:
 - Given `rowCount mustBeGreaterThan 0`, should emit `Tbl.ShouldHaveRows`, not `ShouldHaveMoreRowsThan(0)`
-- Given `mustBe n` or `mustBeGreaterThan n`, should emit `Tbl.ShouldHaveRowCount` or `Tbl.ShouldHaveMoreRowsThan`, with arguments in catalog order (threshold before table)
+- Given `mustBe n` or `mustBeGreaterThan n`, should emit `Tbl.ShouldHaveRowCount` (table, then count) or `Tbl.ShouldHaveMoreRowsThan` (threshold, then table), with argument order taken from the catalog, which follows PQL.Assert 0.7.1's `functions.tmdl`
 - Given `mustBeLessThan`, `mustBeLessOrEqualTo`, `mustBeGreaterOrEqualTo`, `mustNotBe`, or `mustBeBetween`, should emit the matching comparator over `COUNTROWS`
 - Given `mustNotBeBetween`, should be SKIPPED with a reason naming fallback R2 / v0.2
 

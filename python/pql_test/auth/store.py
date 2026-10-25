@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Secure credential storage using platform keyring.
 """

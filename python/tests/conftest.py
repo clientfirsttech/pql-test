@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """Shared pytest fixtures for pql-test tests."""
 
 from __future__ import annotations

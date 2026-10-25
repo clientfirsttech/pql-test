@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Live integration test pinning direct test-UDF coverage evidence for
 SampleModel against tasks/direct-udf-code-coverage-metadata-contract.md.

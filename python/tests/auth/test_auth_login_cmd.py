@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests for ``pql-test auth login`` — specifically the
 ``AuthenticationRecord`` capture-and-store path added by

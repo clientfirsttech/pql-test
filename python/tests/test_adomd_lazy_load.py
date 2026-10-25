@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests that ADOMD.NET loading is deferred until first XMLA use.
 

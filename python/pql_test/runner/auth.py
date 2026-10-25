@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Authentication credential resolution and stored credentials bridge.
 

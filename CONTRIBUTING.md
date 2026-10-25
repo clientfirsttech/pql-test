@@ -13,7 +13,9 @@ smoke test in about 15 minutes.
 
 ```
 pql-test/
-├── python/                     ← the Python package (canonical source)
+├── pyproject.toml              ← uv workspace root only (members: python, packages/pql-odcs)
+├── LICENSES.md                 ← which license covers which path
+├── python/                     ← pql-test (BUSL-1.1)
 │   ├── pql_test/               ← CLI implementation
 │   │   ├── cli.py              ← entry point (`pql-test` command)
 │   │   ├── runner.py           ← XMLA + test discovery + execution
@@ -21,6 +23,7 @@ pql-test/
 │   ├── tests/                  ← pytest suite (mocked + live integration)
 │   ├── pyproject.toml          ← single source of truth for version & deps
 │   └── .env.example            ← copy to .env for service-mode credentials
+├── packages/pql-odcs/          ← pql-odcs (MIT): ODCS contracts → PQL.Assert suites
 ├── examples/                   ← three example PBIP models (see "Examples")
 ├── ai/                         ← aidd skills, commands, scaffolds (not shipped)
 ├── tasks/                      ← epic/task documents (historical context)
@@ -29,8 +32,44 @@ pql-test/
 └── README.md                   ← user-facing documentation
 ```
 
-There is **no** package source outside `python/`. The CI workflow installs from
+pql-test's source lives only in `python/`. The CI workflow installs from
 `./python` (`pip install ./python`); local installs do the same with `-e`.
+`packages/pql-odcs/` is a separate, MIT-licensed package with its own version
+and release tag. See [Contributing to pql-odcs](#contributing-to-pql-odcs-mit).
+
+---
+
+## Contributing to pql-odcs (MIT)
+
+`packages/pql-odcs/` is licensed under MIT, and the rest of the repository under
+BUSL-1.1 ([LICENSES.md](LICENSES.md)). Keeping that boundary clean is a hard rule:
+
+- **Never import, copy, or adapt pql-test code** in `packages/pql-odcs/`. That
+  includes `cli_format.py` and the result-JSON parser. pql-odcs knows two things
+  about pql-test, both as data: PQL.Assert function signatures in
+  `src/pql_odcs/catalog/`, and the `--output` JSON shape documented in README.md.
+- **Start every `.py` file with an SPDX header**:
+  `# SPDX-License-Identifier: MIT` under `packages/pql-odcs/`, and
+  `# SPDX-License-Identifier: BUSL-1.1` under `python/`. CI rejects files that
+  are missing the header or carry the wrong one.
+- **Sign off every commit** that touches `packages/pql-odcs/` with the
+  [Developer Certificate of Origin](https://developercertificate.org/):
+  `git commit -s`. The sign-off certifies that you have the right to submit the
+  change under MIT.
+- **Expect a CODEOWNERS review.** Every change under `packages/pql-odcs/` needs
+  approval from a pql-odcs maintainer ([.github/CODEOWNERS](.github/CODEOWNERS)).
+
+Develop both packages together with uv. From the repo root:
+
+```powershell
+uv sync                                       # one .venv; pql-test resolves pql-odcs from source
+.\.venv\Scripts\pytest packages/pql-odcs      # pql-odcs suite (no Power BI needed)
+.\.venv\Scripts\lint-imports --config packages/pql-odcs/pyproject.toml  # license import boundary
+```
+
+pql-odcs is versioned in `packages/pql-odcs/pyproject.toml` and recorded in its
+`CHANGELOG.md`. It is released from `pql-odcs-vX.Y.Z` tags and is **not** part of
+the pql-test version bump.
 
 ---
 

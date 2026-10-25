@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Text/JSON presentation for direct test-UDF coverage reports.
 

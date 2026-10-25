@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Power BI REST API helpers for workspace and dataset resolution.
 

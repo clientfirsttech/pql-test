@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Live integration tests that query an actual Power BI / Fabric XMLA endpoint.
 

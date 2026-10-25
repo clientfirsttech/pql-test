@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Cloud environment configuration for sovereign clouds.
 """

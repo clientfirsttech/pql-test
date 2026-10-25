@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Unit tests for [python/pql_test/runner/coverage_collector.py](../pql_test/runner/coverage_collector.py).
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Integration tests for the bridge between the auth subsystem
 (`pql_test.auth.*`) and the runtime XMLA execution path

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests for environment-specific test discovery (--env / environment=...).
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Unit tests for [python/pql_test/runner/cli_format.py](../pql_test/runner/cli_format.py).
 

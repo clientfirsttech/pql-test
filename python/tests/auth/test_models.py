@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests for pql_test.auth.models — Data models for authentication configuration.
 """

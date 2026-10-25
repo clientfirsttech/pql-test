@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """Tests that XMLA impersonation parameters compose with bearer-token auth.
 
 Symptom this guards against: ``pql-test run-tests`` against a service XMLA

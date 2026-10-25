@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Local Power BI Desktop detection and connection resolution.
 

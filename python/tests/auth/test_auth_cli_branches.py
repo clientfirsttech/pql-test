@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 Tests for the ``pql-test auth`` CLI subcommands — branch coverage.
 

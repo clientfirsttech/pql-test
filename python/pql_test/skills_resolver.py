@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """Skill file resolution for pql-test.
 
 Resolves skill directories from local workspace overrides (skills/) or falls back

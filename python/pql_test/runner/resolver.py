@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BUSL-1.1
 """
 XMLA connection resolution - coordinates auth, local PBI, and service connections.
 
