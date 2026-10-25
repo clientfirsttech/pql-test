@@ -40,13 +40,13 @@ class TestBuildReport:
             rules["T.id.primaryKey"]["functions"],
             rules["T.quality[0]"]["status"],
             bool(rules["T.quality[0]"]["reason"]),
-        ) == ("mapped", 1, ["PQL.Assert.Col.ShouldBeDistinct"], "skipped", True), f"{given}: {should}"
+        ) == ("approximated", 1, ["PQL.Assert.Col.ShouldBeDistinct"], "skipped", True), f"{given}: {should}"
 
     def test_summary_counts_match_the_rules(self):
         given = "a report"
         should = "summarise totals per status"
 
-        assert _report()["summary"] == {"total": 5, "mapped": 3, "approximated": 0, "skipped": 2}, f"{given}: {should}"
+        assert _report()["summary"] == {"total": 5, "mapped": 2, "approximated": 1, "skipped": 2}, f"{given}: {should}"
 
     def test_is_json_serialisable_with_stable_top_level_keys(self):
         given = "a report"

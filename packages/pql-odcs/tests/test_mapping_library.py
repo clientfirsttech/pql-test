@@ -232,3 +232,12 @@ class TestReviewEdgeCases:
         assert (rules["T.s.required"], rules["T.n.required"]) == (Status.APPROXIMATED, Status.MAPPED), (
             f"{given}: {should}"
         )
+
+    def test_primary_key_is_approximated_because_a_blank_can_mask_a_duplicate(self):
+        given = "primaryKey on a column (mapped to Col.ShouldBeDistinct)"
+        should = "be approximated: in PQL.Assert 0.7.1 one blank plus one duplicate still passes"
+        data = contract_dict(schema=[schema_object("T", [prop("id", "integer", primaryKey=True)])])
+
+        outcome = {o.rule_id: o for o in _map_contract(data)}["T.id.primaryKey"]
+
+        assert (outcome.status, "pass" in outcome.reason) == (Status.APPROXIMATED, True), f"{given}: {should}"

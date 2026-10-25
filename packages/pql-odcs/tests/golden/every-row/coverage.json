@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 46,
-    "mapped": 17,
-    "approximated": 2,
+    "mapped": 16,
+    "approximated": 3,
     "skipped": 27
   },
   "rules": [
@@ -53,14 +53,14 @@
     },
     {
       "ruleId": "orders.order_id.primaryKey",
-      "status": "mapped",
+      "status": "approximated",
       "description": "orders.order_id is a primary key (distinct)",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
     },
     {
       "ruleId": "orders.order_id.unique",
@@ -71,7 +71,7 @@
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
     },
     {
       "ruleId": "orders.order_id.type",
@@ -91,7 +91,7 @@
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
     },
     {
       "ruleId": "orders.customer_id.required",
@@ -239,7 +239,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "object and array properties have no semantic model column"
+      "reason": "object, array, map, and vector properties have no semantic model column"
     },
     {
       "ruleId": "orders.relationships[0]",

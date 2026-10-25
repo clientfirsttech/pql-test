@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 17,
-    "mapped": 8,
-    "approximated": 0,
+    "mapped": 7,
+    "approximated": 1,
     "skipped": 9
   },
   "rules": [
@@ -140,14 +140,14 @@
     },
     {
       "ruleId": "DateDim.DateID.primaryKey",
-      "status": "mapped",
+      "status": "approximated",
       "description": "DateDim.DateID is a primary key (distinct)",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
     },
     {
       "ruleId": "DateDim.DateID.type",

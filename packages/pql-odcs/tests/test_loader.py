@@ -66,15 +66,15 @@ class TestLoadContract:
 
 
 class TestVersionGate:
-    @pytest.mark.parametrize("version", ["v3.2.0", "v2.2.2", "v4.0.0"])
-    def test_rejects_versions_outside_3_0_and_3_1(self, version):
+    @pytest.mark.parametrize("version", ["v3.3.0", "v2.2.2", "v4.0.0"])
+    def test_rejects_versions_outside_3_0_to_3_2(self, version):
         given = f"apiVersion {version}"
         should = "fail and name the supported range"
 
         with pytest.raises(ContractError) as exc:
             load_contract(contract_dict(version))
 
-        assert "v3.0.x and v3.1.x" in str(exc.value), f"{given}: {should}"
+        assert "v3.0.x, v3.1.x, and v3.2.x" in str(exc.value), f"{given}: {should}"
 
     def test_missing_api_version_is_an_error(self):
         given = "a contract without apiVersion"
@@ -127,3 +127,23 @@ class TestSchemaValidation:
             load_contract(path)
 
         assert "not valid YAML" in str(exc.value), f"{given}: {should}"
+
+
+class TestOdcs32:
+    def test_loads_a_3_2_contract_without_status(self):
+        given = "an ODCS v3.2.0 contract without `status` (optional since 3.2)"
+        should = "validate against the bundled 3.2.0 schema"
+        data = contract_dict("v3.2.0", schema=[schema_object("T", [prop("c")])])
+        del data["status"]
+
+        assert load_contract(data).api_version == "3.2.0", f"{given}: {should}"
+
+    def test_3_2_only_fields_are_rejected_in_a_3_1_contract(self):
+        given = "a v3.1.0 contract using the 3.2-only property `enum`"
+        should = "fail validation, because each version is checked against its own schema"
+        data = contract_dict(schema=[schema_object("T", [prop("c", enum=[{"value": "a"}])])])
+
+        with pytest.raises(ContractError) as exc:
+            load_contract(data)
+
+        assert "enum" in str(exc.value), f"{given}: {should}"

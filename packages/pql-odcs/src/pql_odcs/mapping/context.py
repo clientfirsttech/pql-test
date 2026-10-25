@@ -10,6 +10,9 @@ from pql_odcs.ir import Assertion, RuleOutcome, Status
 from pql_odcs.loader import Contract
 from pql_odcs.naming import NameResolver
 
+# Logical types with no single semantic model column (map and vector arrive in ODCS 3.2).
+NON_COLUMN_TYPES = ("object", "array", "map", "vector")
+
 
 @dataclass(frozen=True)
 class MapContext:
@@ -20,7 +23,7 @@ class MapContext:
 
 def is_column(prop: Mapping) -> bool:
     """True when an ODCS property maps to one flat semantic model column."""
-    return prop.get("logicalType") not in ("object", "array") and not prop.get("properties") and not prop.get("items")
+    return prop.get("logicalType") not in NON_COLUMN_TYPES and not prop.get("properties") and not prop.get("items")
 
 
 def mapped(rule_id: str, *assertions: Assertion) -> RuleOutcome:
@@ -35,8 +38,9 @@ def approximated(rule_id: str, reason: str, *assertions: Assertion) -> RuleOutco
 
 
 BLANKS_COUNT_AS_VALUE = (
-    "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), "
-    "so it also fails when the column contains any blank"
+    "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): "
+    "a blank fails an otherwise distinct column, and one blank plus one duplicate still passes "
+    "(PQL.Assert gap plan C4)"
 )
 EMPTY_STRING_IS_BLANK = "DAX treats empty strings as BLANK, so empty strings also count as nulls"
 

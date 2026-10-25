@@ -1326,7 +1326,7 @@ All skills are packaged in the wheel (`pql_test/skills/`) and installed from the
 
 ## Testing against ODCS data contracts
 
-If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0 or v3.1 data contract, `pql-test contract` can generate PQL.Assert test suites from the contract's quality rules. It needs the optional, MIT-licensed [pql-odcs](https://github.com/clientfirsttech/pql-test/blob/main/packages/pql-odcs/README.md) package:
+If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, or v3.2 data contract, `pql-test contract` can generate PQL.Assert test suites from the contract's quality rules. It needs the optional, MIT-licensed [pql-odcs](https://github.com/clientfirsttech/pql-test/blob/main/packages/pql-odcs/README.md) package:
 
 ```bash
 pip install "pql-test[contracts]"

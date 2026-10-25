@@ -91,7 +91,7 @@
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
     },
     {
       "ruleId": "DateDim.Year.type",

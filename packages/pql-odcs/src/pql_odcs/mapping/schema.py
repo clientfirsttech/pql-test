@@ -17,7 +17,7 @@ from pql_odcs.mapping.context import (
     skipped,
 )
 
-NO_COLUMN = "object and array properties have no semantic model column"
+NO_COLUMN = "object, array, map, and vector properties have no semantic model column"
 
 
 def object_rules(ctx: MapContext, obj: Mapping) -> list[RuleOutcome]:
@@ -76,7 +76,7 @@ def property_rules(
                 )
             )
         else:
-            out.append(mapped(rule_id, _distinct(rule_id, target, description)))
+            out.append(approximated(rule_id, BLANKS_COUNT_AS_VALUE, _distinct(rule_id, target, description)))
     if prop.get("unique") is True:
         rule_id = f"{scope}.unique"
         description = f"{scope} is unique"
@@ -115,6 +115,15 @@ def scheduled_property_rules(prop: Mapping, scope: str) -> list[RuleOutcome]:
                 f"{scope}.type",
                 "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)",
                 f"{scope} is {declared}",
+            )
+        )
+    if prop.get("enum"):
+        values = [str(e.get("value")) if isinstance(e, Mapping) else str(e) for e in prop["enum"]]
+        out.append(
+            skipped(
+                f"{scope}.enum",
+                "enum (allowed values, ODCS 3.2) arrives in v0.2 (Col.ValuesShouldBeInSet)",
+                f"{scope} is one of {', '.join(values)}",
             )
         )
     options = prop.get("logicalTypeOptions") or {}

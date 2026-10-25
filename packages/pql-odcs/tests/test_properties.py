@@ -62,7 +62,7 @@ def schema_object(draw):
 @st.composite
 def contracts(draw):
     return {
-        "apiVersion": draw(st.sampled_from(["v3.0.2", "v3.1.0"])),
+        "apiVersion": draw(st.sampled_from(["v3.0.2", "v3.1.0", "v3.2.0"])),
         "kind": "DataContract",
         "id": draw(NAMES),
         "name": draw(NAMES),

@@ -41,6 +41,11 @@ def _walk_property(prop: Mapping, scope: str, top_level: bool) -> Iterator[tuple
     items = prop.get("items")
     if isinstance(items, Mapping):
         yield from _walk_property(items, f"{scope}.items", top_level=False)
+    map_def = prop.get("map")  # ODCS 3.2 map: {key, value}
+    if isinstance(map_def, Mapping):
+        for part in ("key", "value"):
+            if isinstance(map_def.get(part), Mapping):
+                yield from _walk_property(map_def[part], f"{scope}.map.{part}", top_level=False)
 
 
 def _quality_entries(contract: Contract) -> Iterator[tuple[Mapping, Mapping | None, str, int, Mapping, bool]]:

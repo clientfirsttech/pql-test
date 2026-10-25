@@ -1,6 +1,6 @@
 # pql-odcs
 
-Generate [PQL.Assert](https://github.com/clientfirsttech/PQL.Assert) DAX test suites from [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0 and v3.1 data contracts. Every contract rule is reported as **mapped**, **approximated**, or **skipped**, so nothing is dropped silently. Failures from a test run can be traced back to the contract rule that produced them.
+Generate [PQL.Assert](https://github.com/clientfirsttech/PQL.Assert) DAX test suites from [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, and v3.2 data contracts. Every contract rule is reported as **mapped**, **approximated**, or **skipped**, so nothing is dropped silently. Failures from a test run can be traced back to the contract rule that produced them.
 
 pql-odcs is MIT-licensed, has three runtime dependencies (PyYAML, jsonschema, click), and runs on Linux, macOS, and Windows. It only produces text (DAX). To run the generated suites against a semantic model, use [pql-test](https://github.com/clientfirsttech/pql-test), which mounts these same commands as `pql-test contract …` and adds `pql-test contract run`.
 
@@ -86,8 +86,7 @@ Each ODCS schema object maps to a semantic model table, and each property to a c
 | Properties present | `Tbl.ShouldHaveColumns` (one call per table) | mapped |
 | Closed schema (`--closed-schema`) | `Tbl.ShouldNotHaveExtraColumns` | mapped |
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` | mapped; **approximated** on `string` columns (DAX treats empty strings as BLANK, so they count as nulls) |
-| `primaryKey` | `Col.ShouldBeDistinct` (one call per column, shared by every rule that asks for it) | mapped |
-| `unique`, property `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (shared) | **approximated**: it compares `DISTINCTCOUNT` (counts BLANK) with `COUNTA` (ignores blanks), so it also fails when the column has any blank |
+| `primaryKey`, `unique`, property `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one call per column, shared by every rule that asks for it) | **approximated**: it compares `DISTINCTCOUNT` (counts BLANK) with `COUNTA` (ignores blanks). A blank fails an otherwise distinct column, and one blank plus one duplicate still passes. See [PQL.Assert gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md) C4. |
 | `rowCount mustBeGreaterThan 0` | `Tbl.ShouldHaveRows` | mapped |
 | `rowCount mustBe n` | `Tbl.ShouldHaveRowCount` | mapped |
 | `rowCount mustBeGreaterThan n` | `Tbl.ShouldHaveMoreRowsThan` | mapped |
@@ -103,12 +102,13 @@ These rules are reported as **skipped**, with the release that will map them:
 | `logicalTypeOptions` minimum/maximum, minLength/maxLength | v0.2 |
 | `logicalTypeOptions` pattern, `invalidValues` with a pattern | v0.3 |
 | v3.1 `relationships` | v0.2 (`Relationship.ShouldExist`) |
+| v3.2 `enum` (allowed values) | v0.2 (`Col.ValuesShouldBeInSet`) |
 | `nullValues` percent or absolute thresholds | v0.2 |
 | `missingValues`, `invalidValues` | v0.2 |
 | Composite primary keys, 2- and 3+-column `duplicateValues` | v0.2 |
 | `rowCount mustNotBeBetween` | v0.2 |
 | Non-zero `duplicateValues` thresholds | v0.3 |
-| Nested (object / array) properties | no model column |
+| Nested (object / array) and v3.2 `map` / `vector` properties | no model column |
 | `type: sql` | later (optional, review-marked DAX stub) |
 | `type: custom`, `type: text`, `slaProperties` | not planned |
 

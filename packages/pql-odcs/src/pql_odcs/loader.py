@@ -19,8 +19,9 @@ import yaml
 SCHEMAS = {
     "3.0": "odcs-json-schema-v3.0.2.json",
     "3.1": "odcs-json-schema-v3.1.0.json",
+    "3.2": "odcs-json-schema-v3.2.0.json",
 }
-SUPPORTED_RANGE = "v3.0.x and v3.1.x"
+SUPPORTED_RANGE = "v3.0.x, v3.1.x, and v3.2.x"
 _VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
 ContractSource = Union[str, Path, Mapping]

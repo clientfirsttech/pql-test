@@ -9,10 +9,12 @@ License 1.1, and pql-odcs never imports, vendors, or copies it.
 -------------------------------------------------------------------------------
 Open Data Contract Standard (ODCS) JSON schemas
 -------------------------------------------------------------------------------
-pql_odcs/schemas/odcs-json-schema-v3.0.2.json and
-pql_odcs/schemas/odcs-json-schema-v3.1.0.json are unmodified copies of the
+pql_odcs/schemas/odcs-json-schema-v3.0.2.json,
+pql_odcs/schemas/odcs-json-schema-v3.1.0.json, and
+pql_odcs/schemas/odcs-json-schema-v3.2.0.json are unmodified copies of the
 JSON schemas published by the Bitol project (LF AI & Data Foundation) at
-https://github.com/bitol-io/open-data-contract-standard (tags v3.0.2, v3.1.0).
+https://github.com/bitol-io/open-data-contract-standard (tags v3.0.2, v3.1.0,
+v3.2.0).
 They are licensed under the Apache License, Version 2.0, whose full text is
 included as pql_odcs/schemas/LICENSE-ODCS.txt.
 

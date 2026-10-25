@@ -140,7 +140,7 @@ class TestPropertyRules:
         shared = {id(a) for o in sources for a in o.assertions}
 
         assert ([o.status for o in sources], len(shared), sources[0].assertions[0].op) == (
-            [Status.MAPPED, Status.APPROXIMATED, Status.APPROXIMATED],
+            [Status.APPROXIMATED] * 3,
             1,
             "col.distinct",
         ), f"{given}: {should}"
@@ -169,3 +169,36 @@ class TestPropertyRules:
         rules = _map(schema_object("T", [prop("id"), prop("addr", "object", properties=[prop("zip")])]))
 
         assert dict(rules["T.columns"].assertions[0].args) == {"columns": ["id"]}, f"{given}: {should}"
+
+
+class TestOdcs32Rules:
+    def _rules(self, *props):
+        contract = load_contract(contract_dict("v3.2.0", schema=[schema_object("T", list(props))]))
+        return {o.rule_id: o for o in map_contract(contract, NameResolver(contract))}
+
+    def test_enum_is_reported_as_skipped_until_v0_2(self):
+        given = "a 3.2 property with an enum of allowed values"
+        should = "be skipped with a reason naming v0.2 and Col.ValuesShouldBeInSet"
+        rule = self._rules(prop("status", enum=[{"value": "open"}, {"value": "closed"}]))["T.status.enum"]
+
+        assert (rule.status, "v0.2" in rule.reason, "ValuesShouldBeInSet" in rule.reason) == (
+            Status.SKIPPED,
+            True,
+            True,
+        ), f"{given}: {should}"
+
+    def test_map_and_vector_properties_are_not_model_columns(self):
+        given = "3.2 map and vector properties"
+        should = "be left out of the columns check"
+        map_def = {"key": {"logicalType": "string"}, "value": {"logicalType": "string", "required": True}}
+        rules = self._rules(prop("id"), prop("attrs", "map", map=map_def), prop("embedding", "vector"))
+
+        assert dict(rules["T.columns"].assertions[0].args) == {"columns": ["id"]}, f"{given}: {should}"
+
+    def test_rules_inside_a_map_value_are_reported_not_dropped(self):
+        given = "a 3.2 map property whose value definition is required"
+        should = "report the nested rule as skipped"
+        map_def = {"key": {"logicalType": "string"}, "value": {"logicalType": "string", "required": True}}
+        rules = self._rules(prop("attrs", "map", map=map_def))
+
+        assert rules["T.attrs.map.value.required"].status is Status.SKIPPED, f"{given}: {should}"

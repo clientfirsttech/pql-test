@@ -94,7 +94,7 @@ class TestContractRunCommand:
 
         result = CliRunner().invoke(cli, ["contract", "run", str(bad), str(tmp_path), "--env", "DEV"])
 
-        assert (result.exit_code, "v3.0.x and v3.1.x" in result.output) == (1, True), f"{given}: {should}"
+        assert (result.exit_code, "v3.2.x" in result.output) == (1, True), f"{given}: {should}"
 
 
 class TestTraceAnnotations:
