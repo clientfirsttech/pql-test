@@ -161,10 +161,14 @@ def render_suites(
             function_name = f"{prefix}.{suite}.{env_token}.Tests"
             header = [
                 f"{GENERATED_MARKER} {version} from {contract.source} — do not edit",
-                f"// Contract {contract.id} (ODCS v{contract.api_version}); "
-                f"targets {catalog.library} >= {catalog.min_version}",
-                "// Results are model-scoped: they test the semantic model's data "
-                "(filters, RLS, incremental refresh apply), not the source system.",
+                (
+                    f"// Contract {contract.id} (ODCS v{contract.api_version}); "
+                    f"targets {catalog.library} >= {catalog.min_version}"
+                ),
+                (
+                    "// Results are model-scoped: they test the semantic model's data "
+                    "(filters, RLS, incremental refresh apply), not the source system."
+                ),
             ]
             if not blocking:
                 header.append("// Warning-severity rules: run separately; failures here should not fail the build.")

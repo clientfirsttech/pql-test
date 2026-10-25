@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: MIT
+"""Unit tests for pql_odcs.api (plan + generate) and pql_odcs.pbip (model folder helpers)."""
+
+from __future__ import annotations
+
+import pytest
+from factories import contract_dict, prop, schema_object
+
+from pql_odcs.api import GenerateError, generate, plan_contract
+from pql_odcs.pbip import ModelPathError, find_semantic_model_dir, model_names
+
+
+def _contract(**root):
+    return contract_dict(
+        name="M",
+        schema=[
+            schema_object(
+                "T",
+                [prop("id", required=True)],
+                quality=[{"metric": "rowCount", "mustBeGreaterThan": 0}],
+                **root,
+            )
+        ],
+    )
+
+
+def _pbip(tmp_path, name="Sample"):
+    sm = tmp_path / f"{name}.SemanticModel"
+    (sm / "definition" / "tables").mkdir(parents=True)
+    (tmp_path / f"{name}.pbip").write_text("{}", encoding="utf-8")
+    return sm
+
+
+class TestFindSemanticModelDir:
+    @pytest.mark.parametrize("pick", ["root", "semantic_model", "pbip_file"])
+    def test_accepts_the_pbip_root_the_model_folder_or_the_pbip_file(self, tmp_path, pick):
+        given = f"MODEL_PATH given as the {pick}"
+        should = "resolve to the .SemanticModel folder"
+        sm = _pbip(tmp_path)
+        path = {"root": tmp_path, "semantic_model": sm, "pbip_file": tmp_path / "Sample.pbip"}[pick]
+
+        assert find_semantic_model_dir(path) == sm, f"{given}: {should}"
+
+    def test_non_pbip_paths_resolve_to_none(self, tmp_path):
+        given = "a service-style path that does not exist on disk"
+        should = "return None so the caller can explain the missing query target"
+
+        assert find_semantic_model_dir("Ws.Workspace/Model.SemanticModel") is None, f"{given}: {should}"
+
+    def test_two_models_in_one_folder_is_ambiguous(self, tmp_path):
+        given = "a folder holding two .SemanticModel folders"
+        should = "raise ModelPathError naming both"
+        _pbip(tmp_path, "A")
+        _pbip(tmp_path, "B")
+
+        with pytest.raises(ModelPathError) as exc:
+            find_semantic_model_dir(tmp_path)
+
+        assert ("A.SemanticModel" in str(exc.value), "B.SemanticModel" in str(exc.value)) == (True, True), (
+            f"{given}: {should}"
+        )
+
+
+class TestModelNames:
+    def test_reads_tables_and_columns_from_tmdl(self, tmp_path):
+        given = "TMDL tables with quoted names, calculated columns, and measures"
+        should = "return table -> column names, ignoring measures"
+        sm = _pbip(tmp_path)
+        (sm / "definition" / "tables" / "Fact.tmdl").write_text(
+            "table 'Marvel Fact'\n"
+            "\tlineageTag: x\n\n"
+            "\tmeasure 'Total' = SUM('Marvel Fact'[ID])\n\n"
+            "\tcolumn ID\n\t\tdataType: int64\n\n"
+            "\tcolumn 'Bob''s Name' = \"x\"\n",
+            encoding="utf-8",
+        )
+
+        assert model_names(sm) == {"Marvel Fact": {"ID", "Bob's Name"}}, f"{given}: {should}"
+
+
+class TestGenerate:
+    def test_writes_suites_into_daxqueries_with_lf_endings(self, tmp_path):
+        given = "a PBIP model and a valid contract"
+        should = "write each suite into DAXQueries/ with LF line endings"
+        _pbip(tmp_path)
+
+        result = generate(plan_contract(_contract()), tmp_path, env="DEV")
+
+        written = sorted(p.name for p in result.written)
+        raw = (tmp_path / "Sample.SemanticModel" / "DAXQueries" / "M.DataQuality.DEV.Tests.dax").read_bytes()
+        assert (written, b"\r\n" in raw) == (["M.DataQuality.DEV.Tests.dax", "M.Schema.DEV.Tests.dax"], False), (
+            f"{given}: {should}"
+        )
+
+    def test_refuses_to_overwrite_a_hand_written_file(self, tmp_path):
+        given = "an existing suite file without the generated header"
+        should = "refuse to overwrite it and write nothing"
+        sm = _pbip(tmp_path)
+        (sm / "DAXQueries").mkdir()
+        hand_written = sm / "DAXQueries" / "M.Schema.DEV.Tests.dax"
+        hand_written.write_text("// mine\n", encoding="utf-8")
+
+        with pytest.raises(GenerateError) as exc:
+            generate(plan_contract(_contract()), tmp_path, env="DEV")
+
+        assert (
+            "--force" in str(exc.value),
+            hand_written.read_text(encoding="utf-8"),
+            (sm / "DAXQueries" / "M.DataQuality.DEV.Tests.dax").exists(),
+        ) == (True, "// mine\n", False), f"{given}: {should}"
+
+    def test_force_overwrites_a_hand_written_file(self, tmp_path):
+        given = "an existing hand-written suite file and force=True"
+        should = "overwrite it with generated content"
+        sm = _pbip(tmp_path)
+        (sm / "DAXQueries").mkdir()
+        (sm / "DAXQueries" / "M.Schema.DEV.Tests.dax").write_text("// mine\n", encoding="utf-8")
+
+        generate(plan_contract(_contract()), tmp_path, env="DEV", force=True)
+
+        text = (sm / "DAXQueries" / "M.Schema.DEV.Tests.dax").read_text(encoding="utf-8")
+        assert text.startswith("// Generated by pql-odcs"), f"{given}: {should}"
+
+    def test_removes_generated_suites_that_no_longer_have_rules(self, tmp_path):
+        given = "a previously generated WARN suite whose warning rules were removed from the contract"
+        should = "delete the stale generated file so pql-test stops running it"
+        sm = _pbip(tmp_path)
+        (sm / "DAXQueries").mkdir()
+        stale = sm / "DAXQueries" / "M.DataQuality.DEVWARN.Tests.dax"
+        stale.write_text("// Generated by pql-odcs 0.0.1 from x — do not edit\n", encoding="utf-8")
+
+        result = generate(plan_contract(_contract()), tmp_path, env="DEV")
+
+        assert (stale.exists(), [p.name for p in result.removed]) == (False, [stale.name]), f"{given}: {should}"
+
+    def test_non_pbip_model_path_explains_later_targets(self, tmp_path):
+        given = "a MODEL_PATH that is not a PBIP folder"
+        should = "fail, naming the v0.2 query and v0.3 deploy targets"
+
+        with pytest.raises(ModelPathError) as exc:
+            generate(plan_contract(_contract()), "local/Sample", env="DEV")
+
+        assert ("v0.2" in str(exc.value), "v0.3" in str(exc.value)) == (True, True), f"{given}: {should}"
