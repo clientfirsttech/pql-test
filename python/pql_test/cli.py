@@ -114,6 +114,8 @@ from pql_test.runner.cli_format import (
 )
 from pql_test.runner.coverage_collector import CoverageReport
 from pql_test.runner.coverage_report import CoverageSummary, coverage_percent, coverage_status
+from pql_test.contract_run import RunHooks, attach_contract_run
+from pql_test.plugins import load_plugins
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -2080,6 +2082,24 @@ def cmd_skill(name: str | None, format: str, list: bool, version: bool,
     except FileNotFoundError as e:
         click.echo(str(e), err=True)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Plugins (pql_test.commands entry points, e.g. `contract` from pql-odcs)
+# ---------------------------------------------------------------------------
+
+load_plugins(cli)
+attach_contract_run(
+    cli,
+    RunHooks(
+        conn_options=conn_options,
+        make_conn_opts=_make_conn_opts,
+        print_results=_print_results,
+        print_azuredevops=_print_results_azuredevops,
+        print_github=_print_results_github,
+        suite_to_dict=_suite_to_dict,
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
