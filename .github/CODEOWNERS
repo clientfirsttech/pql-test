@@ -1,5 +1,5 @@
 # pql-odcs is MIT-licensed and kept separate from pql-test (BUSL-1.1).
 # Every change under it needs a pql-odcs maintainer's review.
 # Branch protection must have "Require review from Code Owners" turned on.
-/packages/pql-odcs/  @kerski
-/LICENSES.md         @kerski
+/packages/pql-odcs/  @kerski-cft
+/LICENSES.md         @kerski-cft

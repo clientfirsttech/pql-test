@@ -12,11 +12,12 @@ Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD 
 | Epic scope | The epic covers **v0.1 only**. v0.2, v0.3, and v1.0 items are in the `plan.md` backlog. |
 | pql-test release workflow | **Keep `release.yml` as is.** The PyPI trusted publisher is bound to that file name, so renaming it to `release-pql-test.yml` would mean re-registering the publisher. The `v*` tag glob already doesn't match `pql-odcs-v*`. GitHub doesn't apply `paths:` filters to tag pushes, so "scope to `python/**`" can't work. |
 | Root license file | It is `LICENSE.txt`, not `LICENSE`. The scope note goes in `LICENSE.txt` and in its synced copy `python/LICENSE.txt`. |
+| ODCS 3.2 | **Supported in v0.1** (decided 2026-10-25). The 3.2.0 schema is bundled. Quality rules are unchanged from 3.1. The 3.2 `enum` is reported as skipped until v0.2 (`Col.ValuesShouldBeInSet`). `map` and `vector` properties have no model column; rules inside a map's key or value are reported as skipped. |
 | Python floor | pql-odcs core keeps `requires-python >= 3.9`. The `[datacontract]` extra needs Python 3.10+ because datacontract-cli 1.2.7 requires `>=3.10,<3.15`, so the extra gets a Python-version marker. `importlib.metadata.entry_points(group=…)` only exists on 3.10+, so pql-test's plugin hook needs a 3.9 fallback. |
 | `contract run` execution path | With a live connection, `run_tests_from_model` only runs suites already registered in the model ([discovery.py](../python/pql_test/runner/discovery.py)). Freshly generated suites are skipped as "not registered in the deployed dataset". So `contract run` builds `PqlTest`s from the generated files and executes their `DEFINE FUNCTION … EVALUATE` text with `run_tests()`. |
 | Warning suites | Keep the proposed separate `<Suite>.<ENV>WARN.Tests.dax` suites. pql-test matches environments exactly on the second-to-last name token, so `--environment DEV` does not pick them up. `contract run --env DEV` must run both suites, and only the DEV suite decides the exit code. |
 | Still open | Name mapping: customProperties, a sidecar file, or both (v0.1 implements both, in the precedence below). Whether generated `.dax` files are committed or regenerated in CI. Counsel review of `LICENSES.md` and the NOTICE wording. |
-| Gaps in the source plan | The **Milestones** section was empty, and the **Plugin loading masks errors** risk had no mitigation (proposed below). The *PQL.Assert Gap Plan* (C1–C3, R2–R8) lives in the PQL.Assert repository, not here. |
+| Gaps in the source plan | The **Milestones** section was empty, and the **Plugin loading masks errors** risk had no mitigation (proposed below). The PQL.Assert gap plan is now [docs/pql-assert-gap-plan.md](pql-assert-gap-plan.md) (C1–C5, R1–R8, D1). It contains only backward-compatible changes, and every finding in it was verified against SampleModel. |
 
 ## Summary
 
@@ -120,7 +121,7 @@ PQL.Assert itself is MIT-licensed (v0.7.1 on DAX Lib), so pql-odcs may bundle it
 
 The core is a straight pipeline with a neutral intermediate representation (IR) in the middle, so mapping and DAX emission can be tested separately.
 
-1. **Load** (`loader.py`): reads the YAML, or accepts an already-parsed dict (the datacontract-cli adapter hands its ODCS object over this way). Checks `apiVersion` against the supported versions (3.0.x, 3.1.x) and validates against the bundled ODCS JSON schema.
+1. **Load** (`loader.py`): reads the YAML, or accepts an already-parsed dict (the datacontract-cli adapter hands its ODCS object over this way). Checks `apiVersion` against the supported versions (3.0.x, 3.1.x, 3.2.x) and validates against the bundled ODCS JSON schema.
 2. **Resolve names** (`naming.py`): maps each schema object and property to a semantic model table and column. It uses `customProperties` keys `pbiTable` / `pbiColumn` first, then an optional sidecar `pql-odcs.mapping.yaml`, then the logical name as the fallback.
 3. **Map** (`mapping/`): `registry.py` dispatches each rule, by type and metric, to a mapper that returns IR assertions plus a coverage status.
 4. **Emit** (`emit/dax.py`): renders IR assertions through the catalog into one `*.Tests.dax` file per suite.
@@ -198,7 +199,7 @@ Phase 1 ships the rows marked v0.1. The coverage report shows the rest as skippe
 | Schema object present | `Tbl.ShouldExist` | mapped | v0.1 |
 | Properties present | `Tbl.ShouldHaveColumns` (one call per table) | mapped | v0.1 |
 | Closed schema (opt-in flag) | `Tbl.ShouldNotHaveExtraColumns` | mapped | v0.1 |
-| `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)`; switch to `Col.ShouldNotBeNull` if gap plan C1 confirms it checks every row | mapped | v0.1 |
+| `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)`. C1 is confirmed: `Col.ShouldNotBeNull` only checks that some value exists, so it is never used. Switch to `Col.NullCountShouldBeAtMost(…, 0)` from 0.8.0. | mapped (approximated on string columns) | v0.1 |
 | `primaryKey`, `unique`, property `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` | mapped | v0.1 |
 | `rowCount mustBeGreaterThan 0` | `Tbl.ShouldHaveRows` | mapped | v0.1 |
 | `rowCount mustBe n` | `Tbl.ShouldHaveRowCount` | mapped | v0.1 |
@@ -227,7 +228,7 @@ Phase 1 ships the rows marked v0.1. The coverage report shows the rest as skippe
 
 Rules with `severity: warning` are emitted into a separate `<Suite>.<ENV>WARN.Tests.dax` suite, so CI can run them without failing the build.
 
-Gaps in PQL.Assert itself are tracked in the *PQL.Assert Gap Plan* in the PQL.Assert repository: a version function, threshold variants, 3+ column keys, column patterns, freshness, and three documentation clarifications against v0.7.1. Until each function ships, pql-odcs emits the fallback expression listed there and adopts the new function through a catalog update.
+Gaps in PQL.Assert itself are tracked in [docs/pql-assert-gap-plan.md](pql-assert-gap-plan.md): a version function (`LibraryVersion`), threshold variants, 3+ column keys, column patterns, freshness, and clarifications C1–C5 against v0.7.1. All of them are additive 0.8.0 functions. Until each ships, pql-odcs either emits the fallback expression or reports the rule as skipped, then adopts the new function through a `pql_assert_0_8.yaml` catalog.
 
 ## CLI surface
 
@@ -411,7 +412,8 @@ Most testing needs no Power BI at all. Only one layer touches a live model.
 | ODCS 3.2 changes quality rule shape | Mappers miss rules | Loader version gate; unknown rules reported as skipped, never dropped |
 | Semantic model differs from source (filters, RLS, incremental refresh) | False passes or failures | Document clearly; `generate` notes in each file header that results are model-scoped |
 | DAX BLANK treats null and empty string alike | `nullValues` counts differ from the warehouse | Document; offer strict mode using `ISBLANK` vs `= ""` where the column type allows |
-| `Col.ShouldNotBeNull` may only check that some values are non-null (gap plan C1) | Required columns pass with nulls present | Map to `Col.NullRateShouldBeAtMost(…, 0)` until C1 is confirmed |
+| `Col.ShouldNotBeNull` only checks that some values are non-null (gap plan C1, **confirmed** 2026-10-25) | Required columns would pass with nulls present | Map to `Col.NullRateShouldBeAtMost(…, 0)`, which is correct at a 0 threshold; adopt `Col.NullCountShouldBeAtMost` in 0.8.0 |
+| `Col.ShouldBeDistinct` is skewed by blanks (gap plan C4, confirmed) | One blank plus one duplicate passes | Report `primaryKey`/`unique`/`duplicateValues` as approximated; adopt `Col.ShouldBePrimaryKey` / `Col.NonBlankValuesShouldBeDistinct` in 0.8.0 |
 | Plugin loading masks errors | Silent missing commands | *(proposed — source plan was truncated here)* One-line stderr warning naming the plugin and the exception; `PQL_TEST_STRICT_PLUGINS=1` re-raises so CI fails loudly; the plugin-install CI check asserts `pql-test contract --help` lists every command |
 | Generated suites not yet deployed to a live model | `contract run` silently skips them | Run generated suites from their file text through `run_tests()`, not live discovery (see decisions) |
 | Golden files differ by line ending on Windows | Byte-identical check fails on one OS | Emitter writes `\n` explicitly; `.gitattributes` marks golden `.dax` files `eol=lf` |

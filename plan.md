@@ -23,12 +23,15 @@
   - name mapping: contract `customProperties`, a sidecar file, or both (v0.1 implements both);
   - whether generated `.dax` files are committed or regenerated in CI;
   - counsel review of the `LICENSE.txt` scope note, `LICENSES.md`, and the NOTICE wording for bundled PQL.Assert `functions.tmdl`;
-  - whether to allow `typing-extensions` (PSF-2.0, transitive via jsonschema → referencing) in the dependency-license gate. It is allowed for now; the plan's rule was MIT/BSD/Apache only;
-  - whether the version bump to pql-test 0.2.0 is right (a minor bump, because new commands were added);
-  - CODEOWNERS uses `@kerski`: confirm the handle, and turn on "Require review from Code Owners";
-  - PyPI pending publisher for `pql-odcs` with workflow `release-pql-odcs.yml` (one-time setup);
-  - ODCS v3.2.0 (released 2026-09-08) is rejected by the v3.0.x/v3.1.x gate: decide when to support it;
-  - PQL.Assert gap-plan items found while building: `Col.NullRateShouldBeAtMost` divides by `COUNTROWS(ALLNOBLANKROW(col))` (distinct values, not rows), so an all-blank `required` column may pass; `Col.ShouldBeDistinct` fails on any blank (DISTINCTCOUNT vs COUNTA).
+  - turn on "Require review from Code Owners" in branch protection (CODEOWNERS uses `@kerski-cft`);
+  - maintainer: register the PyPI and TestPyPI pending publisher for `pql-odcs`, with workflow `release-pql-odcs.yml` (one-time setup).
+
+  Decided 2026-10-25:
+  - `typing-extensions` (PSF-2.0) is allowed in the dependency-license gate;
+  - pql-test 0.2.0 is confirmed;
+  - CODEOWNERS uses `@kerski-cft`;
+  - ODCS v3.2.x is supported in v0.1;
+  - PQL.Assert gaps are tracked in [docs/pql-assert-gap-plan.md](docs/pql-assert-gap-plan.md), which contains only backward-compatible changes.
 
   See the risks section of [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 
@@ -70,7 +73,7 @@
 
 - See [tasks/archive/2026-10-25-pql-odcs-v0.1.md](tasks/archive/2026-10-25-pql-odcs-v0.1.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 - **pql-odcs** is a new MIT package under `packages/pql-odcs/`. It:
-  - loads ODCS v3.0.x and v3.1.x contracts and validates them against the bundled Bitol schemas;
+  - loads ODCS v3.0.x, v3.1.x, and v3.2.x contracts and validates them against the bundled Bitol schemas;
   - resolves names through `pbiTable`/`pbiColumn` customProperties, then a sidecar file, then the logical name;
   - maps each rule through a PQL.Assert 0.7.1 catalog (data only);
   - writes `<Prefix>.<Suite>.<ENV>[WARN].Tests.dax` suites;
@@ -100,7 +103,7 @@
   - malformed sidecar crash;
   - release could publish from a non-tag ref;
   - `contract run` now emits `--log-format` annotations and writes the per-rule trace into `--output`;
-  - `unique`/`duplicateValues`, and `required` on string columns, are now reported as approximated, with the DAX semantics as the reason.
+  - `primaryKey`/`unique`/`duplicateValues`, and `required` on string columns, are now reported as approximated, with the DAX semantics as the reason (gap plan C4/C5).
 
 ### 2026-10-22 — certifi floor for PYSEC-2026-4320, bump to 0.1.20
 
