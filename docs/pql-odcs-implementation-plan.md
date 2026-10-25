@@ -1,6 +1,6 @@
 # pql-odcs: ODCS Contracts → PQL.Assert — Implementation Plan
 
-Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD discovery on 2026-10-25. The v0.1 work is tracked in [tasks/pql-odcs-v0.1-epic.md](../tasks/pql-odcs-v0.1-epic.md).
+Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD discovery on 2026-10-25. The v0.1 work is tracked in [tasks/archive/2026-10-25-pql-odcs-v0.1.md](../tasks/archive/2026-10-25-pql-odcs-v0.1.md).
 
 ## Discovery decisions (2026-10-25)
 
@@ -383,7 +383,7 @@ Most testing needs no Power BI at all. Only one layer touches a live model.
 
 *Not filled in by the source plan; dates are for the maintainer to set.* Proposed gates:
 
-- **v0.1**: the [v0.1 epic](../tasks/pql-odcs-v0.1-epic.md) is complete. All blocking CI guardrails pass. `pql-test contract run` passes the integration layer against SampleModel.
+- **v0.1**: the [v0.1 epic](../tasks/archive/2026-10-25-pql-odcs-v0.1.md) is complete. All blocking CI guardrails pass. `pql-test contract run` passes the integration layer against SampleModel.
 - **v0.2**: query-scoped XMLA target. The v0.2 mapping rows and fallbacks R2–R5. The datacontract-cli adapter.
 - **v0.3**: persistent deploy target (after the TOM/TMSL UDF spike). Fallback R6 and pattern rules.
 - **v1.0**: optional upstream `datacontract export pql-assert` PR. A pbip importer.

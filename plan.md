@@ -10,7 +10,6 @@
 - **Refactor runner.py monolith into focused module package** — CRITICAL for maintainability (promoted from backlog 2026-08-30). File is 1,947 lines mixing 9+ responsibilities, causing high regression risk and slow code review velocity. Split into `runner/` package with 9 focused modules (~150-350 lines each). See [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md). Estimated 2-3 days.
 - **Implement token validation in auth/manager.py** — TODO at line 123 needs implementation for OWASP A07 (Authentication Failures). Validate JWT expiry without making service calls. Estimated 4 hours.
 - **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address A01, A04, A06, A07 findings from 2026-08-30 AIDD review. Estimated 1 day.
-- **pql-odcs v0.1: ODCS data contracts → PQL.Assert suites** (branch `dev-odcs`, planned 2026-10-25). Adds a new MIT package under `packages/pql-odcs/` that generates `*.Tests.dax` suites from ODCS v3.x contract quality rules, with a coverage report that covers every rule. It is mounted in pql-test as `pql-test contract …` through the `contracts` extra and a `pql_test.commands` plugin hook. The work covers 20 tasks: scaffold, license guardrails, loader, mappers, emitter, CLI, `contract run`, CI, and release. See [tasks/pql-odcs-v0.1-epic.md](tasks/pql-odcs-v0.1-epic.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 
 ## Open Items
 
@@ -23,7 +22,13 @@
 - **pql-odcs open decisions** — These must be settled before pql-odcs v0.1 ships:
   - name mapping: contract `customProperties`, a sidecar file, or both (v0.1 implements both);
   - whether generated `.dax` files are committed or regenerated in CI;
-  - counsel review of the `LICENSE.txt` scope note, `LICENSES.md`, and the NOTICE wording for bundled PQL.Assert `functions.tmdl`.
+  - counsel review of the `LICENSE.txt` scope note, `LICENSES.md`, and the NOTICE wording for bundled PQL.Assert `functions.tmdl`;
+  - whether to allow `typing-extensions` (PSF-2.0, transitive via jsonschema → referencing) in the dependency-license gate. It is allowed for now; the plan's rule was MIT/BSD/Apache only;
+  - whether the version bump to pql-test 0.2.0 is right (a minor bump, because new commands were added);
+  - CODEOWNERS uses `@kerski`: confirm the handle, and turn on "Require review from Code Owners";
+  - PyPI pending publisher for `pql-odcs` with workflow `release-pql-odcs.yml` (one-time setup);
+  - ODCS v3.2.0 (released 2026-09-08) is rejected by the v3.0.x/v3.1.x gate: decide when to support it;
+  - PQL.Assert gap-plan items found while building: `Col.NullRateShouldBeAtMost` divides by `COUNTROWS(ALLNOBLANKROW(col))` (distinct values, not rows), so an all-blank `required` column may pass; `Col.ShouldBeDistinct` fails on any blank (DISTINCTCOUNT vs COUNTA).
 
   See the risks section of [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 
@@ -60,6 +65,42 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-10-25 — pql-odcs v0.1: ODCS data contracts → PQL.Assert suites (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-25-pql-odcs-v0.1.md](tasks/archive/2026-10-25-pql-odcs-v0.1.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
+- **pql-odcs** is a new MIT package under `packages/pql-odcs/`. It:
+  - loads ODCS v3.0.x and v3.1.x contracts and validates them against the bundled Bitol schemas;
+  - resolves names through `pbiTable`/`pbiColumn` customProperties, then a sidecar file, then the logical name;
+  - maps each rule through a PQL.Assert 0.7.1 catalog (data only);
+  - writes `<Prefix>.<Suite>.<ENV>[WARN].Tests.dax` suites;
+  - reports every rule as mapped, approximated, or skipped (`coverage`);
+  - joins pql-test results back to rule ids (`trace`);
+  - checks names against the model's TMDL (`lint --model`);
+  - ships as the standalone `pql-odcs` CLI.
+- **pql-test 0.2.0** loads plugins from the `pql_test.commands` entry point and adds `pql-test contract run`. It installs the plugin through the optional `contracts` extra. Generated suites run from their own DEFINE FUNCTION text, so they don't depend on the model's registered tests.
+- **License boundary**:
+  - the `LICENSE.txt` scope note, `LICENSES.md`, CODEOWNERS, and the DCO guidance;
+  - SPDX headers on every `python/` and pql-odcs `.py` file;
+  - CI checks: SPDX, import-linter, wheel contents, and dependency licenses.
+- **CI and release**:
+  - `pql-odcs.yml` runs Linux, macOS, and Windows on Python 3.9 and 3.13, plus a standalone install and a plugin install;
+  - `release-pql-odcs.yml` publishes on `pql-odcs-v*` tags;
+  - `pytest.yml` now installs the `contracts` extra.
+- **Testing**:
+  - the live `contract run` against SampleModel in Fabric passed: the good contract passes every mapped rule, and the must-fail contract fails exactly the 5 planted rules;
+  - pql-odcs: 136 tests at 95% coverage, including golden files and hypothesis tests, passing on Python 3.9 and 3.12;
+  - pql-test suite green.
+- **Review**: an AIDD review found and fixed these issues:
+  - cross-contract suite overwrite and deletion;
+  - trace now joins on the `ODCS <id> <ruleId>:` prefix;
+  - header injection through the contract id;
+  - duplicate rule ids;
+  - NaN/inf thresholds;
+  - malformed sidecar crash;
+  - release could publish from a non-tag ref;
+  - `contract run` now emits `--log-format` annotations and writes the per-rule trace into `--output`;
+  - `unique`/`duplicateValues`, and `required` on string columns, are now reported as approximated, with the DAX semantics as the reason.
 
 ### 2026-10-22 — certifi floor for PYSEC-2026-4320, bump to 0.1.20
 
