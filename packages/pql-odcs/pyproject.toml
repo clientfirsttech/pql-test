@@ -94,6 +94,8 @@ known-first-party = ["pql_odcs"]
 
 [tool.importlinter]
 root_packages = ["pql_odcs"]
+# pql_test lives outside this package, so it is an external module to the linter.
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "pql-odcs (MIT) never imports pql-test (BUSL-1.1)"

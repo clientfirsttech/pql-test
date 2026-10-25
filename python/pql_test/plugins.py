@@ -50,7 +50,7 @@ def load_plugins(group: click.Group, eps: Iterable[EntryPoint] | None = None) ->
             command = ep.load()
             if not isinstance(command, click.Command):
                 raise TypeError(f"{ep.value} is not a click command")
-        except Exception as exc:
+        except Exception as exc:  # a broken plugin must not break pql-test
             if os.environ.get(STRICT_ENV) == "1":
                 raise
             click.echo(f"warning: pql-test plugin {ep.name!r} failed to load: {exc}", err=True)
