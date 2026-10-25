@@ -85,5 +85,64 @@ def nested_rules(prop: Mapping, scope: str) -> list[RuleOutcome]:
     ]
 
 
+# logicalTypeOptions key groups -> where they land (reported as skipped until then).
+_TYPE_OPTION_RELEASES = (
+    (
+        ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"),
+        "v0.2 (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)",
+    ),
+    (("minLength", "maxLength"), "v0.2 (Col.TextLengthShouldBeInRange)"),
+    (("pattern",), "v0.3 (ShouldMatch per gap plan C3 / R7)"),
+)
+RELATIONSHIP_REASON = "relationship checks arrive in v0.2 (Relationship.ShouldExist with cardinality and direction)"
+
+
+def scheduled_property_rules(prop: Mapping, scope: str) -> list[RuleOutcome]:
+    """Column type and logicalTypeOptions rules, which arrive after v0.1."""
+    out = []
+    if prop.get("logicalType") or prop.get("physicalType"):
+        declared = prop.get("physicalType") or prop.get("logicalType")
+        out.append(
+            skipped(
+                f"{scope}.type",
+                "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)",
+                f"{scope} is {declared}",
+            )
+        )
+    options = prop.get("logicalTypeOptions") or {}
+    checkable = []
+    for keys, release in _TYPE_OPTION_RELEASES:
+        present = [k for k in keys if k in options]
+        if present:
+            checkable.append(f"{', '.join(present)} arrive in {release}")
+    if checkable:
+        out.append(
+            skipped(
+                f"{scope}.logicalTypeOptions", "; ".join(checkable), f"{scope} logicalTypeOptions {sorted(options)}"
+            )
+        )
+    return out
+
+
+def relationship_rules(element: Mapping, scope: str) -> list[RuleOutcome]:
+    """v3.1 relationships on a schema object or property (v0.2)."""
+    return [
+        skipped(f"{scope}.relationships[{i}]", RELATIONSHIP_REASON, f"{scope} relationship to {rel.get('to', '?')}")
+        for i, rel in enumerate(element.get("relationships") or [])
+    ]
+
+
+def sla_rules(contract_data: Mapping) -> list[RuleOutcome]:
+    """Contract-level SLA properties: out of scope for v0.1 (gap plan R8)."""
+    return [
+        skipped(
+            f"slaProperties[{i}]",
+            "SLA and freshness checks are out of scope for v0.1 (gap plan R8)",
+            f"SLA {sla.get('property', '?')}",
+        )
+        for i, sla in enumerate(contract_data.get("slaProperties") or [])
+    ]
+
+
 def _distinct(rule_id: str, target: Target, description: str) -> Assertion:
     return Assertion(rule_id, DATA_QUALITY_SUITE, "col.distinct", target, {}, description)

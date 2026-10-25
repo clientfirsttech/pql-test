@@ -11,7 +11,15 @@ from pql_odcs.ir import RuleOutcome, Status
 from pql_odcs.loader import Contract
 from pql_odcs.mapping.context import MapContext, is_column, skipped
 from pql_odcs.mapping.library import describe, map_library
-from pql_odcs.mapping.schema import NO_COLUMN, nested_rules, object_rules, property_rules
+from pql_odcs.mapping.schema import (
+    NO_COLUMN,
+    nested_rules,
+    object_rules,
+    property_rules,
+    relationship_rules,
+    scheduled_property_rules,
+    sla_rules,
+)
 
 _TYPE_REASONS = {
     "sql": "type: sql rules are not translated to DAX (an optional, review-marked DAX stub is planned for later)",
@@ -99,8 +107,12 @@ def map_contract(contract: Contract, names, *, closed_schema: bool = False) -> l
         for prop, scope, top_level in _properties(obj, obj["name"]):
             if top_level and is_column(prop):
                 outcomes.extend(property_rules(ctx, obj, prop, scope, key_columns))
+                outcomes.extend(scheduled_property_rules(prop, scope))
             else:
                 outcomes.extend(nested_rules(prop, scope))
+            outcomes.extend(relationship_rules(prop, scope))
             outcomes.extend(quality_by_scope.pop(scope, []))
+        outcomes.extend(relationship_rules(obj, obj["name"]))
         outcomes.extend(quality_by_scope.pop(obj["name"], []))
+    outcomes.extend(sla_rules(contract.data))
     return _dedupe(outcomes)

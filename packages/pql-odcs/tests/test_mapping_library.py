@@ -147,6 +147,8 @@ class TestRegistry:
             "T.columns",
             "T.id.required",
             "T.id.primaryKey",
+            "T.id.type",
+            "T.n.type",
             "T.n.quality[0]",
             "T.quality[0]",
             "T.quality[1]",

@@ -70,6 +70,45 @@ class TestObjectRules:
         assert (outcome.status, "comma" in outcome.reason) == (Status.SKIPPED, True), f"{given}: {should}"
 
 
+class TestScheduledRules:
+    def test_rules_scheduled_for_later_releases_are_reported_as_skipped(self):
+        given = "types, logicalTypeOptions, relationships, and SLA properties (all after v0.1)"
+        should = "each appear as a skipped rule naming its release, never dropped"
+        data = contract_dict(
+            schema=[
+                schema_object(
+                    "Orders",
+                    [
+                        prop(
+                            "amount",
+                            "number",
+                            physicalType="DECIMAL(10,2)",
+                            logicalTypeOptions={"minimum": 0, "maximum": 10},
+                        ),
+                        prop("code", logicalTypeOptions={"pattern": "^[A-Z]+$"}),
+                    ],
+                    relationships=[{"type": "foreignKey", "from": "Orders.amount", "to": "Other.id"}],
+                )
+            ],
+            slaProperties=[{"property": "latency", "value": 4, "unit": "d"}],
+        )
+        contract = load_contract(data)
+        rules = {o.rule_id: o for o in map_contract(contract, NameResolver(contract))}
+
+        actual = {
+            rid: (rules[rid].status, release in rules[rid].reason)
+            for rid, release in [
+                ("Orders.amount.type", "v0.2"),
+                ("Orders.amount.logicalTypeOptions", "v0.2"),
+                ("Orders.code.logicalTypeOptions", "v0.3"),
+                ("Orders.relationships[0]", "v0.2"),
+                ("slaProperties[0]", "R8"),
+            ]
+        }
+
+        assert set(actual.values()) == {(Status.SKIPPED, True)}, f"{given}: {should}\n{actual}"
+
+
 class TestPropertyRules:
     def test_required_maps_to_zero_null_rate(self):
         given = "a required property"

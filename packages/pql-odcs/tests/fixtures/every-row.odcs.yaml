@@ -1,0 +1,128 @@
+# Exercises every row of the mapping catalog (docs/pql-odcs-implementation-plan.md),
+# including rows scheduled for later releases, which must appear as skipped.
+apiVersion: v3.1.0
+kind: DataContract
+id: every-row
+name: Every Mapping Row
+version: 0.1.0
+status: draft
+dataProduct: every-row
+schema:
+  - name: orders
+    physicalType: table
+    customProperties:
+      - property: pbiTable
+        value: Orders
+    properties:
+      - name: order_id
+        logicalType: integer
+        primaryKey: true
+        unique: true
+        quality:
+          - metric: duplicateValues            # shares the primaryKey distinct check
+            mustBe: 0
+      - name: customer_id
+        logicalType: integer
+        required: true
+        quality:
+          - metric: nullValues                 # shares the required null-rate check
+            mustBe: 0
+          - metric: nullValues                 # v0.2 (C2)
+            mustBeLessThan: 5
+            unit: percent
+          - metric: nullValues                 # v0.2 (R4)
+            mustBeLessOrEqualTo: 10
+      - name: status
+        logicalType: string
+        customProperties:
+          - property: pbiColumn
+            value: Order Status
+        quality:
+          - metric: invalidValues              # v0.2
+            mustBe: 0
+            arguments:
+              validValues: [open, closed]
+          - metric: missingValues              # v0.2
+            mustBe: 0
+            arguments:
+              missingValues: [n/a, ""]
+          - metric: invalidValues              # v0.3 (C3 / R7)
+            mustBe: 0
+            arguments:
+              pattern: "^[a-z]+$"
+          - metric: invalidValues              # v0.2 (R5)
+            mustBeLessThan: 3
+            unit: percent
+          - metric: duplicateValues            # v0.3 (R6)
+            mustBeLessThan: 10
+      - name: amount
+        logicalType: number
+        physicalType: DECIMAL(10,2)
+        logicalTypeOptions:
+          minimum: 0
+          maximum: 100000
+      - name: code
+        logicalType: string
+        logicalTypeOptions:
+          minLength: 2
+          maxLength: 8
+      - name: address                          # nested: no model column
+        logicalType: object
+        properties:
+          - name: zip
+            logicalType: string
+            required: true
+    relationships:
+      - type: foreignKey
+        from: orders.customer_id
+        to: customers.customer_id
+    quality:
+      - metric: rowCount
+        mustBeGreaterThan: 0
+      - metric: rowCount
+        mustBe: 1000
+      - metric: rowCount
+        mustBeGreaterThan: 10
+      - metric: rowCount
+        mustBeGreaterOrEqualTo: 10
+      - metric: rowCount
+        mustBeLessThan: 1000000
+        severity: warning
+      - metric: rowCount
+        mustBeLessOrEqualTo: 1000000
+      - metric: rowCount
+        mustNotBe: 0
+      - metric: rowCount
+        mustBeBetween: [1, 1000000]
+      - metric: rowCount                       # v0.2 (R2)
+        mustNotBeBetween: [1, 2]
+      - metric: duplicateValues                # v0.2 (Col.ComboShouldBeDistinct)
+        mustBe: 0
+        arguments:
+          properties: [order_id, customer_id]
+      - metric: duplicateValues                # v0.2 (R3)
+        mustBe: 0
+        arguments:
+          properties: [order_id, customer_id, status]
+      - type: sql
+        query: SELECT COUNT(*) FROM orders WHERE amount < 0
+        mustBe: 0
+      - type: custom
+        engine: soda
+        implementation: "checks for orders: [row_count > 0]"
+      - type: text
+        description: Orders are reconciled monthly.
+  - name: bridge
+    properties:
+      - name: a
+        logicalType: integer
+        primaryKey: true
+        primaryKeyPosition: 1
+      - name: b
+        logicalType: integer
+        primaryKey: true
+        primaryKeyPosition: 2
+slaProperties:
+  - property: latency
+    value: 4
+    unit: d
