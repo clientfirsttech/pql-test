@@ -28,9 +28,7 @@ class TestPyproject:
         should = "declare license MIT and ship LICENSE and NOTICE as license files"
         project = _project()
 
-        assert (project["license"], project["license-files"]) == ("MIT", ["LICENSE", "NOTICE"]), (
-            f"{given}: {should}"
-        )
+        assert (project["license"], project["license-files"]) == ("MIT", ["LICENSE", "NOTICE"]), f"{given}: {should}"
 
     def test_supports_python_39(self):
         given = "the pql-odcs pyproject"
@@ -62,16 +60,12 @@ class TestWorkspace:
         should = "declare a uv workspace with python/ and packages/pql-odcs/ as members"
         root = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-        assert root["tool"]["uv"]["workspace"]["members"] == ["python", "packages/pql-odcs"], (
-            f"{given}: {should}"
-        )
+        assert root["tool"]["uv"]["workspace"]["members"] == ["python", "packages/pql-odcs"], f"{given}: {should}"
 
     def test_pql_test_resolves_pql_odcs_from_the_workspace(self):
         given = "pql-test's pyproject"
         should = "offer a contracts extra and resolve pql-odcs from the workspace under uv"
         pql_test = tomllib.loads((REPO_ROOT / "python" / "pyproject.toml").read_text(encoding="utf-8"))
 
-        assert pql_test["project"]["optional-dependencies"]["contracts"] == ["pql-odcs>=0.1,<0.2"], (
-            f"{given}: {should}"
-        )
+        assert pql_test["project"]["optional-dependencies"]["contracts"] == ["pql-odcs>=0.1,<0.2"], f"{given}: {should}"
         assert pql_test["tool"]["uv"]["sources"]["pql-odcs"] == {"workspace": True}, f"{given}: {should}"

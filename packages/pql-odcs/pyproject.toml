@@ -67,7 +67,8 @@ where = ["src"]
 include = ["pql_odcs*"]
 
 [tool.setuptools.package-data]
-pql_odcs = ["catalog/*.yaml", "schemas/*.json", "schemas/*.txt"]
+"pql_odcs.catalog" = ["*.yaml"]
+pql_odcs = ["schemas/*.json", "schemas/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
