@@ -77,3 +77,4 @@ renamedenv
 
 # hypothesis example database (pql-odcs property tests)
 .hypothesis/
+.coverage
