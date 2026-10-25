@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 46,
-    "mapped": 19,
-    "approximated": 0,
+    "mapped": 17,
+    "approximated": 2,
     "skipped": 27
   },
   "rules": [
@@ -64,14 +64,14 @@
     },
     {
       "ruleId": "orders.order_id.unique",
-      "status": "mapped",
+      "status": "approximated",
       "description": "orders.order_id is unique",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
     },
     {
       "ruleId": "orders.order_id.type",
@@ -84,14 +84,14 @@
     },
     {
       "ruleId": "orders.order_id.quality[0]",
-      "status": "mapped",
+      "status": "approximated",
       "description": "orders.order_id duplicateValues mustBe 0",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
     },
     {
       "ruleId": "orders.customer_id.required",

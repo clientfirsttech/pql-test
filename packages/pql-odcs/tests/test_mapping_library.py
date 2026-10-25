@@ -186,3 +186,49 @@ class TestRegistry:
         ids = [o.rule_id for o in _map_contract(data) if not o.rule_id.endswith(".exists")]
 
         assert ids == ["A.rows", "solo", "B.rows"], f"{given}: {should}"
+
+
+class TestReviewEdgeCases:
+    def test_rule_ids_stay_unique_when_qualified_ids_collide(self):
+        given = "two quality rules with the same ODCS id on the same property"
+        should = "still give every rule a distinct rule id"
+        rules = [
+            {"id": "chk", "metric": "duplicateValues", "mustBe": 0},
+            {"id": "chk", "metric": "nullValues", "mustBe": 0},
+        ]
+        data = contract_dict(schema=[schema_object("T", [prop("c", quality=rules)])])
+
+        ids = [o.rule_id for o in _map_contract(data)]
+
+        assert len(ids) == len(set(ids)), f"{given}: {should}\n{ids}"
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf")])
+    def test_non_finite_thresholds_are_skipped(self, value):
+        given = f"rowCount mustBeLessThan {value}"
+        should = "be skipped, because DAX has no literal for it"
+
+        assert _object_rule({"metric": "rowCount", "mustBeLessThan": value}).status is Status.SKIPPED, (
+            f"{given}: {should}"
+        )
+
+    def test_unique_is_approximated_because_blanks_count_as_a_value(self):
+        given = "unique: true on a column"
+        should = "be approximated: Col.ShouldBeDistinct fails when the column has blanks"
+        data = contract_dict(schema=[schema_object("T", [prop("c", "integer", unique=True)])])
+
+        outcome = {o.rule_id: o for o in _map_contract(data)}["T.c.unique"]
+
+        assert (outcome.status, "blank" in outcome.reason.lower()) == (Status.APPROXIMATED, True), f"{given}: {should}"
+
+    def test_required_text_column_is_approximated_and_numeric_is_mapped(self):
+        given = "required on a string column and on an integer column"
+        should = "approximate the string one (empty strings count as BLANK) and map the integer one"
+        data = contract_dict(
+            schema=[schema_object("T", [prop("s", "string", required=True), prop("n", "integer", required=True)])]
+        )
+
+        rules = {o.rule_id: o.status for o in _map_contract(data)}
+
+        assert (rules["T.s.required"], rules["T.n.required"]) == (Status.APPROXIMATED, Status.MAPPED), (
+            f"{given}: {should}"
+        )

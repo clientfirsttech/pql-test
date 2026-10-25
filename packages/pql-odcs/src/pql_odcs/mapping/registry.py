@@ -85,6 +85,21 @@ def _dedupe(outcomes: list[RuleOutcome]) -> list[RuleOutcome]:
     return result
 
 
+def _unique_ids(outcomes: list[RuleOutcome]) -> list[RuleOutcome]:
+    """Suffix ``#2``, ``#3``, ... onto any rule id that is still not unique (e.g. repeated ids in one scope)."""
+    counts: Counter = Counter()
+    result = []
+    for o in outcomes:
+        counts[o.rule_id] += 1
+        if counts[o.rule_id] == 1:
+            result.append(o)
+            continue
+        new_id = f"{o.rule_id}#{counts[o.rule_id]}"
+        renamed = tuple(dataclasses.replace(a, rule_id=new_id) if a.rule_id == o.rule_id else a for a in o.assertions)
+        result.append(dataclasses.replace(o, rule_id=new_id, assertions=renamed))
+    return result
+
+
 def map_contract(contract: Contract, names, *, closed_schema: bool = False) -> list[RuleOutcome]:
     """Map every rule in *contract*; never drops a rule (unmappable ones are SKIPPED)."""
     ctx = MapContext(contract, names, closed_schema)
@@ -115,4 +130,4 @@ def map_contract(contract: Contract, names, *, closed_schema: bool = False) -> l
         outcomes.extend(relationship_rules(obj, obj["name"]))
         outcomes.extend(quality_by_scope.pop(obj["name"], []))
     outcomes.extend(sla_rules(contract.data))
-    return _dedupe(outcomes)
+    return _dedupe(_unique_ids(outcomes))

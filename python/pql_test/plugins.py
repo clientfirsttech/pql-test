@@ -34,10 +34,17 @@ def select_entry_points(eps: Any, group: str) -> list[EntryPoint]:
     group name -> tuple of entry points.
     """
     if hasattr(eps, "select"):
-        return list(eps.select(group=group))
-    if isinstance(eps, Mapping):
-        return list(eps.get(group, ()))
-    return [ep for ep in eps if getattr(ep, "group", None) == group]
+        selected = list(eps.select(group=group))
+    elif isinstance(eps, Mapping):
+        selected = list(eps.get(group, ()))
+    else:
+        selected = [ep for ep in eps if getattr(ep, "group", None) == group]
+    # Python 3.9 does not deduplicate distributions (e.g. a stale *.egg-info next to
+    # an installed wheel), so the same entry point can appear twice.
+    unique: dict[tuple[str, str], EntryPoint] = {}
+    for ep in selected:
+        unique.setdefault((ep.name, ep.value), ep)
+    return list(unique.values())
 
 
 def load_plugins(group: click.Group, eps: Iterable[EntryPoint] | None = None) -> list[str]:
@@ -58,8 +65,8 @@ def load_plugins(group: click.Group, eps: Iterable[EntryPoint] | None = None) ->
         name = command.name or ep.name
         if name in group.commands:
             click.echo(
-                f"warning: pql-test plugin {ep.name!r} provides command {name!r}, which is built in; "
-                "keeping the built-in.",
+                f"warning: pql-test plugin {ep.name!r} provides command {name!r}, which is already registered; "
+                "keeping the existing command.",
                 err=True,
             )
             continue

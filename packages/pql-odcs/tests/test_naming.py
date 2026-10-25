@@ -100,3 +100,15 @@ class TestLoadSidecar:
             load_sidecar(path)
 
         assert "table" in str(exc.value), f"{given}: {should}"
+
+
+def test_malformed_columns_section_is_a_mapping_error(tmp_path):
+    given = "a sidecar whose columns section is a list"
+    should = "raise MappingError instead of crashing"
+    path = tmp_path / "m.yaml"
+    path.write_text("columns:\n  - a\n", encoding="utf-8")
+
+    with pytest.raises(MappingError) as exc:
+        load_sidecar(path)
+
+    assert "columns" in str(exc.value), f"{given}: {should}"

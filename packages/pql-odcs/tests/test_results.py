@@ -166,3 +166,38 @@ class TestTraceCommand:
 
         report = json.loads(result.output)
         assert (result.exit_code, report["summary"]["passed"], report["unmatched"]) == (0, 1, []), f"{given}: {should}"
+
+
+class TestTraceByPrefix:
+    def test_rule_id_prefix_still_matches_after_the_description_changed(self):
+        given = "a result whose test name has the same contract and rule id but an older description"
+        should = "map to the rule by parsing the ODCS <contractId> <ruleId>: prefix"
+        plan = _plan()
+        stale = "ODCS marvel-contract T.n.required: an older description"
+
+        statuses = _statuses(trace(plan, {"results": [_row(stale, False)]}))
+
+        assert statuses["T.n.required"] == "failed", f"{given}: {should}"
+
+    def test_static_pql_test_output_fixture(self):
+        given = "pql-test --output JSON captured from a live must-fail run against SampleModel"
+        should = "trace exactly the planted failures to their rule ids"
+        from pathlib import Path
+
+        fixtures = Path(__file__).parent / "fixtures"
+        plan = plan_contract(fixtures / "marvel-must-fail.odcs.yaml")
+        results = read_results(fixtures / "results-marvel-must-fail.json")
+
+        report = trace(plan, results)
+
+        failed = {r.rule_id for r in report.rules if r.status == "failed"}
+        assert (failed, report.unmatched) == (
+            {
+                "marvel_fact_exactly_one_row",
+                "DateDim.Year.unique",
+                "date_dim_fewer_than_one_row",
+                "ghost.exists",
+                "ghost.columns",
+            },
+            [],
+        ), f"{given}: {should}"

@@ -61,7 +61,7 @@ def _connection_available() -> bool:
         from pql_test.runner import resolve_local_xmla_connection_by_name
 
         return resolve_local_xmla_connection_by_name("SampleModel") is not None
-    except Exception:  # psutil missing, no Desktop running, ...
+    except Exception:  # noqa: BLE001 - psutil missing, no Desktop running, ...: just skip
         return False
 
 

@@ -3,11 +3,21 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from typing import Any
 
 from pql_odcs.ir import DATA_QUALITY_SUITE, ERROR, WARNING, Assertion, RuleOutcome, Target
-from pql_odcs.mapping.context import MapContext, is_column, mapped, skipped
+from pql_odcs.mapping.context import (
+    BLANKS_COUNT_AS_VALUE,
+    EMPTY_STRING_IS_BLANK,
+    MapContext,
+    approximated,
+    is_column,
+    is_text,
+    mapped,
+    skipped,
+)
 from pql_odcs.mapping.schema import NO_COLUMN
 
 OPERATORS = (
@@ -55,7 +65,7 @@ def describe(rule: Mapping, scope: str) -> str:
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _is_zero_ceiling(cmp: tuple[str, Any]) -> bool:
@@ -137,7 +147,7 @@ def _null_values(rule, ctx, rule_id, obj, prop, cmp, description, severity) -> R
         assertion = Assertion(
             rule_id, DATA_QUALITY_SUITE, "col.null_rate_at_most", target, {"maxPct": 0}, description, severity
         )
-        return mapped(rule_id, assertion)
+        return approximated(rule_id, EMPTY_STRING_IS_BLANK, assertion) if is_text(prop) else mapped(rule_id, assertion)
     if rule.get("unit") == "percent":
         return skipped(rule_id, "nullValues percent thresholds arrive in v0.2 (units per gap plan C2)", description)
     return skipped(rule_id, "nullValues absolute thresholds arrive in v0.2 (fallback R4: COUNTBLANK)", description)
@@ -158,4 +168,5 @@ def _duplicate_values(rule, ctx, rule_id, obj, prop, cmp, description, severity)
         return target
     if not _is_zero_ceiling(cmp):
         return skipped(rule_id, "non-zero duplicateValues thresholds arrive in v0.3 (fallback R6)", description)
-    return mapped(rule_id, Assertion(rule_id, DATA_QUALITY_SUITE, "col.distinct", target, {}, description, severity))
+    assertion = Assertion(rule_id, DATA_QUALITY_SUITE, "col.distinct", target, {}, description, severity)
+    return approximated(rule_id, BLANKS_COUNT_AS_VALUE, assertion)

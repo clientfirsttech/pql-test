@@ -122,7 +122,7 @@ class TestPropertyRules:
 
     def test_primary_key_unique_and_duplicate_rule_share_one_distinct_check(self):
         given = "a column that is primaryKey, unique, and has duplicateValues mustBe 0"
-        should = "map all three rules to the same single col.distinct assertion"
+        should = "map all three rules to one shared col.distinct (unique/duplicateValues approximated: blanks)"
         rules = _map(
             schema_object(
                 "Dim",
@@ -140,7 +140,7 @@ class TestPropertyRules:
         shared = {id(a) for o in sources for a in o.assertions}
 
         assert ([o.status for o in sources], len(shared), sources[0].assertions[0].op) == (
-            [Status.MAPPED] * 3,
+            [Status.MAPPED, Status.APPROXIMATED, Status.APPROXIMATED],
             1,
             "col.distinct",
         ), f"{given}: {should}"

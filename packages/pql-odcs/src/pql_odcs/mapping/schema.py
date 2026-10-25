@@ -6,7 +6,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from pql_odcs.ir import DATA_QUALITY_SUITE, SCHEMA_SUITE, Assertion, RuleOutcome, Target
-from pql_odcs.mapping.context import MapContext, is_column, mapped, skipped
+from pql_odcs.mapping.context import (
+    BLANKS_COUNT_AS_VALUE,
+    EMPTY_STRING_IS_BLANK,
+    MapContext,
+    approximated,
+    is_column,
+    is_text,
+    mapped,
+    skipped,
+)
 
 NO_COLUMN = "object and array properties have no semantic model column"
 
@@ -50,12 +59,11 @@ def property_rules(
     if prop.get("required") is True:
         description = f"{scope} is required (no nulls)"
         rule_id = f"{scope}.required"
-        out.append(
-            mapped(
-                rule_id,
-                Assertion(rule_id, DATA_QUALITY_SUITE, "col.null_rate_at_most", target, {"maxPct": 0}, description),
-            )
-        )
+        assertion = Assertion(rule_id, DATA_QUALITY_SUITE, "col.null_rate_at_most", target, {"maxPct": 0}, description)
+        if is_text(prop):
+            out.append(approximated(rule_id, EMPTY_STRING_IS_BLANK, assertion))
+        else:
+            out.append(mapped(rule_id, assertion))
     if prop.get("primaryKey") is True:
         rule_id = f"{scope}.primaryKey"
         description = f"{scope} is a primary key (distinct)"
@@ -72,7 +80,7 @@ def property_rules(
     if prop.get("unique") is True:
         rule_id = f"{scope}.unique"
         description = f"{scope} is unique"
-        out.append(mapped(rule_id, _distinct(rule_id, target, description)))
+        out.append(approximated(rule_id, BLANKS_COUNT_AS_VALUE, _distinct(rule_id, target, description)))
     return out
 
 

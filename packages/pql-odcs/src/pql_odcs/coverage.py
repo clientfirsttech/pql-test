@@ -69,10 +69,6 @@ def build_report(
     }
 
 
-def skipped_count(report: dict) -> int:
-    return report["summary"]["skipped"]
-
-
 def format_text(report: dict) -> str:
     """Plain-text table: one line per rule; mapped rules show their functions, others the reason."""
     c, s = report["contract"], report["summary"]
@@ -86,8 +82,10 @@ def format_text(report: dict) -> str:
     width = max([len(r["ruleId"]) for r in report["rules"]] + [4])
     lines.append(f"  {'STATUS':<13}{'RULE':<{width + 2}}DETAIL")
     for r in report["rules"]:
-        detail = r["reason"] if r["status"] != Status.MAPPED.value else ", ".join(r["functions"])
-        if r["status"] == Status.MAPPED.value and r["severity"] == "warning":
+        detail = ", ".join(r["functions"]) or r["reason"]
+        if r["status"] == Status.APPROXIMATED.value:
+            detail += f" — {r['reason']}"
+        if r["functions"] and r["severity"] == "warning":
             detail += " (warning)"
         lines.append(f"  {r['status']:<13}{r['ruleId']:<{width + 2}}{detail}")
     return "\n".join(lines) + "\n"

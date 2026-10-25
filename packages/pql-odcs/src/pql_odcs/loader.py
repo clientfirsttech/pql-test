@@ -83,7 +83,7 @@ def _read_yaml(path: Path) -> Any:
 def _validator(schema_file: str):
     from jsonschema import Draft201909Validator  # deferred: keeps CLI startup fast
 
-    schema = json.loads(files("pql_odcs").joinpath("schemas", schema_file).read_text(encoding="utf-8"))
+    schema = json.loads(files("pql_odcs").joinpath("schemas").joinpath(schema_file).read_text(encoding="utf-8"))
     return Draft201909Validator(schema)
 
 

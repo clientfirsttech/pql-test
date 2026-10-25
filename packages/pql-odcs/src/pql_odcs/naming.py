@@ -61,7 +61,11 @@ def load_sidecar(path: str | Path) -> dict:
     if unknown:
         raise MappingError(f"Mapping file {path} has unknown key(s) {', '.join(unknown)}; expected tables, columns.")
     tables, columns = data.get("tables") or {}, data.get("columns") or {}
-    if not isinstance(tables, dict) or not all(isinstance(v, dict) for v in columns.values()):
+    if (
+        not isinstance(tables, dict)
+        or not isinstance(columns, dict)
+        or not all(isinstance(v, dict) for v in columns.values())
+    ):
         raise MappingError(f"Mapping file {path}: tables must map names to names; columns must nest by object.")
     return {"tables": tables, "columns": columns}
 

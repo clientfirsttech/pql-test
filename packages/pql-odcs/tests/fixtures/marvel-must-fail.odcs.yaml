@@ -1,5 +1,5 @@
 # Must-fail contract for examples/SampleModel: each rule tagged expect-fail
-# below (and listed in tests/test_integration.py) must fail against the sample model.
+# below (and listed in python/tests/test_contract_live.py) must fail against the sample model.
 apiVersion: v3.1.0
 kind: DataContract
 id: marvel-must-fail

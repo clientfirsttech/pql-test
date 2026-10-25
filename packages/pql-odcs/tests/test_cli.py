@@ -200,3 +200,13 @@ class TestLint:
         should = "exit 2"
 
         assert _run("lint", tmp_path / "nope.yaml").exit_code == 2, f"{given}: {should}"
+
+
+def test_lint_model_names_are_case_insensitive(tmp_path):
+    given = "a model table and column whose names differ from the contract only by case"
+    should = "pass, because DAX object names are case-insensitive"
+    model = _pbip(tmp_path, {"t": ["ID"]})
+
+    result = _run("lint", _write_contract(tmp_path), "--model", model)
+
+    assert result.exit_code == 0, f"{given}: {should}\n{result.output}"

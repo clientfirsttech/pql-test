@@ -115,7 +115,7 @@ class TestLoadPlugins:
         loaded = load_plugins(host, [_ep("impostor", "tests.test_plugins:impostor")])
         result = CliRunner().invoke(host, ["run-tests"])
 
-        assert (loaded, result.output, "built in" in capsys.readouterr().err) == ([], "built-in\n", True), (
+        assert (loaded, result.output, "already registered" in capsys.readouterr().err) == ([], "built-in\n", True), (
             f"{given}: {should}"
         )
 
@@ -129,7 +129,7 @@ class TestInstalledContractPlugin:
 
         result = CliRunner().invoke(cli, ["contract", "--help"])
 
-        assert (result.exit_code, all(c in result.output for c in ("generate", "coverage", "lint", "trace"))) == (
+        assert (result.exit_code, all(c in result.output for c in ("generate", "coverage", "lint", "trace", "run"))) == (
             0,
             True,
         ), f"{given}: {should}\n{result.output}"

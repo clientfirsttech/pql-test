@@ -65,6 +65,27 @@ def exit_code(results: list[TestResult], blocking_suites: set[str]) -> int:
     return 1 if blocking_failed or all_skipped else 0
 
 
+def _rule_detail(rule) -> str:
+    return rule.reason or "; ".join(
+        d.get("error") or f"Expected: {d.get('expected', '?')} | Actual: {d.get('actual', '?')}"
+        for d in rule.details
+        if not d.get("passed")
+    )
+
+
+def print_trace_annotations(report, log_format: str) -> None:
+    """Failed/errored contract rules as CI annotations (warning-severity rules as warnings)."""
+    for rule in report.rules:
+        if rule.status not in ("failed", "error"):
+            continue
+        level = "warning" if rule.severity == "warning" else "error"
+        text = f"ODCS rule {rule.rule_id} {rule.status}: {_rule_detail(rule)}".replace("\n", " ")
+        if log_format == "github":
+            click.echo(f"::{level} title=ODCS rule {rule.rule_id}::{text}")
+        else:
+            click.echo(f"##vso[task.logissue type={level}]{text}")
+
+
 def print_trace(report) -> None:
     """Contract-rule view of the run: every rule that did not pass, grouped by rule id."""
     summary = report.summary()
@@ -76,11 +97,7 @@ def print_trace(report) -> None:
         label = rule.status.upper().replace("_", " ")
         colored = click.style(f"{label:<13}", fg=STATUS_COLORS[_TRACE_COLORS[rule.status]])
         warn = " (warning, non-blocking)" if rule.severity == "warning" else ""
-        detail = rule.reason or "; ".join(
-            d.get("error") or f"Expected: {d.get('expected', '?')} | Actual: {d.get('actual', '?')}"
-            for d in rule.details
-            if not d.get("passed")
-        )
+        detail = _rule_detail(rule)
         click.echo(f"  {colored}{rule.rule_id}{warn}")
         if detail:
             click.echo(f"      {detail}")
@@ -190,10 +207,15 @@ def make_run_command(hooks: RunHooks) -> click.Command:
             hooks.print_results(suite, verbose, pre_warnings=pre_warnings, environment=env)
 
         suite_json = hooks.suite_to_dict(suite)
+        report = trace(plan, suite_json, suite_prefix=suite_prefix)
         if output:
-            Path(output).write_text(json.dumps(suite_json, indent=2), encoding="utf-8")
+            # run-tests' documented shape, plus the per-rule trace under "contract".
+            Path(output).write_text(json.dumps({**suite_json, "contract": report.to_json()}, indent=2), encoding="utf-8")
             click.echo(f"\nJSON results written to: {output}")
-        print_trace(trace(plan, suite_json, suite_prefix=suite_prefix))
+        if log_format:
+            print_trace_annotations(report, log_format.lower())
+        else:
+            print_trace(report)
 
         blocking = {f.function_name for f in generated.files if f.blocking}
         sys.exit(exit_code(results, blocking))
@@ -209,6 +231,8 @@ def extend_contract_group(base: click.Group, run: click.Command) -> click.Group:
         callback=base.callback,
         params=list(base.params),
         help=base.help,
+        context_settings=base.context_settings,
+        no_args_is_help=base.no_args_is_help,
     )
     group.add_command(run)
     return group

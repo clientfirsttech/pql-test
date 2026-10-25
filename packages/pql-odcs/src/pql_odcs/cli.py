@@ -146,14 +146,16 @@ def lint_cmd(contract_path, mapping, model_path):
                 model = model_names(require_semantic_model_dir(model_path))
             except ModelPathError as exc:
                 raise click.UsageError(str(exc)) from None
+            # DAX object names are case-insensitive.
+            model_ci = {t.lower(): {c.lower() for c in cols} for t, cols in model.items()}
             for obj in plan.contract.schema_objects:
                 table = plan.names.table(obj)
-                if table not in model:
+                if table.lower() not in model_ci:
                     problems.append(f"{obj['name']}: table {table!r} not found in model")
                     continue
                 for prop in obj.get("properties") or []:
                     column = plan.names.column(obj, prop)
-                    if is_column(prop) and column not in model[table]:
+                    if is_column(prop) and column.lower() not in model_ci[table.lower()]:
                         problems.append(
                             f"{obj['name']}.{prop['name']}: column {column!r} not found in model table {table!r}"
                         )

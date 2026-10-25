@@ -54,7 +54,8 @@ jobs:
         run: pip install --upgrade build twine
 
       - name: Verify tag matches pyproject version
-        if: github.event_name == 'push'
+        # Runs for tag pushes and for manual dispatches started from a tag.
+        if: github.ref_type == 'tag'
         shell: bash
         working-directory: packages/pql-odcs
         run: |
@@ -106,7 +107,9 @@ jobs:
   publish-pypi:
     name: Publish pql-odcs to PyPI
     needs: build
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') }}
+    # Real PyPI only from a tag (push, or a manual dispatch started from that tag),
+    # so the tag/version check above always ran for what gets published.
+    if: ${{ github.ref_type == 'tag' && (github.event_name == 'push' || inputs.target == 'pypi') }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write   # OIDC token for trusted publishing

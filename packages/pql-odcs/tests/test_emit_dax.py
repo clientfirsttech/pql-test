@@ -173,3 +173,16 @@ class TestTestNames:
         assert "ODCS marvel-contract D.ID.primaryKey: D.ID is a primary key (distinct)" in names and not [
             n for n in names if "D.ID.unique" in n
         ], f"{given}: {should}"
+
+
+class TestHeaderSafety:
+    def test_contract_id_cannot_break_out_of_the_header_comment(self):
+        given = "a contract id containing a newline followed by DAX"
+        should = "keep the whole header on // comment lines so no injected DAX runs"
+        data = _marvel()
+        data["id"] = 'c1\nEVALUATE ROW("x", 1)\n//'
+
+        content = _render(data)[0].content
+
+        header = content.split("DEFINE", 1)[0]
+        assert all(line.startswith("//") for line in header.splitlines()), f"{given}: {should}\n{header}"

@@ -96,11 +96,24 @@ def trace(plan, results: Mapping, *, suite_prefix: str | None = None) -> TraceRe
     by_name = {name: key for key, name in names.items()}
     prefix = suite_prefix or default_suite_prefix(contract)
     assertions = {id(a): a for o in outcomes for a in o.assertions}
+    # Fallback join on the "ODCS <contractId> <ruleId>: " prefix, so a result still maps
+    # when the description part drifted (edited description, different --mapping).
+    by_rule = {o.rule_id: id(o.assertions[0]) for o in outcomes if o.assertions}
+    rule_ids = sorted(by_rule, key=len, reverse=True)  # longest first: "a.b" before "a"
+    name_prefix = f"ODCS {contract.id} "
+
+    def lookup(test_name: str) -> int | None:
+        if test_name in by_name:
+            return by_name[test_name]
+        if not test_name.startswith(name_prefix):
+            return None
+        rest = test_name[len(name_prefix) :]
+        return next((by_rule[r] for r in rule_ids if rest.startswith(f"{r}: ")), None)
 
     seen: dict[int, list[Mapping]] = {}
     unmatched: list[dict] = []
     for row in results.get("results") or []:
-        key = by_name.get(row.get("test_name"))
+        key = lookup(str(row.get("test_name", "")))
         if key is not None:
             seen.setdefault(key, []).append(row)
             continue

@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 12,
-    "mapped": 9,
-    "approximated": 0,
+    "mapped": 8,
+    "approximated": 1,
     "skipped": 3
   },
   "rules": [
@@ -84,14 +84,14 @@
     },
     {
       "ruleId": "DateDim.Year.unique",
-      "status": "mapped",
+      "status": "approximated",
       "description": "DateDim.Year is unique",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Col.ShouldBeDistinct"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), so it also fails when the column contains any blank"
     },
     {
       "ruleId": "DateDim.Year.type",

@@ -1,0 +1,99 @@
+{
+  "model_path": "examples/SampleModel",
+  "passed": 4,
+  "failed": 5,
+  "skipped": 0,
+  "total": 9,
+  "results": [
+    {
+      "test_name": "ODCS marvel-must-fail marvel_fact.exists: marvel_fact exists",
+      "expected": "Table 'MarvelFact' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail marvel_fact.columns: marvel_fact has columns Name",
+      "expected": "Table 'MarvelFact' has columns: Name",
+      "actual": "ALL COLUMNS FOUND",
+      "passed": true,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail DateDim.exists: DateDim exists",
+      "expected": "Table 'DateDim' exists",
+      "actual": "EXISTS",
+      "passed": true,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail DateDim.columns: DateDim has columns Year",
+      "expected": "Table 'DateDim' has columns: Year",
+      "actual": "ALL COLUMNS FOUND",
+      "passed": true,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail ghost.exists: ghost exists",
+      "expected": "Table 'NoSuchTable' exists",
+      "actual": "NOT FOUND",
+      "passed": false,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail ghost.columns: ghost has columns Missing",
+      "expected": "Table 'NoSuchTable' has columns: Missing",
+      "actual": "MISSING 1 COLUMN(S). Available: ",
+      "passed": false,
+      "suite_name": "MarvelFail.Schema.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 1750.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail marvel_fact_exactly_one_row: marvel_fact rowCount mustBe 1",
+      "expected": "1 rows",
+      "actual": "16376 rows",
+      "passed": false,
+      "suite_name": "MarvelFail.DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 203.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail DateDim.Year.unique: DateDim.Year is unique",
+      "expected": "All values distinct",
+      "actual": "DUPLICATES FOUND (89 distinct of 1039 rows)",
+      "passed": false,
+      "suite_name": "MarvelFail.DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 203.0
+    },
+    {
+      "test_name": "ODCS marvel-must-fail date_dim_fewer_than_one_row: DateDim rowCount mustBeLessThan 1",
+      "expected": "< 1",
+      "actual": "1039",
+      "passed": false,
+      "suite_name": "MarvelFail.DataQuality.DEV.Tests",
+      "skipped": false,
+      "error": null,
+      "duration_ms": 203.0
+    }
+  ]
+}

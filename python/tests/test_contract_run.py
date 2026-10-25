@@ -74,12 +74,14 @@ class TestContractRunCommand:
         )
 
         written = sorted(p.name for p in (model / "DAXQueries").iterdir())
+        saved = json.loads(out.read_text(encoding="utf-8"))
         assert (
             result.exit_code,
             written,
             "NOT EXECUTED" in result.output,
-            json.loads(out.read_text(encoding="utf-8"))["skipped"] > 0,
-        ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True), (
+            saved["skipped"] > 0,
+            saved["contract"]["summary"]["not_executed"] > 0,
+        ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True, True), (
             f"{given}: {should}\n{result.output}"
         )
 
@@ -93,3 +95,33 @@ class TestContractRunCommand:
         result = CliRunner().invoke(cli, ["contract", "run", str(bad), str(tmp_path), "--env", "DEV"])
 
         assert (result.exit_code, "v3.0.x and v3.1.x" in result.output) == (1, True), f"{given}: {should}"
+
+
+class TestTraceAnnotations:
+    def _report(self):
+        from pql_odcs.api import plan_contract
+        from pql_odcs.results import read_results, trace
+
+        plan = plan_contract(FIXTURES / "marvel-must-fail.odcs.yaml")
+        return trace(plan, read_results(FIXTURES / "results-marvel-must-fail.json"))
+
+    def test_github_format_emits_one_error_per_failed_rule(self, capsys):
+        given = "--log-format github and five failed contract rules"
+        should = "emit one ::error annotation per failed rule, titled with the rule id"
+        from pql_test.contract_run import print_trace_annotations
+
+        print_trace_annotations(self._report(), "github")
+        lines = capsys.readouterr().out.splitlines()
+
+        assert (len(lines), all(line.startswith("::error title=ODCS rule ") for line in lines)) == (5, True), (
+            f"{given}: {should}"
+        )
+
+    def test_azuredevops_format_uses_logissue(self, capsys):
+        given = "--log-format azuredevops"
+        should = "emit ##vso[task.logissue] lines"
+        from pql_test.contract_run import print_trace_annotations
+
+        print_trace_annotations(self._report(), "azuredevops")
+
+        assert capsys.readouterr().out.startswith("##vso[task.logissue type=error]ODCS rule "), f"{given}: {should}"

@@ -27,5 +27,23 @@ def mapped(rule_id: str, *assertions: Assertion) -> RuleOutcome:
     return RuleOutcome(rule_id, Status.MAPPED, tuple(assertions), description=assertions[0].description)
 
 
+def approximated(rule_id: str, reason: str, *assertions: Assertion) -> RuleOutcome:
+    """Mapped to a close equivalent whose semantics differ in a documented way."""
+    return RuleOutcome(
+        rule_id, Status.APPROXIMATED, tuple(assertions), reason=reason, description=assertions[0].description
+    )
+
+
+BLANKS_COUNT_AS_VALUE = (
+    "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks), "
+    "so it also fails when the column contains any blank"
+)
+EMPTY_STRING_IS_BLANK = "DAX treats empty strings as BLANK, so empty strings also count as nulls"
+
+
+def is_text(prop: Mapping | None) -> bool:
+    return bool(prop) and prop.get("logicalType") == "string"
+
+
 def skipped(rule_id: str, reason: str, description: str = "") -> RuleOutcome:
     return RuleOutcome(rule_id, Status.SKIPPED, (), reason=reason, description=description)
