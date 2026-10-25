@@ -10,6 +10,7 @@
 - **Refactor runner.py monolith into focused module package** — CRITICAL for maintainability (promoted from backlog 2026-08-30). File is 1,947 lines mixing 9+ responsibilities, causing high regression risk and slow code review velocity. Split into `runner/` package with 9 focused modules (~150-350 lines each). See [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md). Estimated 2-3 days.
 - **Implement token validation in auth/manager.py** — TODO at line 123 needs implementation for OWASP A07 (Authentication Failures). Validate JWT expiry without making service calls. Estimated 4 hours.
 - **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address A01, A04, A06, A07 findings from 2026-08-30 AIDD review. Estimated 1 day.
+- **pql-odcs v0.1: ODCS data contracts → PQL.Assert suites** (branch `dev-odcs`, planned 2026-10-25). Adds a new MIT package under `packages/pql-odcs/` that generates `*.Tests.dax` suites from ODCS v3.x contract quality rules, with a coverage report that covers every rule. It is mounted in pql-test as `pql-test contract …` through the `contracts` extra and a `pql_test.commands` plugin hook. The work covers 20 tasks: scaffold, license guardrails, loader, mappers, emitter, CLI, `contract run`, CI, and release. See [tasks/pql-odcs-v0.1-epic.md](tasks/pql-odcs-v0.1-epic.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 
 ## Open Items
 
@@ -18,6 +19,31 @@
 - **PyPI initial release — manual steps remain** — code/config side is ready ([python/pyproject.toml](python/pyproject.toml), [.github/workflows/release.yml](.github/workflows/release.yml), MIT [LICENSE.txt](LICENSE.txt) synced to `python/`, release checklist in [CONTRIBUTING.md](CONTRIBUTING.md)).  Maintainer still has to: (1) `cd python && python -m build && twine check --strict dist/*` locally to confirm a clean build, (2) create accounts on https://test.pypi.org and https://pypi.org if they don't exist, (3) register trusted publishers on both for `pql-test` with workflow name `release.yml` and environments `testpypi` / `pypi`, (4) create matching GitHub Environments in repo settings, (5) `git tag v0.1.0 && git push --tags` to fire the release workflow.  See the "Releasing a new version" section in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Backlog
+
+- **pql-odcs open decisions** — These must be settled before pql-odcs v0.1 ships:
+  - name mapping: contract `customProperties`, a sidecar file, or both (v0.1 implements both);
+  - whether generated `.dax` files are committed or regenerated in CI;
+  - counsel review of the `LICENSE.txt` scope note, `LICENSES.md`, and the NOTICE wording for bundled PQL.Assert `functions.tmdl`.
+
+  See the risks section of [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
+
+- **pql-odcs v0.2** — Contents:
+  - query-scoped XMLA target (`--target query`, transport in pql-test);
+  - v0.2 mapping rows: types, relationships, ranges, text length, percent nulls, missing and invalid values, 2-column keys;
+  - fallbacks R2–R5;
+  - the datacontract-cli `Exporter` adapter (`pql-odcs[datacontract]`, Python ≥3.10);
+  - a PQL.Assert minimum-version warning in `contract run`.
+
+- **pql-odcs v0.3** — Contents:
+  - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
+  - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`);
+  - fallback R6;
+  - pattern rules per C3 / R7.
+
+- **pql-odcs v1.0 (optional)** — Contents:
+  - an upstream `datacontract export pql-assert` PR;
+  - a pbip importer (TMDL → starter ODCS contract);
+  - a Bitol RFC for a Power BI / Fabric semantic model `servers` type.
 
 - **~~Split `python/pql_test/runner.py` into a focused module package~~** — PROMOTED TO ACTIVE WORK (2026-08-30). See above and [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md).
 
