@@ -37,7 +37,7 @@ What makes it unique:
 
 ## Architecture
 
-- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`
+- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`, plus plugin groups from the `pql_test.commands` entry point (`contract` from pql-odcs, with the BUSL `contract run` in `python/pql_test/contract_run.py`)
 - **Core Runner** (`python/pql_test/runner/`) — Refactored module package for test discovery and execution via XMLA/ADOMD.NET
 - **Skill Distribution** (`python/pql_test/skills/`, `python/pql_test/skills_resolver.py`) — Version-matched skills packaged in wheel, installable to any harness (Claude, Copilot, Cursor, Windsurf)
 - **Plugin Skills** (`skills/`) — Source skills with YAML frontmatter (name, description, version), SudoLang behavioral contracts
