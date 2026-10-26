@@ -54,6 +54,38 @@ In v0.1, `MODEL_PATH` must be a PBIP folder: the root containing the `.pbip` fil
 
 The generated DAX calls PQL.Assert, which must be installed in the model, version 0.7.1 or later (DAX Lib).
 
+## Commit the suites, or regenerate them in CI?
+
+pql-odcs supports both workflows. Pick one per model repository.
+
+| | Regenerate in CI | Commit to the PBIP repo |
+|---|---|---|
+| Source of truth | The contract alone | The contract, plus the generated files |
+| Drift | Impossible: suites are rebuilt on every run | Possible, so CI must check for it (below) |
+| Visible in Power BI Desktop's DAX query view | Only after a local `generate` | Yes |
+| Published with the model (Fabric git integration) | No | Yes, as files in `DAXQueries/` |
+| Counted by `pql-test code-coverage` | No | No: files in `DAXQueries/` are not model functions. Persistent deploy arrives in v0.3. |
+| Review | Review the contract | Review the contract and the DAX diff |
+
+**Regenerate in CI.**
+1. Don't commit the generated files. Ignore them by prefix, for example in `.gitignore`: `**/DAXQueries/Marvel.*.Tests.dax`.
+2. In CI, run one step, which generates, runs and traces:
+   ```bash
+   pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json --log-format github
+   ```
+
+**Commit to the PBIP repo.**
+1. Run `pql-odcs generate … --env DEV` whenever the contract changes, and commit the output.
+2. Add a CI step that fails when the committed suites are stale:
+   ```bash
+   pql-odcs generate orders.odcs.yaml ./SalesModel --env DEV
+   git diff --exit-code -- '*/DAXQueries/*.Tests.dax'
+   ```
+
+Generated files carry the pql-odcs version in their header, so upgrading pql-odcs also shows up as a diff. Regenerate and commit after an upgrade.
+
+Both workflows are safe to mix with hand-written suites in the same `DAXQueries/` folder. `generate` never overwrites a file it did not generate, or a suite generated from another contract.
+
 ## Name resolution
 
 Each ODCS schema object maps to a semantic model table, and each property to a column. The model names live in the contract itself, using ODCS's own extension mechanism, `customProperties`. That keeps them valid on ODCS 3.0, 3.1 and 3.2, and keeps them with the contract wherever it goes (including the datacontract-cli adapter):

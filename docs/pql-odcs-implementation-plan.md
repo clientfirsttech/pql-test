@@ -17,7 +17,8 @@ Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD 
 | `contract run` execution path | With a live connection, `run_tests_from_model` only runs suites already registered in the model ([discovery.py](../python/pql_test/runner/discovery.py)). Freshly generated suites are skipped as "not registered in the deployed dataset". So `contract run` builds `PqlTest`s from the generated files and executes their `DEFINE FUNCTION … EVALUATE` text with `run_tests()`. |
 | Warning suites | Keep the proposed separate `<Suite>.<ENV>WARN.Tests.dax` suites. pql-test matches environments exactly on the second-to-last name token, so `--environment DEV` does not pick them up. `contract run --env DEV` must run both suites, and only the DEV suite decides the exit code. |
 | Name mapping | **customProperties only** (decided 2026-10-26): `pbiTable` / `pbiColumn` on the contract, else the logical name. The sidecar file was removed before release. customProperties is ODCS's own extension point, valid in 3.0–3.2, and travels with the contract (the datacontract-cli adapter receives only the contract object). ODCS 3.2's `vendor` field on custom properties allows namespacing later without breaking. |
-| Still open | Whether generated `.dax` files are committed or regenerated in CI. Counsel review of `LICENSES.md` and the NOTICE wording (parked as the last epic). |
+| Generated `.dax` files | **Both workflows supported** (decided 2026-10-26): regenerate in CI with `contract run` (files git-ignored), or commit them and fail CI on drift (`generate` + `git diff --exit-code`). Documented in the pql-odcs README. |
+| Still open | Counsel review of `LICENSES.md` and the NOTICE wording (parked as the last epic). |
 | Gaps in the source plan | The **Milestones** section was empty, and the **Plugin loading masks errors** risk had no mitigation (proposed below). The PQL.Assert gap plan is now [docs/pql-assert-gap-plan.md](pql-assert-gap-plan.md) (C1–C5, R1–R8, D1). It contains only backward-compatible changes, and every finding in it was verified against SampleModel. |
 
 ## Summary
@@ -397,7 +398,7 @@ Most testing needs no Power BI at all. Only one layer touches a live model.
 - [x] Copyright holder for the MIT code → Client First Technologies (2026-10-25)
 - [x] Name mapping → customProperties only (2026-10-26)
 - [x] Warning severity → separate WARN suites (default kept, 2026-10-25)
-- [ ] Do generated `.dax` files get committed to the PBIP repo, or regenerated in CI each run?
+- [x] Generated `.dax` files → both workflows supported and documented (2026-10-26)
 
 **To confirm with counsel**
 

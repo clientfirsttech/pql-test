@@ -20,7 +20,6 @@
 ## Backlog
 
 - **pql-odcs open decisions** — These must be settled before pql-odcs v0.1 ships:
-  - whether generated `.dax` files are committed to the PBIP repo or regenerated in CI;
   - turn on "Require review from Code Owners" in branch protection (CODEOWNERS uses `@kerski-cft`);
   - maintainer: register the PyPI and TestPyPI pending publisher for `pql-odcs`, with workflow `release-pql-odcs.yml` (one-time setup).
 
@@ -33,7 +32,8 @@
 
   Decided 2026-10-26:
   - model names come only from the contract's `customProperties` (`pbiTable` / `pbiColumn`). The sidecar file was removed before release so there is one mechanism that stays compatible going forward.
-  - counsel review is parked as the last epic (below).
+  - counsel review is parked as the last epic (below);
+  - generated `.dax` files: both workflows are supported and documented in the pql-odcs README (regenerate in CI, or commit with a drift check in CI).
 
   See the risks section of [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 

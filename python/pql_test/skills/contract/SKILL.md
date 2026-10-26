@@ -34,6 +34,8 @@ Constraints {
     or another contract's suite (same prefix) unless --force; give contracts that share a dataProduct distinct --suite-prefix values
   approximated = generated, but DAX semantics differ (named in the reason): primaryKey/unique/duplicateValues are skewed by blanks;
     required on string columns also counts empty strings as nulls
+  Both workflows are supported: regenerate in CI (`contract run`, generated files git-ignored), or commit the generated
+    suites and fail CI on drift (`generate` then `git diff --exit-code`); see the pql-odcs README
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule
   Model names come only from the contract: customProperties pbiTable (schema object) / pbiColumn (property), else the ODCS logical name;
     there is no sidecar mapping file
