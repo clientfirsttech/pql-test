@@ -1352,7 +1352,7 @@ The generated files follow the rules below:
 
 In v0.1, MODEL_PATH must be a PBIP folder. Query-scoped XMLA runs against `local/<name>` and service models arrive in v0.2.
 
-The [pql-odcs README](https://github.com/clientfirsttech/pql-test/blob/main/packages/pql-odcs/README.md) documents the full rule mapping, name resolution (`pbiTable` / `pbiColumn` custom properties, or a `--mapping` sidecar file), and the standalone `pql-odcs` CLI.
+The [pql-odcs README](https://github.com/clientfirsttech/pql-test/blob/main/packages/pql-odcs/README.md) documents the full rule mapping, name resolution (`pbiTable` / `pbiColumn` custom properties on the contract), and the standalone `pql-odcs` CLI.
 
 ---
 

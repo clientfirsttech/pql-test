@@ -119,7 +119,6 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     @click.argument("model_path", metavar="MODEL_PATH")
     @click.option("--env", "env", required=True, help="Environment token for the generated suites, e.g. DEV.")
     @click.option("--suite-prefix", help="Suite name prefix (default: from the contract's dataProduct, then name).")
-    @click.option("--mapping", type=click.Path(exists=True, dir_okay=False), help="Sidecar name mapping YAML.")
     @click.option("--closed-schema", is_flag=True, help="Also fail when a table has columns the contract does not list.")
     @click.option("--force", is_flag=True, help="Overwrite suite files that pql-odcs did not generate.")
     @click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail for every result.")
@@ -136,7 +135,6 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         model_path: str,
         env: str,
         suite_prefix: str | None,
-        mapping: str | None,
         closed_schema: bool,
         force: bool,
         verbose: bool,
@@ -160,13 +158,12 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         from pql_odcs.api import GenerateError, generate, plan_contract
         from pql_odcs.emit.dax import EmitError
         from pql_odcs.loader import ContractError
-        from pql_odcs.naming import MappingError
         from pql_odcs.pbip import ModelPathError
         from pql_odcs.results import trace
 
         try:
-            plan = plan_contract(contract_path, mapping=mapping, closed_schema=closed_schema)
-        except (ContractError, MappingError) as exc:
+            plan = plan_contract(contract_path, closed_schema=closed_schema)
+        except ContractError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
         try:

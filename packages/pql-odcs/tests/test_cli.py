@@ -172,19 +172,30 @@ class TestLint:
         assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
 
     def test_lists_every_unresolved_name(self, tmp_path):
-        given = "a model missing one table's column and a sidecar entry for an unknown object"
+        given = "a model missing one table's column, and a pbiTable naming a table the model lacks"
         should = "list every problem and exit 1"
         model = _pbip(tmp_path, {"T": ["other"]})
-        sidecar = tmp_path / "map.yaml"
-        sidecar.write_text("tables:\n  Ghost: G\n", encoding="utf-8")
+        data = contract_dict(
+            name="M",
+            schema=[
+                schema_object("T", [prop("id")]),
+                schema_object("u", [prop("x")], customProperties=[{"property": "pbiTable", "value": "Ghost"}]),
+            ],
+        )
 
-        result = _run("lint", _write_contract(tmp_path), "--model", model, "--mapping", sidecar)
+        result = _run("lint", _write_contract(tmp_path, data), "--model", model)
 
         assert (
             result.exit_code,
             "T.id: column 'id' not found in model table 'T'" in result.output,
-            "tables.Ghost" in result.output,
+            "u: table 'Ghost' not found in model" in result.output,
         ) == (1, True, True), f"{given}: {should}\n{result.output}"
+
+    def test_sidecar_mapping_option_no_longer_exists(self, tmp_path):
+        given = "--mapping (removed: names come only from the contract's customProperties)"
+        should = "be rejected as a usage error"
+
+        assert _run("coverage", _write_contract(tmp_path), "--mapping", "x.yaml").exit_code == 2, f"{given}: {should}"
 
     def test_schema_violations_are_listed(self, tmp_path):
         given = "a contract with two schema violations"

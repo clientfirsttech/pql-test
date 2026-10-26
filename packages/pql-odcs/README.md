@@ -27,11 +27,10 @@ pql-odcs trace orders.odcs.yaml results.json                    # failures by co
 |---|---|
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
 | `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
-| `lint CONTRACT [--model MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks the sidecar entries and (with `--model`) that every table and column exists in the model's TMDL |
+| `lint CONTRACT [--model MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve and (with `--model`) that every table and column exists in the model's TMDL |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
 
 **Shared flags**:
-- `--mapping FILE` names a sidecar name map.
 - `--closed-schema` also forbids columns the contract does not list.
 - `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `trace`).
@@ -57,26 +56,22 @@ The generated DAX calls PQL.Assert, which must be installed in the model, versio
 
 ## Name resolution
 
-Each ODCS schema object maps to a semantic model table, and each property to a column. pql-odcs uses the first of these that applies:
+Each ODCS schema object maps to a semantic model table, and each property to a column. The model names live in the contract itself, using ODCS's own extension mechanism, `customProperties`. That keeps them valid on ODCS 3.0, 3.1 and 3.2, and keeps them with the contract wherever it goes (including the datacontract-cli adapter):
 
-1. `customProperties` `pbiTable` (on the schema object) or `pbiColumn` (on the property):
-   ```yaml
-   - name: fact_marvel
-     customProperties:
-       - property: pbiTable
-         value: MarvelFact
-   ```
-2. A sidecar file passed with `--mapping`, which keeps Power BI details out of a platform-neutral contract:
-   ```yaml
-   tables:
-     fact_marvel: MarvelFact
-   columns:
-     fact_marvel:
-       eye_id: EyeID
-   ```
-3. The ODCS logical `name`.
+```yaml
+schema:
+  - name: fact_marvel
+    customProperties:
+      - property: pbiTable          # semantic model table
+        value: MarvelFact
+    properties:
+      - name: eye_id
+        customProperties:
+          - property: pbiColumn     # semantic model column
+            value: EyeID
+```
 
-`lint` reports any sidecar entry that names something the contract does not define.
+When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchanged. `lint --model` checks that every resolved table and column exists in the model's TMDL.
 
 ## Rule mapping (v0.1)
 
@@ -121,7 +116,7 @@ from pql_odcs.api import plan_contract, render, generate
 from pql_odcs.coverage import build_report
 from pql_odcs.results import trace
 
-plan = plan_contract("orders.odcs.yaml", mapping="pql-odcs.mapping.yaml")  # or a parsed dict
+plan = plan_contract("orders.odcs.yaml")  # or an already-parsed dict
 files = render(plan, env="DEV")  # list of SuiteFile(function_name, content, blocking)
 report = build_report(plan.contract, plan.outcomes)
 ```

@@ -35,7 +35,8 @@ Constraints {
   approximated = generated, but DAX semantics differ (named in the reason): primaryKey/unique/duplicateValues are skewed by blanks;
     required on string columns also counts empty strings as nulls
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule
-  Names resolve in this order: customProperties pbiTable / pbiColumn, then a --mapping sidecar YAML, then the ODCS logical name
+  Model names come only from the contract: customProperties pbiTable (schema object) / pbiColumn (property), else the ODCS logical name;
+    there is no sidecar mapping file
   Never claim a rule is enforced when coverage reports it skipped; quote the reason instead
 }
 ```
@@ -62,7 +63,6 @@ Everything else is reported as **skipped**, with the release that will map it:
 Options shared by `generate`, `coverage`, and `run`:
 - `--env ENV` — environment token for suite names, e.g. `DEV` (generate/run; required).
 - `--suite-prefix NAME` — override the suite name prefix.
-- `--mapping FILE` — sidecar YAML: `tables: {odcs_name: ModelTable}`, `columns: {odcs_name: {odcs_prop: ModelColumn}}`.
 - `--closed-schema` — also fail when a table has columns the contract does not list.
 - `--fail-on-skipped` — exit 1 when any rule is skipped (generate/coverage; strict CI).
 - `--dry-run` — print the DAX instead of writing files (generate).

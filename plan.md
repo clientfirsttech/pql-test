@@ -20,9 +20,7 @@
 ## Backlog
 
 - **pql-odcs open decisions** — These must be settled before pql-odcs v0.1 ships:
-  - name mapping: contract `customProperties`, a sidecar file, or both (v0.1 implements both);
-  - whether generated `.dax` files are committed or regenerated in CI;
-  - counsel review of the `LICENSE.txt` scope note, `LICENSES.md`, and the NOTICE wording for bundled PQL.Assert `functions.tmdl`;
+  - whether generated `.dax` files are committed to the PBIP repo or regenerated in CI;
   - turn on "Require review from Code Owners" in branch protection (CODEOWNERS uses `@kerski-cft`);
   - maintainer: register the PyPI and TestPyPI pending publisher for `pql-odcs`, with workflow `release-pql-odcs.yml` (one-time setup).
 
@@ -32,6 +30,10 @@
   - CODEOWNERS uses `@kerski-cft`;
   - ODCS v3.2.x is supported in v0.1;
   - PQL.Assert gaps are tracked in [docs/pql-assert-gap-plan.md](docs/pql-assert-gap-plan.md), which contains only backward-compatible changes.
+
+  Decided 2026-10-26:
+  - model names come only from the contract's `customProperties` (`pbiTable` / `pbiColumn`). The sidecar file was removed before release so there is one mechanism that stays compatible going forward.
+  - counsel review is parked as the last epic (below).
 
   See the risks section of [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 
@@ -65,6 +67,13 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
+- **LAST EPIC — counsel review of the license boundary.** This is parked 2026-10-26 to run after all other work. Have counsel review:
+  - the `LICENSE.txt` / `python/LICENSE.txt` scope note and [LICENSES.md](LICENSES.md) for this mixed BUSL-1.1 / MIT repository;
+  - the pql-odcs [NOTICE](packages/pql-odcs/NOTICE) wording: the Apache-2.0 ODCS schemas, and PQL.Assert attribution if `functions.tmdl` is ever bundled for v0.2 query mode or v0.3 deploy mode;
+  - the DCO sign-off requirement for `packages/pql-odcs/`.
+
+  Apply any wording changes, then publish the first `pql-odcs-v*` release.
+
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
@@ -74,7 +83,7 @@
 - See [tasks/archive/2026-10-25-pql-odcs-v0.1.md](tasks/archive/2026-10-25-pql-odcs-v0.1.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
 - **pql-odcs** is a new MIT package under `packages/pql-odcs/`. It:
   - loads ODCS v3.0.x, v3.1.x, and v3.2.x contracts and validates them against the bundled Bitol schemas;
-  - resolves names through `pbiTable`/`pbiColumn` customProperties, then a sidecar file, then the logical name;
+  - resolves model names from `pbiTable`/`pbiColumn` customProperties on the contract, else the logical name;
   - maps each rule through a PQL.Assert 0.7.1 catalog (data only);
   - writes `<Prefix>.<Suite>.<ENV>[WARN].Tests.dax` suites;
   - reports every rule as mapped, approximated, or skipped (`coverage`);
@@ -100,7 +109,7 @@
   - header injection through the contract id;
   - duplicate rule ids;
   - NaN/inf thresholds;
-  - malformed sidecar crash;
+  - malformed sidecar crash (the sidecar was later removed, 2026-10-26);
   - release could publish from a non-tag ref;
   - `contract run` now emits `--log-format` annotations and writes the per-rule trace into `--output`;
   - `primaryKey`/`unique`/`duplicateValues`, and `required` on string columns, are now reported as approximated, with the DAX semantics as the reason (gap plan C4/C5).

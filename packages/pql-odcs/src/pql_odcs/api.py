@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,7 +20,7 @@ from pql_odcs.emit.dax import (
 from pql_odcs.ir import RuleOutcome
 from pql_odcs.loader import Contract, ContractSource, load_contract
 from pql_odcs.mapping import map_contract
-from pql_odcs.naming import NameResolver, load_sidecar
+from pql_odcs.naming import NameResolver
 from pql_odcs.pbip import require_semantic_model_dir
 
 
@@ -50,19 +49,16 @@ class GenerateResult:
 def plan_contract(
     source: ContractSource | Contract,
     *,
-    mapping: str | Path | Mapping | None = None,
     closed_schema: bool = False,
 ) -> Plan:
     """Load (unless already loaded) and map a contract.
 
     Args:
         source: YAML path, parsed dict, or a ``Contract``.
-        mapping: sidecar mapping file path, or an already-parsed sidecar dict.
         closed_schema: also forbid columns the contract does not list.
     """
     contract = source if isinstance(source, Contract) else load_contract(source)
-    sidecar = load_sidecar(mapping) if isinstance(mapping, (str, Path)) else mapping
-    names = NameResolver(contract, sidecar)
+    names = NameResolver(contract)
     outcomes = tuple(map_contract(contract, names, closed_schema=closed_schema))
     return Plan(contract, outcomes, names, closed_schema)
 

@@ -16,7 +16,8 @@ Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD 
 | Python floor | pql-odcs core keeps `requires-python >= 3.9`. The `[datacontract]` extra needs Python 3.10+ because datacontract-cli 1.2.7 requires `>=3.10,<3.15`, so the extra gets a Python-version marker. `importlib.metadata.entry_points(group=…)` only exists on 3.10+, so pql-test's plugin hook needs a 3.9 fallback. |
 | `contract run` execution path | With a live connection, `run_tests_from_model` only runs suites already registered in the model ([discovery.py](../python/pql_test/runner/discovery.py)). Freshly generated suites are skipped as "not registered in the deployed dataset". So `contract run` builds `PqlTest`s from the generated files and executes their `DEFINE FUNCTION … EVALUATE` text with `run_tests()`. |
 | Warning suites | Keep the proposed separate `<Suite>.<ENV>WARN.Tests.dax` suites. pql-test matches environments exactly on the second-to-last name token, so `--environment DEV` does not pick them up. `contract run --env DEV` must run both suites, and only the DEV suite decides the exit code. |
-| Still open | Name mapping: customProperties, a sidecar file, or both (v0.1 implements both, in the precedence below). Whether generated `.dax` files are committed or regenerated in CI. Counsel review of `LICENSES.md` and the NOTICE wording. |
+| Name mapping | **customProperties only** (decided 2026-10-26): `pbiTable` / `pbiColumn` on the contract, else the logical name. The sidecar file was removed before release. customProperties is ODCS's own extension point, valid in 3.0–3.2, and travels with the contract (the datacontract-cli adapter receives only the contract object). ODCS 3.2's `vendor` field on custom properties allows namespacing later without breaking. |
+| Still open | Whether generated `.dax` files are committed or regenerated in CI. Counsel review of `LICENSES.md` and the NOTICE wording (parked as the last epic). |
 | Gaps in the source plan | The **Milestones** section was empty, and the **Plugin loading masks errors** risk had no mitigation (proposed below). The PQL.Assert gap plan is now [docs/pql-assert-gap-plan.md](pql-assert-gap-plan.md) (C1–C5, R1–R8, D1). It contains only backward-compatible changes, and every finding in it was verified against SampleModel. |
 
 ## Summary
@@ -122,7 +123,7 @@ PQL.Assert itself is MIT-licensed (v0.7.1 on DAX Lib), so pql-odcs may bundle it
 The core is a straight pipeline with a neutral intermediate representation (IR) in the middle, so mapping and DAX emission can be tested separately.
 
 1. **Load** (`loader.py`): reads the YAML, or accepts an already-parsed dict (the datacontract-cli adapter hands its ODCS object over this way). Checks `apiVersion` against the supported versions (3.0.x, 3.1.x, 3.2.x) and validates against the bundled ODCS JSON schema.
-2. **Resolve names** (`naming.py`): maps each schema object and property to a semantic model table and column. It uses `customProperties` keys `pbiTable` / `pbiColumn` first, then an optional sidecar `pql-odcs.mapping.yaml`, then the logical name as the fallback.
+2. **Resolve names** (`naming.py`): maps each schema object and property to a semantic model table and column. It uses `customProperties` keys `pbiTable` / `pbiColumn`, with the logical name as the fallback.
 3. **Map** (`mapping/`): `registry.py` dispatches each rule, by type and metric, to a mapper that returns IR assertions plus a coverage status.
 4. **Emit** (`emit/dax.py`): renders IR assertions through the catalog into one `*.Tests.dax` file per suite.
 5. **Report** (`coverage.py`): writes a coverage table (text and JSON) listing every rule and its status.
@@ -245,7 +246,6 @@ One click group, `contract`, is defined once in `pql_odcs/cli.py` and mounted in
 **Shared flags**:
 - `--dry-run` prints the DAX to stdout.
 - `--suite-prefix` sets the suite prefix; it defaults to the contract's `dataProduct`, then its `name`.
-- `--mapping FILE` names the sidecar name map.
 - `--fail-on-skipped` exits 1 if any rule is skipped, for strict CI.
 
 **Exit codes**:
@@ -395,7 +395,7 @@ Most testing needs no Power BI at all. Only one layer touches a live model.
 
 - [x] Package name → `pql-odcs` (2026-10-25)
 - [x] Copyright holder for the MIT code → Client First Technologies (2026-10-25)
-- [ ] Name mapping: customProperties on the contract, a sidecar file, or both? Contract owners may not want Power BI details in a platform-neutral contract.
+- [x] Name mapping → customProperties only (2026-10-26)
 - [x] Warning severity → separate WARN suites (default kept, 2026-10-25)
 - [ ] Do generated `.dax` files get committed to the PBIP repo, or regenerated in CI each run?
 
