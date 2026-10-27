@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pql_odcs import __version__
+from pql_odcs.catalog import DEFAULT_PQL_ASSERT, Catalog, catalog_for
 from pql_odcs.emit.dax import (
     GENERATED_MARKER,
     SUITE_ORDER,
@@ -36,6 +37,7 @@ class Plan:
     outcomes: tuple[RuleOutcome, ...]
     names: NameResolver
     closed_schema: bool = False
+    catalog: Catalog = field(default_factory=catalog_for)
 
 
 @dataclass(frozen=True)
@@ -50,21 +52,29 @@ def plan_contract(
     source: ContractSource | Contract,
     *,
     closed_schema: bool = False,
+    pql_assert: str = DEFAULT_PQL_ASSERT,
 ) -> Plan:
     """Load (unless already loaded) and map a contract.
 
     Args:
         source: YAML path, parsed dict, or a ``Contract``.
         closed_schema: also forbid columns the contract does not list.
+        pql_assert: PQL.Assert version to target, ``"0.7"`` (default) or ``"0.8"``.
+
+    Raises:
+        CatalogError: *pql_assert* is not a bundled version.
     """
     contract = source if isinstance(source, Contract) else load_contract(source)
     names = NameResolver(contract)
-    outcomes = tuple(map_contract(contract, names, closed_schema=closed_schema))
-    return Plan(contract, outcomes, names, closed_schema)
+    catalog = catalog_for(pql_assert)
+    outcomes = tuple(map_contract(contract, names, closed_schema=closed_schema, catalog=catalog))
+    return Plan(contract, outcomes, names, closed_schema, catalog)
 
 
 def render(plan: Plan, *, env: str, suite_prefix: str | None = None, version: str = __version__) -> list[SuiteFile]:
-    return render_suites(plan.contract, plan.outcomes, env=env, suite_prefix=suite_prefix, version=version)
+    return render_suites(
+        plan.contract, plan.outcomes, env=env, suite_prefix=suite_prefix, catalog=plan.catalog, version=version
+    )
 
 
 def _owner(path: Path) -> str | None:

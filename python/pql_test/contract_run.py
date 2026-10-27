@@ -26,6 +26,7 @@ import click
 from pql_test.runner import (
     TestResult,
     TestSuite,
+    _execute_dax_query,
     resolve_xmla_connection,
     run_tests,
 )
@@ -111,6 +112,23 @@ def print_trace(report) -> None:
     )
 
 
+def detect_pql_assert(conn) -> str:
+    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``.
+
+    ``PQL.Assert.LibraryVersion`` only exists from 0.8.0, so a query error (older library,
+    no library, unreachable model) means 0.7.
+    """
+    if conn is None:
+        return "0.7"
+    try:
+        rows = _execute_dax_query(conn, "EVALUATE { PQL.Assert.LibraryVersion() }")
+        version = str(next(iter(rows[0].values())))
+        major, minor = (int(part) for part in version.split(".")[:2])
+    except Exception:  # noqa: BLE001 - any failure means "not 0.8"
+        return "0.7"
+    return "0.8" if (major, minor) >= (0, 8) else "0.7"
+
+
 def make_run_command(hooks: RunHooks) -> click.Command:
     """Build the `contract run` click command around pql-test's injected CLI helpers."""
 
@@ -120,6 +138,14 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     @click.option("--env", "env", required=True, help="Environment token for the generated suites, e.g. DEV.")
     @click.option("--suite-prefix", help="Suite name prefix (default: from the contract's dataProduct, then name).")
     @click.option("--closed-schema", is_flag=True, help="Also fail when a table has columns the contract does not list.")
+    @click.option(
+        "--pql-assert",
+        "pql_assert",
+        type=click.Choice(["auto", "0.7", "0.8"]),
+        default="auto",
+        show_default=True,
+        help="PQL.Assert version to generate for. auto asks the model (PQL.Assert.LibraryVersion).",
+    )
     @click.option("--force", is_flag=True, help="Overwrite suite files that pql-odcs did not generate.")
     @click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail for every result.")
     @click.option("--output", default=None, metavar="FILE", help="Write full JSON results to FILE.")
@@ -136,6 +162,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         env: str,
         suite_prefix: str | None,
         closed_schema: bool,
+        pql_assert: str,
         force: bool,
         verbose: bool,
         output: str | None,
@@ -157,37 +184,46 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         """
         from pql_odcs.api import GenerateError, generate, plan_contract
         from pql_odcs.emit.dax import EmitError
-        from pql_odcs.loader import ContractError
-        from pql_odcs.pbip import ModelPathError
+        from pql_odcs.loader import ContractError, load_contract
+        from pql_odcs.pbip import ModelPathError, require_semantic_model_dir
         from pql_odcs.results import trace
 
         try:
-            plan = plan_contract(contract_path, closed_schema=closed_schema)
+            contract = load_contract(contract_path)
         except ContractError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
         try:
-            generated = generate(plan, model_path, env=env, suite_prefix=suite_prefix, force=force)
-        except (EmitError, ModelPathError, GenerateError) as exc:
+            semantic_model_dir = require_semantic_model_dir(model_path)
+        except ModelPathError as exc:
             raise click.UsageError(str(exc)) from None
-        click.echo(f"Generated {len(generated.written)} suite(s) in {generated.target_dir}")
 
+        # The connection comes first: `--pql-assert auto` asks the model which PQL.Assert it has.
         opts = hooks.make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
-        semantic_model_dir = generated.target_dir.parent
         if not opts.dataset_id and not opts.dataset_name:
             opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
         abs_path = str(Path(model_path).resolve())
         conn = resolve_xmla_connection(abs_path, opts)
         pre_warnings: list[str] = []
         if conn:
-            click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
+            click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
             pre_warnings.append("No XMLA connection detected. Tests will be reported as skipped.")
             click.echo(
-                "\nWarning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
+                "Warning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
                 "--tenant-id, --workspace-id, --dataset-id (and --client-id, --client-secret).",
                 err=True,
             )
+        if pql_assert == "auto":
+            pql_assert = detect_pql_assert(conn)
+            click.echo(f"PQL.Assert {pql_assert} catalog selected (detected from the model; override with --pql-assert).")
+
+        plan = plan_contract(contract, closed_schema=closed_schema, pql_assert=pql_assert)
+        try:
+            generated = generate(plan, model_path, env=env, suite_prefix=suite_prefix, force=force)
+        except (EmitError, ModelPathError, GenerateError) as exc:
+            raise click.UsageError(str(exc)) from None
+        click.echo(f"Generated {len(generated.written)} suite(s) in {generated.target_dir}")
 
         tests = [_parse_dax_test_file(str(p)) for p in generated.written]
         results = run_tests(

@@ -7,6 +7,7 @@ import dataclasses
 from collections import Counter
 from collections.abc import Iterator, Mapping
 
+from pql_odcs.catalog import Catalog, load_catalog
 from pql_odcs.ir import RuleOutcome, Status
 from pql_odcs.loader import Contract
 from pql_odcs.mapping.context import MapContext, is_column, skipped
@@ -105,9 +106,14 @@ def _unique_ids(outcomes: list[RuleOutcome]) -> list[RuleOutcome]:
     return result
 
 
-def map_contract(contract: Contract, names, *, closed_schema: bool = False) -> list[RuleOutcome]:
-    """Map every rule in *contract*; never drops a rule (unmappable ones are SKIPPED)."""
-    ctx = MapContext(contract, names, closed_schema)
+def map_contract(
+    contract: Contract, names, *, closed_schema: bool = False, catalog: Catalog | None = None
+) -> list[RuleOutcome]:
+    """Map every rule in *contract*; never drops a rule (unmappable ones are SKIPPED).
+
+    *catalog* (default: PQL.Assert 0.7) decides which ops mappers may use.
+    """
+    ctx = MapContext(contract, names, closed_schema, catalog or load_catalog())
     id_counts = Counter(r.get("id") for *_, r, _ in _quality_entries(contract) if r.get("id"))
     duplicate_ids = {i for i, n in id_counts.items() if n > 1}
     quality_by_scope: dict[str, list[RuleOutcome]] = {}
@@ -127,12 +133,12 @@ def map_contract(contract: Contract, names, *, closed_schema: bool = False) -> l
         for prop, scope, top_level in _properties(obj, obj["name"]):
             if top_level and is_column(prop):
                 outcomes.extend(property_rules(ctx, obj, prop, scope, key_columns))
-                outcomes.extend(scheduled_property_rules(prop, scope))
+                outcomes.extend(scheduled_property_rules(ctx, obj, prop, scope))
             else:
                 outcomes.extend(nested_rules(prop, scope))
             outcomes.extend(relationship_rules(prop, scope))
             outcomes.extend(quality_by_scope.pop(scope, []))
         outcomes.extend(relationship_rules(obj, obj["name"]))
         outcomes.extend(quality_by_scope.pop(obj["name"], []))
-    outcomes.extend(sla_rules(contract.data))
+    outcomes.extend(sla_rules(ctx, contract.data))
     return _dedupe(_unique_ids(outcomes))

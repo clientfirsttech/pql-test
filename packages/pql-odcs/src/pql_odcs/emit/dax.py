@@ -120,6 +120,10 @@ def _argument(source: str, a: Assertion, test_name: str, catalog: Catalog) -> st
         if target.column is None:
             raise EmitError(f"Rule {a.rule_id}: op {a.op} needs a column target.")
         return dax_column(target.table, target.column)
+    if source == "keyProjection":
+        columns = a.args["columns"]
+        parts = ", ".join(f'"k{i}", {dax_column(target.table, c)}' for i, c in enumerate(columns, 1))
+        return f"SELECTCOLUMNS({dax_table(target.table)}, {parts})"
     if source == "columnList":
         return dax_string(",".join(a.args["columns"]))
     if source not in a.args:

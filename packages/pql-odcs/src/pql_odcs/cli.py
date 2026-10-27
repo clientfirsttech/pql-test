@@ -19,17 +19,25 @@ _CONTRACT = click.argument("contract_path", metavar="CONTRACT", type=click.Path(
 _CLOSED = click.option(
     "--closed-schema", is_flag=True, help="Also fail when a table has columns the contract does not list."
 )
+_PQL_ASSERT = click.option(
+    "--pql-assert",
+    "pql_assert",
+    type=click.Choice(["0.7", "0.8"]),
+    default="0.7",
+    show_default=True,
+    help="PQL.Assert version to target. 0.8 maps more rules exactly but needs a model with PQL.Assert 0.8.0+.",
+)
 _FAIL_ON_SKIPPED = click.option(
     "--fail-on-skipped", is_flag=True, help="Exit 1 when any contract rule is skipped (strict CI)."
 )
 
 
-def _plan(contract_path: str, closed_schema: bool):
+def _plan(contract_path: str, closed_schema: bool, pql_assert: str = "0.7"):
     from pql_odcs.api import plan_contract
     from pql_odcs.loader import ContractError
 
     try:
-        return plan_contract(contract_path, closed_schema=closed_schema)
+        return plan_contract(contract_path, closed_schema=closed_schema, pql_assert=pql_assert)
     except ContractError as exc:
         click.echo(f"Error: {exc}", err=True)
         raise click.exceptions.Exit(1) from None
@@ -38,7 +46,7 @@ def _plan(contract_path: str, closed_schema: bool):
 def _report(plan) -> dict:
     from pql_odcs.coverage import build_report
 
-    return build_report(plan.contract, plan.outcomes)
+    return build_report(plan.contract, plan.outcomes, catalog=plan.catalog)
 
 
 def _fail_if_skipped(report: dict, fail_on_skipped: bool) -> None:
@@ -60,16 +68,19 @@ def contract() -> None:
 @click.option("--env", "env", required=True, help="Environment token for suite names, e.g. DEV.")
 @click.option("--suite-prefix", help="Suite name prefix (default: from the contract's dataProduct, then name).")
 @_CLOSED
+@_PQL_ASSERT
 @_FAIL_ON_SKIPPED
 @click.option("--dry-run", is_flag=True, help="Print the DAX to stdout instead of writing files.")
 @click.option("--force", is_flag=True, help="Overwrite suite files that pql-odcs did not generate.")
-def generate_cmd(contract_path, model_path, env, suite_prefix, closed_schema, fail_on_skipped, dry_run, force):
+def generate_cmd(
+    contract_path, model_path, env, suite_prefix, closed_schema, pql_assert, fail_on_skipped, dry_run, force
+):
     """Write *.Tests.dax suites for CONTRACT into MODEL_PATH/DAXQueries/ (a PBIP model)."""
     from pql_odcs.api import GenerateError, generate, render
     from pql_odcs.emit.dax import EmitError
     from pql_odcs.pbip import ModelPathError
 
-    plan = _plan(contract_path, closed_schema)
+    plan = _plan(contract_path, closed_schema, pql_assert)
     try:
         if dry_run:
             for f in render(plan, env=env, suite_prefix=suite_prefix):
@@ -97,12 +108,13 @@ def generate_cmd(contract_path, model_path, env, suite_prefix, closed_schema, fa
 @_CONTRACT
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @_CLOSED
+@_PQL_ASSERT
 @_FAIL_ON_SKIPPED
-def coverage_cmd(contract_path, fmt, closed_schema, fail_on_skipped):
+def coverage_cmd(contract_path, fmt, closed_schema, pql_assert, fail_on_skipped):
     """List every rule in CONTRACT as mapped, approximated, or skipped."""
     from pql_odcs.coverage import format_text
 
-    report = _report(_plan(contract_path, closed_schema))
+    report = _report(_plan(contract_path, closed_schema, pql_assert))
     click.echo(json.dumps(report, indent=2) if fmt == "json" else format_text(report), nl=fmt == "json")
     _fail_if_skipped(report, fail_on_skipped)
 
@@ -162,11 +174,12 @@ def lint_cmd(contract_path, model_path):
 @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
 @click.option("--suite-prefix", help="Suite prefix used at generate time (default: derived from the contract).")
 @_CLOSED
-def trace_cmd(contract_path, results_path, fmt, suite_prefix, closed_schema):
+@_PQL_ASSERT
+def trace_cmd(contract_path, results_path, fmt, suite_prefix, closed_schema, pql_assert):
     """Join pql-test --output RESULTS_JSON back to CONTRACT's rule ids."""
     from pql_odcs.results import ResultsError, format_text, read_results, trace
 
-    plan = _plan(contract_path, closed_schema)
+    plan = _plan(contract_path, closed_schema, pql_assert)
     try:
         results = read_results(results_path)
     except ResultsError as exc:

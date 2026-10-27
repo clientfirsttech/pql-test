@@ -27,13 +27,19 @@ CASES = {
     "marvel": {"contract": "marvel.odcs.yaml"},
     "marvel-must-fail": {"contract": "marvel-must-fail.odcs.yaml"},
     "every-row": {"contract": "every-row.odcs.yaml", "closed_schema": True},
+    "every-row-0-8": {"contract": "every-row.odcs.yaml", "closed_schema": True, "pql_assert": "0.8"},
 }
 
 
 def _expected_files(case: str) -> dict[str, bytes]:
-    plan = plan_contract(FIXTURES / CASES[case]["contract"], closed_schema=CASES[case].get("closed_schema", False))
+    options = CASES[case]
+    plan = plan_contract(
+        FIXTURES / options["contract"],
+        closed_schema=options.get("closed_schema", False),
+        pql_assert=options.get("pql_assert", "0.7"),
+    )
     files = {f.file_name: f.content.encode("utf-8") for f in render(plan, env="DEV", version=VERSION)}
-    report = build_report(plan.contract, plan.outcomes, version=VERSION)
+    report = build_report(plan.contract, plan.outcomes, catalog=plan.catalog, version=VERSION)
     files["coverage.json"] = (json.dumps(report, indent=2) + "\n").encode("utf-8")
     return files
 

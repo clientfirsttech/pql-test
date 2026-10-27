@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from pql_odcs.catalog import Catalog, load_catalog
 from pql_odcs.ir import Assertion, RuleOutcome, Status
 from pql_odcs.loader import Contract
 from pql_odcs.naming import NameResolver
@@ -19,6 +20,11 @@ class MapContext:
     contract: Contract
     names: NameResolver
     closed_schema: bool = False
+    catalog: Catalog = field(default_factory=load_catalog)
+
+    def supports(self, op: str) -> bool:
+        """True when the selected PQL.Assert catalog has *op* (mappers fall back to 0.7 behaviour otherwise)."""
+        return self.catalog.has(op)
 
 
 def is_column(prop: Mapping) -> bool:

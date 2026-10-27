@@ -10,7 +10,7 @@ from pathlib import Path
 import click
 import pytest
 from click.testing import CliRunner
-from pql_test.contract_run import exit_code, extend_contract_group
+from pql_test.contract_run import detect_pql_assert, exit_code, extend_contract_group
 from pql_test.runner import TestResult
 
 pytest.importorskip("pql_odcs")
@@ -44,6 +44,33 @@ class TestExitCode:
         results = [_result("M.Schema.DEV.Tests", skipped=True)]
 
         assert exit_code(results, {"M.Schema.DEV.Tests"}) == 1, f"{given}: {should}"
+
+
+class TestDetectPqlAssert:
+    @pytest.mark.parametrize("reported, expected", [("0.8.0", "0.8"), ("0.10.2", "0.8"), ("1.0.0", "0.8"), ("0.7.9", "0.7")])
+    def test_version_reported_by_the_model_picks_the_catalog(self, monkeypatch, reported, expected):
+        given = f"a model whose PQL.Assert.LibraryVersion() returns {reported}"
+        should = f"select the {expected} catalog"
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", lambda *_a: [{"[Value]": reported}])
+
+        assert detect_pql_assert(object()) == expected, f"{given}: {should}"
+
+    def test_model_without_the_function_means_0_7(self, monkeypatch):
+        given = "a model where EVALUATE PQL.Assert.LibraryVersion() raises (PQL.Assert 0.7.x)"
+        should = "select the 0.7 catalog instead of failing the run"
+
+        def boom(*_a):
+            raise RuntimeError("function not found")
+
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", boom)
+
+        assert detect_pql_assert(object()) == "0.7", f"{given}: {should}"
+
+    def test_no_connection_means_0_7(self):
+        given = "no XMLA connection"
+        should = "select the 0.7 catalog without querying"
+
+        assert detect_pql_assert(None) == "0.7", f"{given}: {should}"
 
 
 class TestExtendContractGroup:
@@ -84,6 +111,43 @@ class TestContractRunCommand:
         ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True, True), (
             f"{given}: {should}\n{result.output}"
         )
+
+    @pytest.mark.parametrize(
+        "args, reported, expected",
+        [
+            ([], "0.8.0", "Col.NullCountShouldBeAtMost"),
+            ([], None, "Col.NullRateShouldBeAtMost"),
+            (["--pql-assert", "0.7"], "0.8.0", "Col.NullRateShouldBeAtMost"),
+            (["--pql-assert", "0.8"], None, "Col.NullCountShouldBeAtMost"),
+        ],
+    )
+    def test_catalog_follows_the_option_then_the_model(self, tmp_path, monkeypatch, args, reported, expected):
+        given = f"contract run {args or 'with the default --pql-assert auto'} on a model reporting {reported}"
+        should = f"generate calls containing {expected}"
+        from types import SimpleNamespace
+
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        contract = tmp_path / "c.odcs.yaml"
+        contract.write_text(
+            "apiVersion: v3.1.0\nkind: DataContract\nid: c\nversion: '1'\nstatus: active\nschema:\n  - name: T\n    properties:\n      - name: a\n        logicalType: integer\n        required: true\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: SimpleNamespace(server="s", catalog="c"))
+        monkeypatch.setattr("pql_test.contract_run.run_tests", lambda *_a, **_k: [])
+
+        def library_version(*_a):
+            if reported is None:
+                raise RuntimeError("function not found")
+            return [{"[Value]": reported}]
+
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", library_version)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "run", str(contract), str(model), "--env", "DEV", *args])
+
+        text = "".join(p.read_text(encoding="utf-8") for p in (model / "DAXQueries").iterdir())
+        assert expected in text, f"{given}: {should}\n{result.output}"
 
     def test_invalid_contract_exits_1(self, tmp_path):
         given = "a contract with an unsupported apiVersion"

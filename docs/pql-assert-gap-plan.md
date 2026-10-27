@@ -1,7 +1,7 @@
 # PQL.Assert Gap Plan (0.7.1 → 0.8.0)
 
 **Audience:** PQL.Assert maintainers and contributors.
-**Status:** proposed, 2026-10-25.
+**Status:** proposed, 2026-10-25. PQL.Assert 0.8.0 released; pql-odcs adopts it with `--pql-assert 0.8` (2026-10-27, see [the adoption epic](../tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md)). The `BlankRate…V2`, `NullOrBlankRate…V2`, and `ValuesShouldContain` live checks noted below are still open: pql-odcs's 0.8 catalog uses `NullRateShouldBeAtMostV2` and `ValuesShouldContain`, but its output has not yet been run against a 0.8.0 model.
 **Why it exists:** [pql-odcs](../packages/pql-odcs/README.md) turns ODCS data-contract rules into PQL.Assert calls. Building it surfaced places where PQL.Assert 0.7.1 is missing a function, or where an existing function behaves differently from what its name suggests. This plan closes those gaps in 0.8.0 **without breaking anything written against 0.7.1**.
 
 Every finding below was reproduced with read-only DAX queries against `examples/SampleModel` (dev workspace) on 2026-10-25. Every function whose full body appears below was parsed and run there as a query-scoped `DEFINE FUNCTION`; nothing was deployed to the model. Results are under **Live check**. The variants described only as "same shape" have **not** been run yet: `BlankRate…V2`, `NullOrBlankRate…V2`, and `ValuesShouldContain`. Validate them before release.

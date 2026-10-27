@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: MIT
+#
+# PQL.Assert 0.8.0 additions. Every 0.7 op is inherited unchanged; this file only
+# adds ops, so a model on 0.8.0 keeps every 0.7.1 function. Selected with
+# `--pql-assert 0.8`. Function signatures follow docs/pql-assert-gap-plan.md.
+#
+# Extra argument sources beyond the 0.7 catalog:
+#   keyProjection  the assertion's `columns` as SELECTCOLUMNS over the table
+
+library: PQL.Assert
+min_version: "0.8.0"
+extends: pql_assert_0_7
+
+ops:
+  col.null_count_at_most:
+    # True nulls only (ISBLANK); maxCount 0 is "no row is null" (gap plan C1 / R4).
+    fn: PQL.Assert.Col.NullCountShouldBeAtMost
+    args: [testName, tableRef, columnRef, maxCount]
+  col.null_pct_at_most:
+    # Correct row-based rate; maxPct is a percentage (0-100) (gap plan C2).
+    fn: PQL.Assert.Col.NullRateShouldBeAtMostV2
+    args: [testName, tableRef, columnRef, maxPct]
+  col.non_blank_distinct:
+    fn: PQL.Assert.Col.NonBlankValuesShouldBeDistinct
+    args: [testName, columnRef]
+  col.primary_key:
+    fn: PQL.Assert.Col.ShouldBePrimaryKey
+    args: [testName, columnRef]
+  col.duplicates_at_most:
+    fn: PQL.Assert.Col.DuplicateCountShouldBeAtMost
+    args: [testName, columnRef, maxCount]
+  tbl.rows_not_between:
+    fn: PQL.Assert.ShouldNotBeBetween
+    args: [testName, lower, upper, rowCount]
+  tbl.rows_distinct:
+    fn: PQL.Assert.Tbl.RowsShouldBeDistinct
+    args: [testName, keyProjection]
+  col.starts_with:
+    fn: PQL.Assert.Col.ValuesShouldStartWith
+    args: [testName, columnRef, text]
+  col.ends_with:
+    fn: PQL.Assert.Col.ValuesShouldEndWith
+    args: [testName, columnRef, text]
+  col.contains:
+    fn: PQL.Assert.Col.ValuesShouldContain
+    args: [testName, columnRef, text]
+  col.max_date_within_days:
+    fn: PQL.Assert.Col.MaxDateShouldBeWithinDays
+    args: [testName, columnRef, maxAgeDays]

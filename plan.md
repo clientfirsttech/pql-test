@@ -40,15 +40,14 @@
 - **pql-odcs v0.2** — Contents:
   - query-scoped XMLA target (`--target query`, transport in pql-test);
   - v0.2 mapping rows: types, relationships, ranges, text length, percent nulls, missing and invalid values, 2-column keys;
-  - fallbacks R2–R5;
+  - fallbacks R2–R5 (R2, R3, and R4 now ship through the 0.8 catalog; R5 value-list rules remain);
   - the datacontract-cli `Exporter` adapter (`pql-odcs[datacontract]`, Python ≥3.10);
   - a PQL.Assert minimum-version warning in `contract run`.
 
 - **pql-odcs v0.3** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
   - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`);
-  - fallback R6;
-  - pattern rules per C3 / R7.
+  - ~~fallback R6; pattern rules per C3 / R7~~ (shipped through the 0.8 catalog, 2026-10-27).
 
 - **pql-odcs v1.0 (optional)** — Contents:
   - an upstream `datacontract export pql-assert` PR;
@@ -77,6 +76,14 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-10-27 — pql-odcs adopts PQL.Assert 0.8.0 (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md](tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md) and [docs/pql-assert-gap-plan.md](docs/pql-assert-gap-plan.md).
+- A second catalog, `pql_assert_0_8.yaml`, extends the 0.7 one. `--pql-assert 0.7|0.8` on `generate`, `coverage`, and `trace` picks it; the default stays 0.7 and its golden files are unchanged.
+- With 0.8: exact `required`, `primaryKey`, `unique`, and `duplicateValues`; null and duplicate ceilings; percent null rates; multi-column keys (R3); `mustNotBeBetween` (R2); simple anchored patterns (R7); `latency` freshness (R8, approximated).
+- `pql-test contract run` defaults to `--pql-assert auto`: it queries `PQL.Assert.LibraryVersion()` and falls back to 0.7. The connection is now resolved before generating.
+- Still open: run the 0.8 output against a model with PQL.Assert 0.8.0 (the gap plan's unrun variants), and the v0.2 items that need no 0.8 function (types, relationships, ranges, text length, value lists, `missingValues`, the query-scoped XMLA target, the datacontract-cli adapter).
 
 ### 2026-10-25 — pql-odcs v0.1: ODCS data contracts → PQL.Assert suites (branch `dev-odcs`)
 

@@ -10,6 +10,9 @@ from importlib.resources import files
 import yaml
 
 DEFAULT_CATALOG = "pql_assert_0_7"
+# `--pql-assert` choices -> bundled catalog. The default stays 0.7 until 0.8 is common.
+PQL_ASSERT_CATALOGS = {"0.7": "pql_assert_0_7", "0.8": "pql_assert_0_8"}
+DEFAULT_PQL_ASSERT = "0.7"
 
 
 class CatalogError(Exception):
@@ -29,6 +32,9 @@ class Catalog:
     min_version: str
     ops: dict
 
+    def has(self, key: str) -> bool:
+        return key in self.ops
+
     def op(self, key: str) -> OpSpec:
         try:
             return self.ops[key]
@@ -45,7 +51,20 @@ def load_catalog(name: str = DEFAULT_CATALOG) -> Catalog:
     text = files("pql_odcs.catalog").joinpath(f"{name}.yaml").read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     try:
-        ops = {key: OpSpec(fn=spec["fn"], args=tuple(spec["args"])) for key, spec in data["ops"].items()}
+        # `extends` names an older catalog whose ops this one inherits and may override.
+        base = dict(load_catalog(data["extends"]).ops) if data.get("extends") else {}
+        base.update({key: OpSpec(fn=spec["fn"], args=tuple(spec["args"])) for key, spec in data["ops"].items()})
+        ops = base
         return Catalog(name=name, library=data["library"], min_version=str(data["min_version"]), ops=ops)
     except (KeyError, TypeError) as exc:
         raise CatalogError(f"Catalog {name} is malformed: {exc}") from exc
+
+
+def catalog_for(pql_assert: str = DEFAULT_PQL_ASSERT) -> Catalog:
+    """The bundled catalog for a ``--pql-assert`` choice (``"0.7"`` or ``"0.8"``)."""
+    try:
+        return load_catalog(PQL_ASSERT_CATALOGS[str(pql_assert)])
+    except KeyError:
+        raise CatalogError(
+            f"Unknown PQL.Assert version {pql_assert!r}; choose from {', '.join(PQL_ASSERT_CATALOGS)}."
+        ) from None
