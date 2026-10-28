@@ -4,7 +4,7 @@ Query-scoped PQL.Assert 0.8.0 for live tests against a model that has an older l
 
 The released 0.8.0 package is vendored (MIT) under
 packages/pql-odcs/tests/fixtures/pql-assert-0.8.0/. A suite that calls 0.8-only
-functions can run on a 0.7.x model when those functions are defined in the query's own
+functions can run on a model with an older PQL.Assert when those functions are defined in the query's own
 DEFINE block, the same way docs/pql-assert-gap-plan.md's live checks were run. Only
 functions the model lacks are defined: whether a query may redefine a model function is
 not known, so that is never relied on.

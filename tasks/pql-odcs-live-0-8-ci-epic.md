@@ -1,6 +1,6 @@
 # pql-odcs PQL.Assert 0.8 Live CI Epic
 
-**Status**: 📋 PLANNED
+**Status**: 🔄 IN PROGRESS. Offline work is done; the live runs wait on a renewed service-principal secret and a republished SampleModel (see plan.md Open Items)
 **Goal**: Prove in the existing CI pipeline that pql-odcs's 0.8 output and `contract run` auto-detection work against a real model with PQL.Assert 0.8.0, and run the library variants the gap plan has not yet checked.
 
 ## Overview
@@ -37,7 +37,7 @@ Get a green baseline for the 0.7 live path on `dev-odcs` before changing anythin
 Phase A needs the 0.8.0 function bodies, and the repo has only their signatures (in `catalog/pql_assert_0_8.yaml`).
 
 **Requirements**:
-- Given the DAX Lib PQL.Assert 0.8.0 package, should store its `functions.tmdl` under `python/tests/fixtures/` (BUSL side, never under `packages/pql-odcs/`) with a note on its source and version
+- Given the PQL.Assert 0.8.0 package (MIT), should store it with a note on its source and version under `packages/pql-odcs/tests/fixtures/`. Changed 2026-10-27: MIT into MIT, not in the wheel, and the pql-odcs conformance test needs it on every OS
 - Given the fixture, should have a unit test asserting every function is annotated `DAXLIB_PackageVersion = 0.8.0` and that every 0.8 catalog op has a matching function
 - Given a test helper, should turn the fixture into query-scoped `DEFINE FUNCTION` text for only the functions the target model does not already define, since redefining a model function in the query is not known to work
 
@@ -48,8 +48,8 @@ Phase A needs the 0.8.0 function bodies, and the repo has only their signatures 
 Run pql-odcs's 0.8 output against the existing SampleModel dataset with the 0.8-only functions defined in the query, in the same way the gap plan's live checks were done.
 
 **Requirements**:
-- Given `marvel.odcs.yaml` generated with `--pql-assert 0.8`, should pass every mapped rule against SampleModel
-- Given `marvel-must-fail.odcs.yaml` generated with `--pql-assert 0.8`, should fail exactly a pinned 0.8 expected-failure set, where each entry has a comment naming the data fact that makes it fail (e.g. `DateDim[Year]` 815 nulls of 16,376 rows), taken from the gap plan's live-check numbers rather than copied from a first run
+- Changed 2026-10-27: a new `marvel-0-8.odcs.yaml` replaces running `marvel` and `marvel-must-fail` under 0.8, because those two reach only 3 of the 11 0.8 ops. It has one rule per 0.8 op
+- Given `marvel-0-8.odcs.yaml` generated with `--pql-assert 0.8`, should give a pinned outcome per rule, where each entry has a comment naming the data fact that makes it fail (e.g. `DateDim[Year]` 815 nulls of 16,376 rows), taken from the gap plan's live-check numbers rather than copied from a first run
 - Given the fixture contracts, should cover `Col.NullRateShouldBeAtMostV2` and `Col.ValuesShouldContain`, adding a contract rule if neither fixture emits them
 - Given no `PQL_*` credentials or no pql-odcs, should skip the same way `test_contract_live.py` does
 

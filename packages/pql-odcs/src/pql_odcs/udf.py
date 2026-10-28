@@ -50,7 +50,8 @@ class UdfFunction:
 
     @property
     def parameters(self) -> tuple[Parameter, ...]:
-        return tuple(_parameter(p) for p in _split_top_level(_parameter_list(self.expression)))
+        params = _strip_comments(_parameter_list(self.expression))
+        return tuple(_parameter(p) for p in _split_top_level(params))
 
     def define(self) -> str:
         """This function as one ``FUNCTION`` entry of a DAX query's ``DEFINE`` block."""
@@ -82,15 +83,10 @@ def parse_functions(text: str) -> list[UdfFunction]:
         else:
             if rest:
                 body.append(rest)
-            body_indent = None
             while i < len(lines):
                 line = lines[i]
-                if line.strip():
-                    if _indent(line) <= indent or _PROPERTY_RE.match(line.strip()):
-                        break
-                    body_indent = body_indent or _indent(line)
-                    if _indent(line) < body_indent:
-                        break
+                if line.strip() and (_indent(line) <= indent or _PROPERTY_RE.match(line.strip())):
+                    break
                 body.append(line)
                 i += 1
         annotations = {}
@@ -119,6 +115,26 @@ def _parameter_list(expression: str) -> str:
             if depth == 0:
                 return expression[1:pos]
     return ""
+
+
+def _strip_comments(text: str) -> str:
+    """*text* without DAX ``//``, ``--``, and ``/* */`` comments (string literals are kept)."""
+    out, pos, in_string = [], 0, False
+    while pos < len(text):
+        ch = text[pos]
+        if ch == '"':
+            in_string = not in_string
+        elif not in_string and text.startswith(("//", "--"), pos):
+            end = text.find("\n", pos)
+            pos = len(text) if end == -1 else end
+            continue
+        elif not in_string and text.startswith("/*", pos):
+            end = text.find("*/", pos + 2)
+            pos = len(text) if end == -1 else end + 2
+            continue
+        out.append(ch)
+        pos += 1
+    return "".join(out)
 
 
 def _split_top_level(text: str, sep: str = ",") -> list[str]:

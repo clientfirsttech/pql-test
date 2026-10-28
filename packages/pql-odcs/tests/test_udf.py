@@ -109,6 +109,30 @@ class TestParseFunctions:
 
         assert (fn.expression, fn.package) == ("() =>\n\t1", "F"), f"{given}: {should}"
 
+    def test_body_lines_indented_less_than_the_first_stay_in_the_body(self):
+        given = "a body whose later lines are indented less than its first line"
+        should = "keep every line up to the properties"
+        text = "function 'F.G' =\n\t\t\t(x : STRING) =>\n\t\tVAR y = x\n\t\tRETURN y\n\tannotation DAXLIB_PackageId = F\n"
+
+        (fn,) = parse_functions(text)
+
+        assert (fn.expression.splitlines()[-1].strip(), fn.package) == ("RETURN y", "F"), f"{given}: {should}"
+
+    def test_comments_in_the_parameter_list_are_ignored(self):
+        given = "a parameter list with // and /* */ comments, and a // inside a string default"
+        should = "read only the parameter names, types, and defaults"
+        text = (
+            "function 'F.G' =\n\t\t(\n\t\t\t// the x\n\t\t\tx : INT64, /* why */ url : STRING = \"http://a\"\n"
+            "\t\t) => x\n"
+        )
+
+        (fn,) = parse_functions(text)
+
+        assert [(p.name, p.type, p.optional) for p in fn.parameters] == [
+            ("x", "INT64", False),
+            ("url", "STRING", True),
+        ], f"{given}: {should}"
+
     def test_fenced_expression(self):
         given = "a TMDL ``` fenced expression"
         should = "read the lines between the fences as the expression"

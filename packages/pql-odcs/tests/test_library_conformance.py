@@ -16,6 +16,16 @@ from pql_odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog
 from pql_odcs.udf import library_versions, parse_functions
 
 LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.8.0"
+# Catalog argument source -> the PQL.Assert parameter types it can be passed as (pql_odcs.emit.dax).
+_TABLE = {"TABLE", "TABLE EXPR"}
+SOURCE_TYPES = {
+    "testName": {"STRING"},
+    "tableName": {"STRING"},
+    "columnList": {"STRING"},
+    "tableRef": _TABLE,
+    "keyProjection": _TABLE,
+    "columnRef": {"ANYREF EXPR"},
+}
 
 
 def _library():
@@ -40,7 +50,7 @@ def test_fixture_is_the_whole_0_8_0_release():
 @pytest.mark.parametrize("version", sorted(PQL_ASSERT_CATALOGS))
 def test_every_catalog_op_calls_a_released_function(version):
     given = f"the PQL.Assert {version} catalog"
-    should = "name only functions in the released library, with an argument count each one accepts"
+    should = "name only functions in the released library, with arguments each one accepts"
     library = _library()
     catalog = load_catalog(PQL_ASSERT_CATALOGS[version])
 
@@ -54,5 +64,10 @@ def test_every_catalog_op_calls_a_released_function(version):
         if not required <= len(spec.args) <= len(fn.parameters):
             signature = ", ".join(p.name for p in fn.parameters)
             problems.append(f"{key}: {spec.fn}({signature}) cannot take {len(spec.args)} arguments")
+            continue
+        for source, param in zip(spec.args, fn.parameters):
+            expected = SOURCE_TYPES.get(source)
+            if expected and param.type.upper() not in expected:
+                problems.append(f"{key}: {source} is passed as {param.name} : {param.type}, not {sorted(expected)}")
 
     assert problems == [], f"{given}: {should}\n" + "\n".join(problems)

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -47,7 +48,10 @@ FIXTURES = REPO_ROOT / "packages" / "pql-odcs" / "tests" / "fixtures"
 EXAMPLES = REPO_ROOT / "examples"
 SERVICE_VARS = ("PQL_TENANT_ID", "PQL_WORKSPACE_ID")
 
-# Rules in marvel-must-fail.odcs.yaml that must fail against SampleModel's data.
+# Rules in marvel-must-fail.odcs.yaml that must fail against SampleModel's data. These 0.7
+# expectations also hold once SampleModel runs PQL.Assert 0.8.0: the 0.7 catalog calls only
+# functions whose 0.8.0 changes affect NULL actuals and all-NULL columns, which none of these
+# rules involve.
 EXPECTED_FAILURES = {
     "marvel_fact_exactly_one_row",  # rowCount mustBe 1
     "DateDim.Year.unique",  # many dates share a year
@@ -65,7 +69,7 @@ EXPECTED_0_8 = {
     "source_year_nulls_at_most_815": "passed",
     "source_year_nulls_below_815": "failed",
     "source_eye_ends_with_eyes": "failed",
-    "source_eye_starts_with_lowercase": "failed",
+    "source_eye_starts_with_lowercase": "executed",
     "source_eye_contains_eye": "executed",
     "DateDim.exists": "passed",
     "DateDim.columns": "passed",
@@ -214,9 +218,13 @@ def test_auto_detection_matches_the_committed_library(model, dataset_var):
     should = f"report the PQL.Assert {expected} catalog that examples/{model} commits"
     if not all(os.environ.get(k, "").strip() for k in (*SERVICE_VARS, dataset_var)):
         pytest.skip(f"Set {', '.join(SERVICE_VARS)} and {dataset_var} to check the deployed {model}.")
+    from pql_test.runner import _execute_dax_query
+
     conn = _connect(EXAMPLES / f"{model}.SemanticModel", dataset_var)
     if conn is None:
         pytest.fail(f"No XMLA connection to the deployed {model}.")
+    # A broken connection also reads as "0.7", so prove the connection queries first.
+    _execute_dax_query(conn, "EVALUATE { 1 }")
 
     detected = detect_pql_assert(conn)
 
@@ -227,24 +235,19 @@ def test_auto_detection_matches_the_committed_library(model, dataset_var):
 
 
 LIBRARY_SMOKE = [
-    # (call, passed, Actual or None). SampleModel facts: MarvelSource[Year] has 815 null rows
-    # of 16,376 (4.98%) and, being an integer column, no "" values.
+    # (call, passed, Actual or None). SampleModel facts (docs/pql-assert-gap-plan.md):
+    # MarvelSource[Year] has 815 NULL rows of 16,376 (4.98%) and, being an integer column, no "".
+    # MarvelSource[GSM] has 16,286 "" rows of 16,376 (99.45%) and no NULL (gap plan C5), so it
+    # tells the NULL, blank, and NULL-or-blank rates apart.
     ("Col.NullRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[Year], 5)", True, "4.98% (815 of 16376 rows)"),
     ("Col.NullRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[Year], 4.9)", False, None),
+    ("Col.NullRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[GSM], 0)", True, "0% (0 of 16376 rows)"),
+    ("Col.BlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[GSM], 100)", True, "99.45% (16286 of 16376 rows)"),
+    ("Col.BlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[GSM], 99)", False, None),
     ("Col.BlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[Year], 0)", True, "0% (0 of 16376 rows)"),
+    ("Col.NullOrBlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[GSM], 99)", False, "99.45% (16286 of 16376 rows)"),
     ("Col.NullOrBlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[Year], 5)", True, "4.98% (815 of 16376 rows)"),
-    ("Col.NullOrBlankRateShouldBeAtMostV2(\"t\", 'MarvelSource', 'MarvelSource'[Year], 4.9)", False, None),
-    # No EYE value contains upper-case "EYE", so the case-sensitive check must fail.
-    ("Col.ShouldContainString(\"t\", 'MarvelSource'[EYE], \"EYE\", \"Y\")", False, None),
 ]
-
-
-def test_case_insensitive_contains_ignores_case(sample_model_copy):
-    given = "ShouldContainString on MarvelSource[EYE] without matchCase"
-    should = 'give the same result for "EYE" and "Eye"'
-    rows = _library_rows(sample_model_copy, ["Col.ShouldContainString(\"t\", 'MarvelSource'[EYE], \"%s\")" % t for t in ("EYE", "Eye")])
-
-    assert rows[0][0] == rows[1][0], f"{given}: {should} (got {rows})"
 
 
 @pytest.mark.parametrize("call, passed, actual", LIBRARY_SMOKE)
@@ -255,8 +258,25 @@ def test_library_variants_on_sample_model(sample_model_copy, call, passed, actua
     ((got_passed, got_actual),) = _library_rows(sample_model_copy, [call])
 
     assert (got_passed, got_actual if actual else None) == (passed, actual), (
-        f"{given}: {should}. If PQL.Assert disagrees with docs/pql-assert-gap-plan.md, the bug is upstream."
+        f"{given}: {should}. If PQL.Assert disagrees with the gap plan's live checks "
+        "(docs/pql-assert-gap-plan.md, C2 and C5), the bug is upstream in PQL.Assert."
     )
+
+
+def test_match_case_makes_text_checks_case_sensitive(sample_model_copy):
+    given = 'ShouldEndWith(MarvelSource[EYE], "EYES") with and without matchCase "Y"'
+    should = (
+        "count fewer non-matching values case-insensitively (most values end with \"Eyes\") than "
+        "case-sensitively, where no value matches"
+    )
+    call = "Col.ShouldEndWith(\"t\", 'MarvelSource'[EYE], \"EYES\"%s)"
+
+    (_, insensitive), (_, sensitive) = _library_rows(sample_model_copy, [call % "", call % ', "Y"'])
+
+    counts = [re.search(r"\((\d+) of (\d+)\)", text) for text in (insensitive, sensitive)]
+    assert all(counts), f"{given}: expected NON-MATCHING VALUES (n of N), got {insensitive!r} / {sensitive!r}"
+    (bad_i, total_i), (bad_s, total_s) = ((int(m.group(1)), int(m.group(2))) for m in counts)
+    assert (bad_i < bad_s, bad_s == total_s) == (True, True), f"{given}: {should} ({insensitive!r} / {sensitive!r})"
 
 
 def _library_rows(model_copy: Path, calls: list[str]) -> list[tuple[bool, str]]:

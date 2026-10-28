@@ -34,7 +34,7 @@ schema:
             mustBe: 0
             arguments:
               pattern: "Eyes$"
-          - id: source_eye_starts_with_lowercase      # fail: values start with a capital letter
+          - id: source_eye_starts_with_lowercase      # executes: no recorded fact
             metric: invalidValues
             mustBe: 0
             arguments:

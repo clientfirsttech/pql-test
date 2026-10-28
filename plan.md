@@ -13,9 +13,9 @@
 
 ## Open Items
 
-- **pql-odcs PQL.Assert 0.8 live CI** — planned 2026-10-27. Reuses Stage 3a (pytest.yml) as is. Phase A runs the 0.8 suites with query-scoped 0.8.0 functions, so the workspace does not change. Phase B publishes a 0.8.0 model so auto-detection can be checked live. Decision: upgrade SampleModel in place, or add a ContractModel. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md).
+- **pql-odcs PQL.Assert 0.8 live CI** — planned 2026-10-27. Reuses Stage 3a (pytest.yml) as is. Phase A runs the 0.8 suites with query-scoped 0.8.0 functions, so the workspace does not change. Phase B upgrades SampleModel in place to 0.8.0 (decided 2026-10-27); it must be republished for the auto-detection check to pass. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md).
 
-- **pql-odcs doctor and skill** — planned 2026-10-27. Adds an offline `contract doctor` that detects the PQL.Assert version from TMDL, plus live checks when run as `pql-test contract doctor`, and an installable pql-odcs skill. Decisions: the command name, and whether the skill text is written fresh or relicensed. See [tasks/pql-odcs-doctor-and-skill-epic.md](tasks/pql-odcs-doctor-and-skill-epic.md).
+- **pql-odcs doctor and skill** — planned 2026-10-27. Adds an offline `contract doctor` that detects the PQL.Assert version from TMDL, plus live checks when run as `pql-test contract doctor`, and an installable pql-odcs skill. Decided 2026-10-27: the command is `doctor`, and the skill is written fresh under MIT. See [tasks/pql-odcs-doctor-and-skill-epic.md](tasks/pql-odcs-doctor-and-skill-epic.md).
 
 - **Local-machine service smoke validation** — `python/tests/.env` is not configured on the maintainer's machine. CI's [run-tests-remote.yml](.github/workflows/run-tests-remote.yml) exercises the service path on every push, so the gap is informational only.
 
