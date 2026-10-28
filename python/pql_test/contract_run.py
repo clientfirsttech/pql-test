@@ -16,6 +16,7 @@ registered in the live model, which skips suites that were just generated.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -31,7 +32,7 @@ from pql_test.runner import (
     run_tests,
 )
 from pql_test.runner.cli_format import STATUS_COLORS, banner
-from pql_test.runner.model_path import _parse_dax_test_file
+from pql_test.runner.model_path import _parse_dax_test_file, parse_model_identifier
 
 # trace status -> cli_format status color key
 _TRACE_COLORS = {"failed": "FAIL", "error": "FAIL", "not_executed": "SKIP", "skipped": "SKIP"}
@@ -146,8 +147,68 @@ def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_mode
     opts = hooks.make_conn_opts(*credentials)
     if not opts.dataset_id and not opts.dataset_name:
         opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
-    abs_path = str(Path(model_path).resolve())
+    # local/<name> stays as is: the resolver connects to that open Desktop model and nothing else.
+    is_local = parse_model_identifier(model_path).kind == "local"
+    abs_path = model_path if is_local else str(Path(model_path).resolve())
     return abs_path, resolve_xmla_connection(abs_path, opts)
+
+
+# Folders never searched for a local/<name> model's PBIP folder.
+_SKIP_DIRS = {"node_modules", "__pycache__", "site-packages"}
+
+
+def find_local_model_dir(name: str, root: Path) -> Path:
+    """The one ``<name>.SemanticModel`` folder under *root*; a usage error when there is none or several."""
+    wanted = f"{name}.SemanticModel".lower()
+    found = []
+    for dirpath, dirnames, _ in os.walk(root):
+        found += [Path(dirpath) / d for d in dirnames if d.lower() == wanted]
+        # Skip hidden folders (.git, .venv), dependency trees, and the inside of any semantic model.
+        dirnames[:] = [
+            d for d in dirnames if not d.startswith(".") and d not in _SKIP_DIRS and not d.endswith(".SemanticModel")
+        ]
+    if len(found) == 1:
+        return found[0]
+    if found:
+        listed = ", ".join(str(p) for p in sorted(found))
+        raise click.UsageError(f"Several {name}.SemanticModel folders under {root}: {listed}. Pick one with --model-dir.")
+    raise click.UsageError(
+        f"No {name}.SemanticModel folder under {root}. Run from the folder that holds the PBIP, "
+        "or pass it with --model-dir."
+    )
+
+
+def resolve_model_target(model_path: str, model_dir: str | None) -> tuple[str, str]:
+    """``(PBIP folder, connection target)`` for MODEL_PATH.
+
+    A PBIP path is both. ``local/<name>`` connects only to that model open in Power BI Desktop and
+    takes its folder from --model-dir, else from the one ``<name>.SemanticModel`` under the current folder.
+    """
+    ident = parse_model_identifier(model_path)
+    if ident.kind != "local":
+        if model_dir:
+            raise click.UsageError("--model-dir goes with a local/<model_name> MODEL_PATH; pass the folder as MODEL_PATH instead.")
+        return model_path, model_path
+    return model_dir or str(find_local_model_dir(ident.model_name, Path.cwd())), model_path
+
+
+def _model_dir_option(command: Callable) -> Callable:
+    return click.option(
+        "--model-dir",
+        metavar="DIR",
+        help="PBIP folder of a local/<model_name> MODEL_PATH (default: the <model_name>.SemanticModel under the current folder).",
+    )(command)
+
+
+def _no_local_connection(target: str) -> str | None:
+    """pql-test's 'which Desktop instances are open' diagnostic when local/<name> did not connect."""
+    ident = parse_model_identifier(target)
+    if ident.kind != "local":
+        return None
+    # cli imports this module, so import it late.
+    from pql_test.cli import _format_local_miss_diagnostic
+
+    return _format_local_miss_diagnostic(ident.model_name)
 
 
 def make_run_command(hooks: RunHooks) -> click.Command:
@@ -176,10 +237,12 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         type=click.Choice(["azuredevops", "github"], case_sensitive=False),
         help="Emit CI-native log annotations instead of human-readable output.",
     )
+    @_model_dir_option
     @hooks.conn_options
     def run(
         contract_path: str,
         model_path: str,
+        model_dir: str | None,
         env: str,
         suite_prefix: str | None,
         closed_schema: bool,
@@ -196,11 +259,15 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     ) -> None:
         """Generate suites from CONTRACT into a PBIP MODEL_PATH, run them, and trace results to rule ids.
 
-        Warning-severity rules run in <ENV>WARN suites: they are reported but do not fail the run.
+        MODEL_PATH is a PBIP path, or local/<model_name> to run against that model open in
+        Power BI Desktop (its suites go into --model-dir, or the <model_name>.SemanticModel
+        under the current folder). Warning-severity rules run in <ENV>WARN suites: they are
+        reported but do not fail the run.
 
         \b
         Examples:
           pql-test contract run orders.odcs.yaml ./MyModel --env DEV
+          pql-test contract run orders.odcs.yaml local/MyModel --env DEV
           pql-test contract run orders.odcs.yaml ./MyModel --env DEV --output results.json --log-format github
         """
         from pql_odcs.api import GenerateError, generate, plan_contract
@@ -214,21 +281,23 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         except ContractError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
+        folder, target = resolve_model_target(model_path, model_dir)
         try:
-            semantic_model_dir = require_semantic_model_dir(model_path)
+            semantic_model_dir = require_semantic_model_dir(folder)
         except ModelPathError as exc:
             raise click.UsageError(str(exc)) from None
 
         # The connection comes first: `--pql-assert auto` asks the model which PQL.Assert it has.
         credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
-        abs_path, conn = _connect(model_path, hooks, credentials, semantic_model_dir)
+        abs_path, conn = _connect(target, hooks, credentials, semantic_model_dir)
         pre_warnings: list[str] = []
         if conn:
             click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
             pre_warnings.append("No XMLA connection detected. Tests will be reported as skipped.")
             click.echo(
-                "Warning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
+                _no_local_connection(target)
+                or "Warning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
                 "--tenant-id, --workspace-id, --dataset-id (and --client-id, --client-secret).",
                 err=True,
             )
@@ -239,7 +308,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
 
         plan = plan_contract(contract, closed_schema=closed_schema, pql_assert=pql_assert)
         try:
-            generated = generate(plan, model_path, env=env, suite_prefix=suite_prefix, force=force)
+            generated = generate(plan, folder, env=env, suite_prefix=suite_prefix, force=force)
         except (EmitError, ModelPathError, GenerateError) as exc:
             raise click.UsageError(str(exc)) from None
         click.echo(f"Generated {len(generated.written)} suite(s) in {generated.target_dir}")
@@ -279,10 +348,16 @@ def make_run_command(hooks: RunHooks) -> click.Command:
 _DOCTOR_STATUS = {"ok": ("PASS", "PASS"), "warn": ("SKIP", "WARN"), "fail": ("FAIL", "FAIL")}
 
 
-def live_doctor_checks(conn, recommended: str | None) -> list:
-    """Checks against the deployed model: the connection, its PQL.Assert, and drift from the model folder."""
+def live_doctor_checks(conn, recommended: str | None, local_miss: str | None = None) -> list:
+    """Checks against the deployed model: the connection, its PQL.Assert, and drift from the model folder.
+
+    *local_miss* is the diagnostic for a local/<name> MODEL_PATH: asking for one open model and
+    not finding it fails, where finding no connection at all only warns.
+    """
     from pql_odcs.doctor import FAIL, OK, WARN, Check
 
+    if conn is None and local_miss:
+        return [Check("XMLA connection", FAIL, local_miss)]
     if conn is None:
         return [
             Check(
@@ -353,10 +428,12 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
     @click.command("doctor")
     @click.argument("model_path", metavar="[MODEL_PATH]", required=False)
     @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+    @_model_dir_option
     @hooks.conn_options
     def doctor(
         model_path: str | None,
         fmt: str,
+        model_dir: str | None,
         tenant_id: str | None,
         workspace_id: str | None,
         dataset_id: str | None,
@@ -365,17 +442,20 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
     ) -> None:
         """Check the environment and, given a PBIP MODEL_PATH, its PQL.Assert library and deployed model.
 
+        MODEL_PATH may also be local/<model_name>: the model open in Power BI Desktop, with its
+        folder from --model-dir or the <model_name>.SemanticModel under the current folder.
         Recommends the --pql-assert value the model folder supports, and warns when the
         deployed model supports a different one. Exits 1 when a check fails.
         """
         from pql_odcs.doctor import run_doctor
         from pql_odcs.pbip import require_semantic_model_dir
 
-        report, conn = run_doctor(model_path), None
-        if model_path and report.ok:
+        folder, target = resolve_model_target(model_path, model_dir) if model_path else (None, None)
+        report, conn = run_doctor(folder), None
+        if folder and report.ok:
             credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
-            _, conn = _connect(model_path, hooks, credentials, require_semantic_model_dir(model_path))
-            report.checks.extend(live_doctor_checks(conn, report.recommended))
+            _, conn = _connect(target, hooks, credentials, require_semantic_model_dir(folder))
+            report.checks.extend(live_doctor_checks(conn, report.recommended, local_miss=_no_local_connection(target)))
         if fmt == "json":
             click.echo(json.dumps(report.to_json(), indent=2))
         else:

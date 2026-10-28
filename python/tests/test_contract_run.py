@@ -343,3 +343,92 @@ class TestContractDoctor:
         assert (result.exit_code, json.loads(result.output)["recommendedPqlAssert"]) == (0, None), (
             f"{given}: {should}\n{result.output}"
         )
+
+
+class TestLocalModelPath:
+    """`local/<model_name>`: run against the model open in Power BI Desktop, generating into its PBIP folder."""
+
+    @staticmethod
+    def _model(root: Path, name: str = "Sample") -> Path:
+        model = root / f"{name}.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        return model
+
+    @staticmethod
+    def _invoke(*args):
+        from pql_test.cli import cli
+
+        return CliRunner().invoke(cli, ["contract", *[str(a) for a in args]])
+
+    def test_run_connects_to_the_open_model_and_writes_into_model_dir(self, tmp_path, monkeypatch):
+        given = "contract run CONTRACT local/Sample --model-dir <folder>"
+        should = "ask the resolver for local/Sample as given and write the suites into --model-dir"
+        model = self._model(tmp_path)
+        targets = []
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda target, _o: targets.append(target))
+
+        self._invoke("run", FIXTURES / "marvel.odcs.yaml", "local/Sample", "--model-dir", model, "--env", "DEV")
+
+        assert (targets, (model / "DAXQueries" / "Marvel.Schema.DEV.Tests.dax").exists()) == (["local/Sample"], True), (
+            f"{given}: {should}"
+        )
+
+    def test_folder_is_found_under_the_current_directory(self, tmp_path, monkeypatch):
+        given = "local/Sample with Sample.SemanticModel under the current folder, and a copy inside .venv"
+        should = "use the one outside hidden folders"
+        model = self._model(tmp_path / "examples")
+        self._model(tmp_path / ".venv" / "lib")
+        monkeypatch.chdir(tmp_path)
+        from pql_test.contract_run import resolve_model_target
+
+        assert resolve_model_target("local/Sample", None) == (str(model), "local/Sample"), f"{given}: {should}"
+
+    def test_no_or_several_folders_are_usage_errors(self, tmp_path):
+        given = "local/Sample with no Sample.SemanticModel, then with two"
+        should = "raise a usage error that points to --model-dir each time"
+        from pql_test.contract_run import find_local_model_dir
+
+        messages = []
+        for copies in (0, 2):
+            for i in range(copies):
+                self._model(tmp_path / f"copy{i}")
+            with pytest.raises(click.UsageError) as exc:
+                find_local_model_dir("Sample", tmp_path)
+            messages.append(exc.value.message)
+
+        assert [("--model-dir" in m, "Several" in m) for m in messages] == [(True, False), (True, True)], (
+            f"{given}: {should}\n{messages}"
+        )
+
+    def test_model_dir_with_a_folder_model_path_is_a_usage_error(self, tmp_path):
+        given = "--model-dir with a PBIP folder as MODEL_PATH"
+        should = "exit 2: --model-dir only goes with local/<model_name>"
+        model = self._model(tmp_path)
+
+        result = self._invoke("doctor", model, "--model-dir", model)
+
+        assert (result.exit_code, "--model-dir goes with a local/<model_name>" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_doctor_fails_when_the_named_model_is_not_open(self, tmp_path, monkeypatch):
+        given = "contract doctor local/Sample while no Desktop instance has Sample open"
+        should = "fail the XMLA connection check with pql-test's list of open instances, and exit 1"
+        model = self._model(tmp_path)
+        (model / "definition" / "functions.tmdl").write_text(
+            (REPO_ROOT / "examples" / "SampleModel.SemanticModel" / "definition" / "functions.tmdl").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        monkeypatch.setattr("pql_test.cli._format_local_miss_diagnostic", lambda name: f"No instance for '{name}'.")
+
+        result = self._invoke("doctor", "local/Sample", "--model-dir", model, "--format", "json")
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (result.exit_code, checks["XMLA connection"]["status"], checks["XMLA connection"]["detail"]) == (
+            1,
+            "fail",
+            "No instance for 'Sample'.",
+        ), f"{given}: {should}\n{result.output}"

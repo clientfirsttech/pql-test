@@ -11,6 +11,11 @@ NOT_PBIP = (
     "*.Tests.dax files into a PBIP model's DAXQueries/ folder; query-scoped XMLA runs arrive in "
     "v0.2 (--target query) and persistent deploys in v0.3 (--target deploy)."
 )
+NOT_PBIP_LOCAL = (
+    "MODEL_PATH {path!r} names a model open in Power BI Desktop, but pql-odcs reads the PBIP folder on "
+    "disk and never connects. Pass the folder (for example ./{name}.SemanticModel), or check the open "
+    "model with `pql-test contract run CONTRACT {path} --env ENV`."
+)
 _TABLE_RE = re.compile(r"^table\s+(.+?)\s*$")
 _COLUMN_RE = re.compile(r"^\s+column\s+(.+?)\s*(?:=.*)?$")
 
@@ -47,6 +52,10 @@ def find_semantic_model_dir(model_path: str | Path) -> Path | None:
 def require_semantic_model_dir(model_path: str | Path) -> Path:
     found = find_semantic_model_dir(model_path)
     if found is None:
+        path = str(model_path).replace("\\", "/")
+        if path.startswith("local/"):
+            # pql-test's identifier for an open Desktop model: say so instead of "not a PBIP folder".
+            raise ModelPathError(NOT_PBIP_LOCAL.format(path=str(model_path), name=path[len("local/") :]))
         raise ModelPathError(NOT_PBIP.format(path=str(model_path)))
     return found
 

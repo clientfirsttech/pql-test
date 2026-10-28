@@ -24,7 +24,9 @@ Interface Contract {
 
 Constraints {
   MODEL_PATH must be a PBIP folder (the root with the .pbip file, or the *.SemanticModel folder) in v0.1;
-    local/<name> and <workspace>.Workspace/<model>.SemanticModel are NOT accepted yet
+    `run` and `doctor` also accept local/<name>: they connect only to that model open in Power BI Desktop and use its
+    folder from --model-dir, else the one <name>.SemanticModel under the current folder.
+    <workspace>.Workspace/<model>.SemanticModel is NOT accepted yet
     (query-scoped XMLA runs arrive in v0.2, persistent deploys in v0.3)
   Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema or DataQuality;
     the prefix comes from the contract's dataProduct, then its name (override with --suite-prefix)
@@ -82,9 +84,9 @@ Options shared by `generate`, `coverage`, and `run`:
 - `--dry-run` — print the DAX instead of writing files (generate).
 - `--force` — overwrite suite files that pql-odcs did not generate (generate/run).
 
-`doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json` and the same connection options as `run`.
+`doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json`, `--model-dir`, and the same connection options as `run`.
 
-`run` also accepts `--verbose`, `--output FILE`, and `--log-format azuredevops|github`, plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
+`run` also accepts `--verbose`, `--output FILE`, `--log-format azuredevops|github`, and `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 
 Usage:
 ```
@@ -102,6 +104,9 @@ pql-test contract generate orders.odcs.yaml ./MyModel --env DEV
 
 # Generate, run, and trace in one step (model open in Power BI Desktop)
 pql-test contract run orders.odcs.yaml ./MyModel --env DEV
+
+# The same against the model open in Power BI Desktop, even when PQL_* service credentials are set
+pql-test contract run orders.odcs.yaml local/MyModel --env DEV --model-dir ./MyModel
 
 # CI: GitHub annotations, JSON results, and fail if any rule cannot be enforced
 pql-test contract coverage orders.odcs.yaml --fail-on-skipped

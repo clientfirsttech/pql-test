@@ -1338,12 +1338,13 @@ pip install "pql-test[contracts]"
 | `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract lint CONTRACT [--model MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
-| `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites, runs them, and traces every failure back to its contract rule id |
+| `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites, runs them, and traces every failure back to its contract rule id. MODEL_PATH can be `local/<name>` to run against that model open in Power BI Desktop; the suites go into `--model-dir`, or the `<name>.SemanticModel` folder under the current folder |
 | `pql-test contract trace CONTRACT RESULTS_JSON` | Joins an earlier `run-tests --output` file to the contract's rule ids |
 
 ```bash
 pql-test contract coverage orders.odcs.yaml
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json
+pql-test contract run orders.odcs.yaml local/SalesModel --env DEV   # the model open in Power BI Desktop
 ```
 
 The generated files follow the rules below:

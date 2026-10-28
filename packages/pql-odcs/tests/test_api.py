@@ -142,9 +142,22 @@ class TestGenerate:
         should = "fail, naming the v0.2 query and v0.3 deploy targets"
 
         with pytest.raises(ModelPathError) as exc:
-            generate(plan_contract(_contract()), "local/Sample", env="DEV")
+            generate(plan_contract(_contract()), tmp_path / "nowhere", env="DEV")
 
         assert ("v0.2" in str(exc.value), "v0.3" in str(exc.value)) == (True, True), f"{given}: {should}"
+
+    def test_local_identifier_points_to_the_folder_and_pql_test(self):
+        given = "pql-test's local/<model_name> identifier as MODEL_PATH"
+        should = "say pql-odcs needs the PBIP folder, and name pql-test contract run for the open model"
+
+        with pytest.raises(ModelPathError) as exc:
+            generate(plan_contract(_contract()), "local/Sample", env="DEV")
+
+        message = str(exc.value)
+        assert ("./Sample.SemanticModel" in message, "pql-test contract run CONTRACT local/Sample" in message) == (
+            True,
+            True,
+        ), f"{given}: {should}\n{message}"
 
 
 class TestGenerateAcrossContracts:

@@ -86,9 +86,19 @@ class TestGenerate:
         given = "a MODEL_PATH that is not a PBIP folder"
         should = "exit 2 and mention the v0.2 query target"
 
-        result = _run("generate", _write_contract(tmp_path), "local/Sample", "--env", "DEV")
+        result = _run("generate", _write_contract(tmp_path), tmp_path / "nowhere", "--env", "DEV")
 
         assert (result.exit_code, "v0.2" in result.output) == (2, True), f"{given}: {should}"
+
+    def test_lint_model_given_as_local_identifier(self, tmp_path):
+        given = "lint --model local/Sample (pql-test's name for a model open in Power BI Desktop)"
+        should = "exit 2 and explain that pql-odcs reads the PBIP folder, not the open model"
+
+        result = _run("lint", _write_contract(tmp_path), "--model", "local/Sample")
+
+        assert (result.exit_code, "names a model open in Power BI Desktop" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
+        )
 
     def test_hand_written_target_is_a_usage_error_without_force(self, tmp_path):
         given = "a hand-written file at a generated suite's path"
