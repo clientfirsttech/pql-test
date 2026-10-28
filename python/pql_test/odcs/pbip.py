@@ -15,6 +15,7 @@ NOT_PBIP = (
 _SKIP_DIRS = {"node_modules", "__pycache__", "site-packages"}
 _TABLE_RE = re.compile(r"^table\s+(.+?)\s*$")
 _COLUMN_RE = re.compile(r"^\s+column\s+(.+?)\s*(?:=.*)?$")
+_DATA_TYPE_RE = re.compile(r"^\t\tdataType:\s*(\S+)\s*$")
 
 
 class ModelPathError(Exception):
@@ -111,19 +112,31 @@ def _tmdl_name(raw: str) -> str:
     return raw
 
 
-def model_names(semantic_model_dir: Path) -> dict[str, set[str]]:
-    """``table -> {columns}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
-    names: dict[str, set[str]] = {}
+def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
+    """``table -> {column: TMDL dataType or None}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
+    columns: dict[str, dict[str, str | None]] = {}
     for tmdl in sorted((semantic_model_dir / "definition" / "tables").glob("*.tmdl")):
-        table = None
+        table, column = None, None
         for line in tmdl.read_text(encoding="utf-8-sig").splitlines():
             if table is None:
                 match = _TABLE_RE.match(line)
                 if match:
                     table = _tmdl_name(match.group(1))
-                    names[table] = set()
+                    columns[table] = {}
                 continue
-            match = _COLUMN_RE.match(line)
-            if match and line.startswith("\t") and not line.startswith("\t\t"):
-                names[table].add(_tmdl_name(match.group(1)))
-    return names
+            if line.startswith("\t") and not line.startswith("\t\t"):
+                # A table-level line: a new column, or a measure/partition/... that ends the current one.
+                match = _COLUMN_RE.match(line)
+                column = _tmdl_name(match.group(1)) if match else None
+                if column is not None:
+                    columns[table][column] = None
+                continue
+            data_type = _DATA_TYPE_RE.match(line)
+            if column is not None and data_type:
+                columns[table][column] = data_type.group(1)
+    return columns
+
+
+def model_names(semantic_model_dir: Path) -> dict[str, set[str]]:
+    """``table -> {columns}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
+    return {table: set(cols) for table, cols in model_columns(semantic_model_dir).items()}

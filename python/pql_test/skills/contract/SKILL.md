@@ -43,6 +43,7 @@ Constraints {
     suites and fail CI on drift (`generate` then `git diff --exit-code`); see docs/contracts.md
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule
   Model names come only from the contract: customProperties pbiTable (schema object) / pbiColumn (property), else the ODCS logical name;
+    customProperties pbiDataType (property) pins the exact model type for the column type check (Text, Integer, Number, Currency, Date, True/False, Binary);
     there is no sidecar mapping file
   Never claim a rule is enforced when coverage reports it skipped; quote the reason instead
 }
@@ -55,6 +56,7 @@ Constraints {
 | Schema object present | `Tbl.ShouldExist` |
 | Properties present | `Tbl.ShouldHaveColumns` (one per table) |
 | `--closed-schema` | `Tbl.ShouldNotHaveExtraColumns` |
+| `logicalType` string / integer / number / boolean / date | `Tbl.ColumnDataTypeShouldBe` with Text / Integer / Number or Currency / True/False / Date (timestamp and time check Date, approximated) |
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` (approximated on string columns) |
 | `primaryKey`, `unique`, `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one shared check per column; approximated, because blanks skew it) |
 | `rowCount` (all comparators except `mustNotBeBetween`) | `Tbl.ShouldHaveRows` / `ShouldHaveRowCount` / `ShouldHaveMoreRowsThan` / comparisons on `COUNTROWS` |
@@ -62,7 +64,7 @@ Constraints {
 Everything else is reported as **skipped**, with the release that will map it:
 - `type: sql`, `custom`, and `text` rules;
 - composite keys, nested properties, and ODCS 3.2 `map` / `vector` properties;
-- column types, `logicalTypeOptions`, relationships, and ODCS 3.2 `enum`;
+- `logicalTypeOptions`, relationships, ODCS 3.2 `enum`, and a `physicalType` with no `logicalType`;
 - `missingValues` and `invalidValues`;
 - non-zero thresholds;
 - SLA properties.

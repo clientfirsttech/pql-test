@@ -102,7 +102,34 @@ schema:
             value: EyeID
 ```
 
-When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchanged. `lint CONTRACT MODEL_PATH` checks that every resolved table and column exists in the model's TMDL.
+When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchanged. `lint CONTRACT MODEL_PATH` checks that every resolved table and column exists in the model's TMDL, and that each column's data type is one the contract accepts.
+
+## Column types
+
+Each property's `logicalType` becomes a `Tbl.ColumnDataTypeShouldBe` check in the Schema suite. It compares with the type the model reports in `INFO.VIEW.COLUMNS()`:
+
+| ODCS `logicalType` | Model type (TMDL `dataType`) | Status |
+|---|---|---|
+| `string` | `Text` (`string`) | mapped |
+| `integer` | `Integer` (`int64`) | mapped |
+| `number` | `Number` (`double`) or `Currency` (`decimal`) | mapped |
+| `boolean` | `True/False` (`boolean`) | mapped |
+| `date` | `Date` (`dateTime`) | mapped |
+| `timestamp`, `time` | `Date` (`dateTime`) | **approximated**: the model has one date/time type, so a date-only column also passes |
+
+To check one exact model type, add a `pbiDataType` custom property to the property. Its value is one of `Text`, `Integer`, `Number`, `Currency`, `Date`, `True/False`, or `Binary`, in any case:
+
+```yaml
+      - name: amount
+        logicalType: number
+        customProperties:
+          - property: pbiDataType   # only Currency (fixed decimal) passes
+            value: Currency
+```
+
+`physicalType` (for example `DECIMAL(10,2)`) describes the source system, so it is not checked. A property with only a `physicalType` is reported as skipped until it gets a `logicalType` or a `pbiDataType`.
+
+A `number` check accepts either type and still reports both when it fails, for example `expected Number, actual Text`.
 
 ## Rule mapping (`--pql-assert 0.7`, the default)
 
@@ -111,6 +138,7 @@ When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchan
 | Schema object present | `Tbl.ShouldExist` | mapped |
 | Properties present | `Tbl.ShouldHaveColumns` (one call per table) | mapped |
 | Closed schema (`--closed-schema`) | `Tbl.ShouldNotHaveExtraColumns` | mapped |
+| `logicalType` (or `pbiDataType`) | `Tbl.ColumnDataTypeShouldBe` (see [Column types](#column-types)) | mapped; **approximated** for `timestamp` and `time` |
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` | mapped; **approximated** on `string` columns (DAX treats empty strings as BLANK, so they count as nulls) |
 | `primaryKey`, `unique`, property `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one call per column, shared by every rule that asks for it) | **approximated**: it compares `DISTINCTCOUNT` (counts BLANK) with `COUNTA` (ignores blanks). A blank fails an otherwise distinct column, and one blank plus one duplicate still passes. See [PQL.Assert gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md) C4. |
 | `rowCount mustBeGreaterThan 0` | `Tbl.ShouldHaveRows` | mapped |
@@ -136,13 +164,13 @@ PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap pl
 | `^literal`, `literal$`, or a bare-literal pattern (`invalidValues` with `mustBe 0`, or `logicalTypeOptions` pattern) | `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString` with `matchCase` `"Y"` (case-sensitive, like the regex; null rows are skipped) | mapped |
 | `slaProperties` `latency` in days or hours, with a `table.column` element | `Col.MaxDateShouldBeWithinDays` | **approximated** (the age of the newest value, in UTC days; depends on when the test runs) |
 
-Like most PQL.Assert 0.8 column checks, these fail with `NO VALUES` on a column with no non-null value. Any other regex, ceiling, or SLA stays **skipped** with its reason. `missingValues`, `invalidValues` with a value list, column types, ranges, and relationships are unchanged and still skipped.
+Like most PQL.Assert 0.8 column checks, these fail with `NO VALUES` on a column with no non-null value. Any other regex, ceiling, or SLA stays **skipped** with its reason. `missingValues`, `invalidValues` with a value list, ranges, and relationships are unchanged and still skipped. Column types map the same way on both catalogs.
 
 These rules are reported as **skipped**, with the plan for each:
 
 | ODCS rule | Planned |
 |---|---|
-| Column types (`logicalType` / `physicalType`) | planned (`Tbl.ColumnDataTypeShouldBe`) |
+| `physicalType` alone (the source system's type) | not planned: add a `logicalType` or a `pbiDataType` |
 | `logicalTypeOptions` minimum/maximum, minLength/maxLength | planned |
 | `logicalTypeOptions` pattern, `invalidValues` with a pattern | later |
 | v3.1 `relationships` | planned (`Relationship.ShouldExist`) |

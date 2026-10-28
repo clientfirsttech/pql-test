@@ -53,7 +53,7 @@ class TestGenerate:
         result = _run("generate", _write_contract(tmp_path), model, "--env", "DEV")
 
         written = sorted(p.name for p in (model / "Sample.SemanticModel" / "DAXQueries").iterdir())
-        assert (result.exit_code, written, "2 skipped" in result.output) == (
+        assert (result.exit_code, written, "1 skipped" in result.output) == (
             0,
             ["M.DataQuality.DEV.Tests.dax", "M.Schema.DEV.Tests.dax"],
             True,
@@ -154,7 +154,7 @@ class TestCoverage:
 
         result = _run("coverage", _write_contract(tmp_path), "--format", "json")
 
-        assert (result.exit_code, json.loads(result.output)["summary"]["skipped"]) == (0, 2), f"{given}: {should}"
+        assert (result.exit_code, json.loads(result.output)["summary"]["skipped"]) == (0, 1), f"{given}: {should}"
 
     def test_text_format_lists_rules(self, tmp_path):
         given = "coverage with default text format"

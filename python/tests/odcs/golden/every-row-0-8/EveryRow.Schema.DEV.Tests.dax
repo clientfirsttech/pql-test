@@ -7,9 +7,16 @@ DEFINE
 			PQL.Assert.Tbl.ShouldExist("ODCS every-row orders.exists: orders exists", "Orders"),
 			PQL.Assert.Tbl.ShouldHaveColumns("ODCS every-row orders.columns: orders has columns order_id, customer_id, Order Status, amount, code", "Orders", "order_id,customer_id,Order Status,amount,code"),
 			PQL.Assert.Tbl.ShouldNotHaveExtraColumns("ODCS every-row orders.closed: orders has no columns beyond the contract", "Orders", "order_id,customer_id,Order Status,amount,code"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row orders.order_id.type: orders.order_id is integer (Integer in the model)", "Orders", "order_id", "Integer"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row orders.customer_id.type: orders.customer_id is integer (Integer in the model)", "Orders", "customer_id", "Integer"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row orders.status.type: orders.status is string (Text in the model)", "Orders", "Order Status", "Text"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row orders.amount.type: orders.amount is number (Number or Currency in the model)", "Orders", "amount", SWITCH(MAXX(FILTER(INFO.VIEW.COLUMNS(), [Table] = "Orders" && [Name] = "amount"), [DataType]), "Currency", "Currency", "Number")),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row orders.code.type: orders.code is string (Text in the model)", "Orders", "code", "Text"),
 			PQL.Assert.Tbl.ShouldExist("ODCS every-row bridge.exists: bridge exists", "bridge"),
 			PQL.Assert.Tbl.ShouldHaveColumns("ODCS every-row bridge.columns: bridge has columns a, b", "bridge", "a,b"),
-			PQL.Assert.Tbl.ShouldNotHaveExtraColumns("ODCS every-row bridge.closed: bridge has no columns beyond the contract", "bridge", "a,b")
+			PQL.Assert.Tbl.ShouldNotHaveExtraColumns("ODCS every-row bridge.closed: bridge has no columns beyond the contract", "bridge", "a,b"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row bridge.a.type: bridge.a is integer (Integer in the model)", "bridge", "a", "Integer"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS every-row bridge.b.type: bridge.b is integer (Integer in the model)", "bridge", "b", "Integer")
 		)
 
 EVALUATE EveryRow.Schema.DEV.Tests()

@@ -17,6 +17,7 @@ from pql_test.odcs.loader import Contract
 
 TABLE_KEY = "pbiTable"
 COLUMN_KEY = "pbiColumn"
+DATA_TYPE_KEY = "pbiDataType"  # on a property: the exact model data type to check (see datatypes.py)
 
 
 def custom_property(element: Mapping, key: str) -> Any:

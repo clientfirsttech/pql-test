@@ -14,6 +14,9 @@
 #   tableRef    the target table                             -> 'Table'
 #   columnRef   the target column                            -> 'Table'[Column]
 #   columnList  the assertion's `columns`, comma-joined      -> DAX string
+#   columnName  the target column name                       -> DAX string
+#   dataType    the assertion's `types`: one model type name  -> DAX string;
+#               several -> the column's type when it is one of them, else the first
 #   rowCount    the target table's row count                 -> COUNTROWS('Table')
 #   <other>     the assertion argument of that name          -> DAX literal
 
@@ -30,6 +33,10 @@ ops:
   tbl.no_extra_columns:
     fn: PQL.Assert.Tbl.ShouldNotHaveExtraColumns
     args: [testName, tableName, columnList]
+  tbl.column_type:
+    # Compares with INFO.VIEW.COLUMNS()[DataType] (same in PQL.Assert 0.4.0 to 0.8.0).
+    fn: PQL.Assert.Tbl.ColumnDataTypeShouldBe
+    args: [testName, tableName, columnName, dataType]
   tbl.has_rows:
     fn: PQL.Assert.Tbl.ShouldHaveRows
     args: [testName, tableRef]

@@ -89,7 +89,7 @@ class TestRendering:
         ), f"{given}: {should}"
 
     def test_renders_calls_with_catalog_argument_order(self):
-        given = "a schema suite with exists and has-columns assertions"
+        given = "a schema suite with exists, has-columns, and column type assertions"
         should = "render a DEFINE FUNCTION with a UNION of the catalog calls, then EVALUATE it"
         schema = _render(_marvel(name="M"))[0].content
 
@@ -98,7 +98,8 @@ class TestRendering:
             "\tFUNCTION M.Schema.DEV.Tests = () =>\n"
             "\t\tUNION (\n"
             '\t\t\tPQL.Assert.Tbl.ShouldExist("ODCS marvel-contract MarvelFact.exists: MarvelFact exists", "MarvelFact"),\n'
-            '\t\t\tPQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-contract MarvelFact.columns: MarvelFact has columns Name", "MarvelFact", "Name")\n'
+            '\t\t\tPQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-contract MarvelFact.columns: MarvelFact has columns Name", "MarvelFact", "Name"),\n'
+            '\t\t\tPQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS marvel-contract MarvelFact.Name.type: MarvelFact.Name is string (Text in the model)", "MarvelFact", "Name", "Text")\n'
             "\t\t)\n"
             "\n"
             "EVALUATE M.Schema.DEV.Tests()\n"

@@ -58,6 +58,7 @@ EXPECTED_FAILURES = {
     "date_dim_fewer_than_one_row",  # rowCount mustBeLessThan 1
     "ghost.exists",  # table NoSuchTable does not exist
     "ghost.columns",  # ...nor its columns
+    "ghost.Missing.type",  # ...so its column type cannot match (COLUMN NOT FOUND)
 }
 
 # Every mapped rule in marvel-0-8.odcs.yaml. The fixture comments give the SampleModel
@@ -84,6 +85,15 @@ EXPECTED_0_8 = {
     "marvel_fact.columns": "passed",
     "fact_date_eye_alignment_distinct": "failed",
     "slaProperties[0]": "failed",
+    # Column types: each logicalType matches the deployed column (INFO.VIEW.COLUMNS, 2026-10-28).
+    "MarvelSource.Year.type": "passed",
+    "MarvelSource.EYE.type": "passed",
+    "DateDim.DateID.type": "passed",
+    "DateDim.Year.type": "passed",
+    "DateDim.Date.type": "passed",
+    "marvel_fact.DateID.type": "passed",
+    "marvel_fact.EyeID.type": "passed",
+    "marvel_fact.AlignmentID.type": "passed",
 }
 
 

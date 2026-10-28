@@ -71,7 +71,7 @@ class TestObjectRules:
 
 class TestScheduledRules:
     def test_rules_scheduled_for_later_releases_are_reported_as_skipped(self):
-        given = "types, logicalTypeOptions, relationships, and SLA properties (not mapped by the 0.7 catalog)"
+        given = "logicalTypeOptions, relationships, and SLA properties (not mapped by the 0.7 catalog)"
         should = "each appear as a skipped rule saying when, never dropped"
         data = contract_dict(
             schema=[
@@ -97,7 +97,6 @@ class TestScheduledRules:
         actual = {
             rid: (rules[rid].status, release in rules[rid].reason)
             for rid, release in [
-                ("Orders.amount.type", "planned"),
                 ("Orders.amount.logicalTypeOptions", "planned"),
                 ("Orders.code.logicalTypeOptions", "a later release"),
                 ("Orders.relationships[0]", "planned"),

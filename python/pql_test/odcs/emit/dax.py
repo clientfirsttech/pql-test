@@ -132,11 +132,33 @@ def _argument(source: str, a: Assertion, test_name: str, catalog: Catalog) -> st
         return f"SELECTCOLUMNS({dax_table(target.table)}, {parts})"
     if source == "columnList":
         return dax_string(",".join(a.args["columns"]))
+    if source in ("columnName", "dataType") and target.column is None:
+        raise EmitError(f"Rule {a.rule_id}: op {a.op} needs a column target.")
+    if source == "columnName":
+        return dax_string(target.column)
+    if source == "dataType":
+        return _expected_data_type(target, a.args["types"])
     if source not in a.args:
         raise CatalogError(
             f"Catalog {catalog.name} op {a.op} expects argument {source!r}, which rule {a.rule_id} does not provide."
         )
     return dax_literal(a.args[source])
+
+
+def _expected_data_type(target, types: list[str]) -> str:
+    """The expected type argument: one name, or (for several) the column's own type when it is allowed.
+
+    With several allowed types the check still compares one name, so a failure reports
+    "expected <first>, actual <type>" instead of a bare TRUE/FALSE.
+    """
+    if len(types) == 1:
+        return dax_string(types[0])
+    actual = (
+        f"MAXX(FILTER(INFO.VIEW.COLUMNS(), [Table] = {dax_string(target.table)} && [Name] = {dax_string(target.column)}), "
+        "[DataType])"
+    )
+    branches = ", ".join(f"{dax_string(t)}, {dax_string(t)}" for t in types[1:])
+    return f"SWITCH({actual}, {branches}, {dax_string(types[0])})"
 
 
 def render_call(a: Assertion, test_name: str, catalog: Catalog) -> str:

@@ -6,6 +6,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 
+from pql_test.odcs.datatypes import LOGICAL_TYPES, MODEL_TYPES, model_type
 from pql_test.odcs.ir import (
     DATA_QUALITY_SUITE,
     SCHEMA_SUITE,
@@ -23,6 +24,7 @@ from pql_test.odcs.mapping.context import (
     mapped,
     skipped,
 )
+from pql_test.odcs.naming import DATA_TYPE_KEY, custom_property
 
 NO_COLUMN = "object, array, map, and vector properties have no semantic model column"
 
@@ -134,18 +136,46 @@ _TYPE_OPTION_RELEASES = (
 RELATIONSHIP_REASON = "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
 
 
-def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> list[RuleOutcome]:
-    """Column type and logicalTypeOptions rules, which are not mapped yet (patterns from PQL.Assert 0.8)."""
-    out = []
-    if prop.get("logicalType") or prop.get("physicalType"):
-        declared = prop.get("physicalType") or prop.get("logicalType")
-        out.append(
-            skipped(
-                f"{scope}.type",
-                "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)",
-                f"{scope} is {declared}",
+def type_rule(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> RuleOutcome | None:
+    """The column's data type: ``pbiDataType`` when set, else the model types its ``logicalType`` allows."""
+    logical, physical = prop.get("logicalType"), prop.get("physicalType")
+    pinned = custom_property(prop, DATA_TYPE_KEY)
+    if not (logical or physical or pinned is not None):
+        return None
+    rule_id = f"{scope}.type"
+    reason = None
+    if pinned is not None:
+        types = (model_type(pinned),) if model_type(pinned) else ()
+        if not types:
+            return skipped(
+                rule_id,
+                f"{DATA_TYPE_KEY} {pinned!r} is not a model data type; use one of {', '.join(MODEL_TYPES)}",
+                f"{scope} is {pinned}",
             )
+        declared = types[0]
+    elif str(logical).lower() in LOGICAL_TYPES:
+        types, reason = LOGICAL_TYPES[str(logical).lower()]
+        declared = str(logical)
+    else:
+        what = f"logicalType {logical}" if logical else f"physicalType {physical} (the source system's type)"
+        return skipped(
+            rule_id,
+            f"{what} has no model data type; add a logicalType ({', '.join(LOGICAL_TYPES)}) "
+            f"or a {DATA_TYPE_KEY} custom property",
+            f"{scope} is {logical or physical}",
         )
+    target = Target(ctx.names.table(obj), ctx.names.column(obj, prop))
+    description = f"{scope} is {declared} ({' or '.join(types)} in the model)"
+    assertion = Assertion(rule_id, SCHEMA_SUITE, "tbl.column_type", target, {"types": list(types)}, description)
+    return approximated(rule_id, reason, assertion) if reason else mapped(rule_id, assertion)
+
+
+def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> list[RuleOutcome]:
+    """The column type rule, plus the enum and logicalTypeOptions rules (patterns from PQL.Assert 0.8)."""
+    out = []
+    typed = type_rule(ctx, obj, prop, scope)
+    if typed is not None:
+        out.append(typed)
     if prop.get("enum"):
         values = [str(e.get("value")) if isinstance(e, Mapping) else str(e) for e in prop["enum"]]
         out.append(

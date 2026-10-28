@@ -157,11 +157,12 @@ def coverage_cmd(contract_path, fmt, closed_schema, pql_assert, fail_on_skipped)
 def lint_cmd(contract_path, model_path):
     """Schema-validate CONTRACT and check that its names resolve (in MODEL_PATH, when given)."""
     from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.datatypes import tmdl_model_type
     from pql_test.odcs.loader import ContractError
     from pql_test.odcs.mapping.context import is_column
     from pql_test.odcs.pbip import (
         ModelPathError,
-        model_names,
+        model_columns,
         require_semantic_model_dir,
     )
 
@@ -174,11 +175,11 @@ def lint_cmd(contract_path, model_path):
         problems.extend(plan.names.problems())
         if model_path:
             try:
-                model = model_names(require_semantic_model_dir(model_path))
+                model = model_columns(require_semantic_model_dir(model_path))
             except ModelPathError as exc:
                 raise click.UsageError(str(exc)) from None
             # DAX object names are case-insensitive.
-            model_ci = {t.lower(): {c.lower() for c in cols} for t, cols in model.items()}
+            model_ci = {t.lower(): {c.lower(): dt for c, dt in cols.items()} for t, cols in model.items()}
             for obj in plan.contract.schema_objects:
                 table = plan.names.table(obj)
                 if table.lower() not in model_ci:
@@ -190,6 +191,7 @@ def lint_cmd(contract_path, model_path):
                         problems.append(
                             f"{obj['name']}.{prop['name']}: column {column!r} not found in model table {table!r}"
                         )
+            problems.extend(_type_problems(plan, model_ci, tmdl_model_type))
     if problems:
         for p in problems:
             click.echo(f"  {p}", err=True)
@@ -197,6 +199,24 @@ def lint_cmd(contract_path, model_path):
         raise click.exceptions.Exit(1)
     n = len(plan.outcomes)
     click.echo(f"{Path(contract_path).name}: valid ODCS v{plan.contract.api_version}, {n} rules, names resolve.")
+
+
+def _type_problems(plan, model_ci: dict, tmdl_model_type) -> list[str]:
+    """Type checks whose column has a different data type in the model's TMDL."""
+    problems = []
+    for outcome in plan.outcomes:
+        for a in outcome.assertions:
+            if a.op != "tbl.column_type":
+                continue
+            tmdl = model_ci.get(a.target.table.lower(), {}).get((a.target.column or "").lower())
+            actual = tmdl_model_type(tmdl) if tmdl else None
+            if actual and actual not in a.args["types"]:
+                expected = " or ".join(a.args["types"])
+                problems.append(
+                    f"{outcome.rule_id}: column {a.target.column!r} is {actual} in the model, the contract expects "
+                    f"{expected} (set pbiDataType to pin another model type)"
+                )
+    return problems
 
 
 @contract.command("trace")

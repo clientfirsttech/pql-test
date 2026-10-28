@@ -6,10 +6,13 @@ DEFINE
 		UNION (
 			PQL.Assert.Tbl.ShouldExist("ODCS marvel-must-fail marvel_fact.exists: marvel_fact exists", "MarvelFact"),
 			PQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-must-fail marvel_fact.columns: marvel_fact has columns Name", "MarvelFact", "Name"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS marvel-must-fail marvel_fact.Name.type: marvel_fact.Name is string (Text in the model)", "MarvelFact", "Name", "Text"),
 			PQL.Assert.Tbl.ShouldExist("ODCS marvel-must-fail DateDim.exists: DateDim exists", "DateDim"),
 			PQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-must-fail DateDim.columns: DateDim has columns Year", "DateDim", "Year"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS marvel-must-fail DateDim.Year.type: DateDim.Year is integer (Integer in the model)", "DateDim", "Year", "Integer"),
 			PQL.Assert.Tbl.ShouldExist("ODCS marvel-must-fail ghost.exists: ghost exists", "NoSuchTable"),
-			PQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-must-fail ghost.columns: ghost has columns Missing", "NoSuchTable", "Missing")
+			PQL.Assert.Tbl.ShouldHaveColumns("ODCS marvel-must-fail ghost.columns: ghost has columns Missing", "NoSuchTable", "Missing"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS marvel-must-fail ghost.Missing.type: ghost.Missing is string (Text in the model)", "NoSuchTable", "Missing", "Text")
 		)
 
 EVALUATE MarvelFail.Schema.DEV.Tests()

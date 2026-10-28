@@ -22,6 +22,8 @@ SOURCE_TYPES = {
     "testName": {"STRING"},
     "tableName": {"STRING"},
     "columnList": {"STRING"},
+    "columnName": {"STRING"},
+    "dataType": {"STRING"},
     "tableRef": _TABLE,
     "keyProjection": _TABLE,
     "columnRef": {"ANYREF EXPR"},

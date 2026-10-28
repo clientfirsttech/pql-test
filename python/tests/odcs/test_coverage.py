@@ -45,7 +45,7 @@ class TestBuildReport:
         given = "a report"
         should = "summarise totals per status"
 
-        assert _report()["summary"] == {"total": 5, "mapped": 2, "approximated": 1, "skipped": 2}, f"{given}: {should}"
+        assert _report()["summary"] == {"total": 5, "mapped": 3, "approximated": 1, "skipped": 1}, f"{given}: {should}"
 
     def test_is_json_serialisable_with_stable_top_level_keys(self):
         given = "a report"

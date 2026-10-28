@@ -3,7 +3,7 @@
 # PQL.Assert 0.8.0 additions. Every 0.7 op is inherited unchanged; this file only
 # adds ops, so a model on 0.8.0 keeps every 0.7.1 function. Selected with
 # `--pql-assert 0.8`. Function names and signatures follow the released PQL.Assert
-# 0.8.0 package; tests/test_library_conformance.py checks them against a vendored copy.
+# 0.8.0 package; python/tests/odcs/test_library_conformance.py checks them against a vendored copy.
 #
 # Extra argument sources beyond the 0.7 catalog:
 #   keyProjection  the assertion's `columns` as SELECTCOLUMNS over the table

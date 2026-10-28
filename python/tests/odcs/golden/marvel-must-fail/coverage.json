@@ -13,9 +13,9 @@
   },
   "summary": {
     "total": 12,
-    "mapped": 8,
+    "mapped": 11,
     "approximated": 1,
-    "skipped": 3
+    "skipped": 0
   },
   "rules": [
     {
@@ -42,12 +42,14 @@
     },
     {
       "ruleId": "marvel_fact.Name.type",
-      "status": "skipped",
-      "description": "marvel_fact.Name is string",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "marvel_fact.Name is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "marvel_fact_exactly_one_row",
@@ -95,12 +97,14 @@
     },
     {
       "ruleId": "DateDim.Year.type",
-      "status": "skipped",
-      "description": "DateDim.Year is integer",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "DateDim.Year is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "date_dim_fewer_than_one_row",
@@ -137,12 +141,14 @@
     },
     {
       "ruleId": "ghost.Missing.type",
-      "status": "skipped",
-      "description": "ghost.Missing is string",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "ghost.Missing is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     }
   ]
 }

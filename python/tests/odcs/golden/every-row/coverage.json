@@ -13,9 +13,9 @@
   },
   "summary": {
     "total": 46,
-    "mapped": 16,
+    "mapped": 23,
     "approximated": 3,
-    "skipped": 27
+    "skipped": 20
   },
   "rules": [
     {
@@ -75,12 +75,14 @@
     },
     {
       "ruleId": "orders.order_id.type",
-      "status": "skipped",
-      "description": "orders.order_id is integer",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "orders.order_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.order_id.quality[0]",
@@ -106,12 +108,14 @@
     },
     {
       "ruleId": "orders.customer_id.type",
-      "status": "skipped",
-      "description": "orders.customer_id is integer",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "orders.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.customer_id.quality[0]",
@@ -144,12 +148,14 @@
     },
     {
       "ruleId": "orders.status.type",
-      "status": "skipped",
-      "description": "orders.status is string",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "orders.status is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.status.quality[0]",
@@ -198,12 +204,14 @@
     },
     {
       "ruleId": "orders.amount.type",
-      "status": "skipped",
-      "description": "orders.amount is DECIMAL(10,2)",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "orders.amount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.amount.logicalTypeOptions",
@@ -216,12 +224,14 @@
     },
     {
       "ruleId": "orders.code.type",
-      "status": "skipped",
-      "description": "orders.code is string",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "orders.code is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.code.logicalTypeOptions",
@@ -436,12 +446,14 @@
     },
     {
       "ruleId": "bridge.a.type",
-      "status": "skipped",
-      "description": "bridge.a is integer",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "bridge.a is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "bridge.b.primaryKey",
@@ -454,12 +466,14 @@
     },
     {
       "ruleId": "bridge.b.type",
-      "status": "skipped",
-      "description": "bridge.b is integer",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "status": "mapped",
+      "description": "bridge.b is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "slaProperties[0]",
