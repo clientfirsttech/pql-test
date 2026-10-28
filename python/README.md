@@ -507,7 +507,7 @@ environment's suites (see
 pql-test auth login
 
 # Or with service principal
-pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 
 # Now run tests without credential flags
 pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
@@ -537,17 +537,17 @@ This opens a browser window for you to sign in with your Azure AD credentials. A
 #### Service Principal with Secret
 
 ```powershell
-pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 ```
 
 #### Service Principal with Certificate
 
 ```powershell
 # PEM certificate
-pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --certificate cert.pem --tenant-id <tenant-id>
 
 # P12/PFX with password
-pql-test auth login -u <client-id> --certificate cert.p12 -p <cert-password> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --certificate cert.p12 --client-secret <cert-password> --tenant-id <tenant-id>
 ```
 
 #### Managed Identity (Azure VM/Container)
@@ -557,7 +557,7 @@ pql-test auth login -u <client-id> --certificate cert.p12 -p <cert-password> --t
 pql-test auth login --identity
 
 # User-assigned
-pql-test auth login --identity -u <client-id>
+pql-test auth login --identity --client-id <client-id>
 ```
 
 ### Credential Priority
@@ -671,7 +671,7 @@ EVALUATE
 # When secret approaches expiry:
 # 1. Create new secret in Azure Portal
 # 2. Update stored credential
-pql-test auth login -u <client-id> -p <new-secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <new-secret> --tenant-id <tenant-id>
 
 # 3. Verify new secret works
 pql-test auth status
@@ -715,7 +715,7 @@ All prerequisites met.
 List all DAX test suites discovered in a PBIP model.
 
 ```bash
-pql-test retrieve-tests <modelPath> [--env <environment>] [--verbose]
+pql-test retrieve-tests <modelPath> [--env <environment>] [--format json|text] [--verbose | --quiet]
 ```
 
 **Arguments:**
@@ -724,7 +724,9 @@ pql-test retrieve-tests <modelPath> [--env <environment>] [--verbose]
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `--env <environment>` | ❌ | Only list suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
-| `--verbose`, `-v` | ❌ | Also print file paths and connection info |
+| `--format <fmt>` | ❌ | `json` (default) or `text` (a readable list; `--human` still works as a deprecated alias) |
+| `--verbose`, `-v` | ❌ | With `--format text`: also print file paths and connection info |
+| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
 
 **Example:**
 
@@ -802,8 +804,10 @@ pql-test retrieve-test <modelPath> <name> [--verbose]
 | Argument | Required | Description |
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
-| `<name>` | ✅ | Test suite name (file stem without `.dax`) |
+| `<name>` or `--test <name>` | ✅ | Test suite name (file stem without `.dax`); give one of them |
+| `--format <fmt>` | ❌ | `json` (default) or `text` (`--human` still works as a deprecated alias) |
 | `--verbose`, `-v` | ❌ | Also print the full DAX source |
+| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
 
 **Example:**
 
@@ -846,7 +850,9 @@ pql-test run-tests <modelPath> [--test <name>] [--env <environment>] [--verbose]
 | `--test <name>` | ❌ | Run only the named test suite |
 | `--env <environment>` | ❌ | Run only suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
-| `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
+| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
+| `--format <fmt>` | ❌ | `text` (default, the report) or `json` (the JSON results on stdout); not with `--log-format` |
+| `--output <file>`, `-o` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
 | `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (required for remote XMLA; or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (required for remote XMLA; or set `PQL_WORKSPACE_ID`) |
@@ -1063,7 +1069,8 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `<workspace>.Workspace/<semantic_model>.SemanticModel` (see [Model Path Formats](#model-path-formats)) |
 | `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
 | `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
-| `--output <file>` | ❌ | Write the JSON report to `<file>`. Requires `--format json` — otherwise fails as a usage error before any XMLA query |
+| `--output <file>`, `-o` | ❌ | Write the JSON report to `<file>`; with `--format text` the text report is printed as well |
+| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
 | `--min-coverage <percent>` | ❌ | Exit `1` when overall eligible coverage is below `<percent>` (0-100); prints `Required coverage of N% reached` when met (like pytest-cov's `--cov-fail-under`). Also switches the report colors to pass/fail against the threshold. A malformed or out-of-range value fails before any XMLA query |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (or set `PQL_WORKSPACE_ID`) |
@@ -1429,7 +1436,7 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 |  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
 | `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
 | `--client-secret` | `PQL_CLIENT_SECRET` | Service principal client secret |
-|  | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) — no flag; also stored by `pql-test auth login --environment` |
+|  | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) — no flag; also stored by `pql-test auth login --cloud` |
 
 Place these in a `.env` file (git-ignored) at the directory where you invoke
 the CLI — typically the repo root or `python/`. The CLI loads `.env`
@@ -1459,7 +1466,7 @@ with the dataset display name as the `Initial Catalog`.
 
 ### Sovereign / government clouds
 
-Log in with `pql-test auth login --environment <cloud>` (or set
+Log in with `pql-test auth login --cloud <cloud>` (or set
 `PQL_ENVIRONMENT` when supplying explicit service-principal credentials) to
 target a non-commercial cloud:
 

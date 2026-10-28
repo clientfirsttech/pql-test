@@ -53,8 +53,10 @@ The command auto-detects a locally-open Power BI Desktop instance via the Analys
 
 Options:
 - `--test NAME` — Run only the named test suite.
-- `--verbose` — Show per-assertion detail (message and duration) for every result.
-- `--output FILE` — Write full JSON results to FILE in addition to the human-readable output.
+- `-v, --verbose` — Show per-assertion detail (message and duration) for every result.
+- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
+- `--format text|json` — `text` (default) prints the test report; `json` prints the JSON results on stdout instead. Cannot be combined with `--log-format`.
+- `-o, --output FILE` — Write full JSON results to FILE in addition to the report.
 - `--log-format github` — Emit GitHub Actions native log annotations (`::group::` / `::error::` / `::notice::`).
 - `--log-format azuredevops` — Emit Azure Pipelines logging commands (`##[group]` / `##[error]` / `##vso[task.complete]`).
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).

@@ -14,6 +14,14 @@ from pathlib import Path
 
 import click
 
+from pql_test.cli_options import (
+    emit_result,
+    format_option,
+    output_option,
+    record_summary,
+    verbosity_options,
+)
+
 _CONTRACT = click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
 _CLOSED = click.option(
     "--closed-schema", is_flag=True, help="Also fail when a table has columns the contract does not list."
@@ -102,6 +110,7 @@ def _model_pql_assert(model_path: str) -> str:
 @_FAIL_ON_SKIPPED
 @click.option("--dry-run", is_flag=True, help="Print the DAX to stdout instead of writing files.")
 @click.option("--force", is_flag=True, help="Overwrite suite files that pql-test did not generate.")
+@verbosity_options(result_on_stdout=lambda kw: kw.get("dry_run"))
 def generate_cmd(
     contract_path, model_path, env, suite_prefix, closed_schema, pql_assert, fail_on_skipped, dry_run, force
 ):
@@ -120,6 +129,7 @@ def generate_cmd(
                 click.echo(f.content)
         else:
             result = generate(plan, model_path, env=env, suite_prefix=suite_prefix, force=force)
+            record_summary(f"Wrote {len(result.written)} suite(s) to {result.target_dir}")
             for path in result.written:
                 click.echo(f"wrote   {path}")
             for path in result.removed:
@@ -140,8 +150,9 @@ def generate_cmd(
 @click.argument("model_path", metavar="MODEL_PATH")
 @click.option("--table", "tables", multiple=True, metavar="NAME", help="Describe only this table (repeatable).")
 @click.option("--id", "contract_id", help="Contract id (default: the model name, lowercased with dashes).")
-@click.option("--output", "-o", type=click.Path(dir_okay=False), help="Write the contract to FILE instead of stdout.")
+@output_option("Write the contract to FILE instead of stdout.")
 @click.option("--force", is_flag=True, help="With --output: overwrite an existing file.")
+@verbosity_options(result_on_stdout=lambda kw: not kw.get("output"))
 def init_cmd(model_path, tables, contract_id, output, force):
     """Start an ODCS contract from MODEL_PATH: its tables, columns, and types, read from the TMDL.
 
@@ -177,28 +188,37 @@ def init_cmd(model_path, tables, contract_id, output, force):
         raise click.UsageError(f"{path} exists; pass --force to overwrite it.") from None
     except OSError as exc:
         raise click.UsageError(f"Cannot write {path}: {exc.strerror or exc}.") from None
+    record_summary(f"wrote   {path}")
     click.echo(f"wrote   {path}", err=True)
 
 
 @contract.command("coverage")
 @_CONTRACT
-@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@format_option()
 @_CLOSED
 @_PQL_ASSERT
 @_FAIL_ON_SKIPPED
-def coverage_cmd(contract_path, fmt, closed_schema, pql_assert, fail_on_skipped):
+@verbosity_options()
+def coverage_cmd(contract_path, output_format, closed_schema, pql_assert, fail_on_skipped):
     """List every rule in CONTRACT as mapped, approximated, or skipped."""
     from pql_test.odcs.coverage import format_text
 
     report = _report(_plan(contract_path, closed_schema, pql_assert))
-    click.echo(json.dumps(report, indent=2) if fmt == "json" else format_text(report), nl=fmt == "json")
+    if output_format == "json":
+        emit_result(json.dumps(report, indent=2))
+    else:
+        text = format_text(report)
+        record_summary(text.splitlines()[0])
+        click.echo(text, nl=False)
     _fail_if_skipped(report, fail_on_skipped)
 
 
 @contract.command("lint")
 @_CONTRACT
 @click.argument("model_path", metavar="[MODEL_PATH]", required=False)
-def lint_cmd(contract_path, model_path):
+@format_option()
+@verbosity_options()
+def lint_cmd(contract_path, model_path, output_format):
     """Schema-validate CONTRACT and check that its names resolve (in MODEL_PATH, when given)."""
     from pql_test.odcs.api import plan_contract
     from pql_test.odcs.datatypes import tmdl_model_type
@@ -242,13 +262,31 @@ def lint_cmd(contract_path, model_path):
                             f"{obj['name']}.{prop['name']}: column {column!r} not found in model table {table!r}"
                         )
             problems.extend(_type_problems(plan, model_ci, tmdl_model_type))
+    name = Path(contract_path).name
+    if output_format == "json":
+        emit_result(
+            json.dumps(
+                {
+                    "ok": not problems,
+                    "contract": name,
+                    "apiVersion": plan.contract.api_version if plan else None,
+                    "rules": len(plan.outcomes) if plan else 0,
+                    "problems": problems,
+                },
+                indent=2,
+            )
+        )
+        if problems:
+            raise click.exceptions.Exit(1)
+        return
     if problems:
         for p in problems:
             click.echo(f"  {p}", err=True)
-        click.echo(f"{Path(contract_path).name}: {len(problems)} problem(s).", err=True)
+        click.echo(f"{name}: {len(problems)} problem(s).", err=True)
         raise click.exceptions.Exit(1)
-    n = len(plan.outcomes)
-    click.echo(f"{Path(contract_path).name}: valid ODCS v{plan.contract.api_version}, {n} rules, names resolve.")
+    summary = f"{name}: valid ODCS v{plan.contract.api_version}, {len(plan.outcomes)} rules, names resolve."
+    record_summary(summary)
+    click.echo(summary)
 
 
 def _type_problems(plan, model_ci: dict, tmdl_model_type) -> list[str]:
@@ -272,11 +310,12 @@ def _type_problems(plan, model_ci: dict, tmdl_model_type) -> list[str]:
 @contract.command("trace")
 @_CONTRACT
 @click.argument("results_path", metavar="RESULTS_JSON", type=click.Path(exists=True, dir_okay=False))
-@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+@format_option()
 @click.option("--suite-prefix", help="Suite prefix used at generate time (default: derived from the contract).")
 @_CLOSED
 @_PQL_ASSERT
-def trace_cmd(contract_path, results_path, fmt, suite_prefix, closed_schema, pql_assert):
+@verbosity_options()
+def trace_cmd(contract_path, results_path, output_format, suite_prefix, closed_schema, pql_assert):
     """Join a pql-test --output RESULTS_JSON back to CONTRACT's rule ids."""
     from pql_test.odcs.results import ResultsError, format_text, read_results, trace
 
@@ -286,7 +325,9 @@ def trace_cmd(contract_path, results_path, fmt, suite_prefix, closed_schema, pql
     except ResultsError as exc:
         raise click.BadParameter(str(exc), param_hint="RESULTS_JSON") from None
     report = trace(plan, results, suite_prefix=suite_prefix)
-    if fmt == "json":
-        click.echo(json.dumps(report.to_json(), indent=2))
+    if output_format == "json":
+        emit_result(json.dumps(report.to_json(), indent=2))
     else:
-        click.echo(format_text(report), nl=False)
+        text = format_text(report)
+        record_summary(text.splitlines()[0])
+        click.echo(text, nl=False)

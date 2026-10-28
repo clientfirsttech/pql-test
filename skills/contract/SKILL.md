@@ -137,9 +137,11 @@ Options shared by `generate`, `coverage`, and `run`:
 - `--dry-run` — print the DAX instead of writing files (generate).
 - `--force` — overwrite suite files that pql-test did not generate (generate, run --write).
 
+Every contract command takes `-v/--verbose` and `-q/--quiet` (only the summary line; a result on stdout, such as JSON, a contract, or DAX, is never suppressed), and every command with a report takes `--format text|json`, `lint` included. `-o` is short for `--output`.
+
 `doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed or open model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json`, `--model-dir`, and the same connection options as `run`.
 
-`run` also accepts `--write` (also save the suites into DAXQueries/), `--verbose`, `--output FILE`, `--log-format azuredevops|github`, and, with `--write`, `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
+`run` also accepts `--write` (also save the suites into DAXQueries/), `--format json` (the JSON results on stdout), `--output FILE`, `--log-format azuredevops|github`, and, with `--write`, `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 
 Usage:
 ```

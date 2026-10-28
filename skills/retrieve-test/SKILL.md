@@ -1,6 +1,6 @@
 ---
 name: retrieve-test
-description: Show details for a single DAX test suite by name. Returns a JSON object by default; use --human for formatted text and --verbose to include the full DAX source.
+description: Show details for a single DAX test suite by name. Returns a JSON object by default; use --format text for formatted text and --verbose to include the full DAX source.
 version: 0.2.0
 ---
 
@@ -14,8 +14,10 @@ MODEL_PATH accepts three formats:
 NAME is the exact name of the DAX test suite to retrieve (e.g. `Calcs.DEV.Tests`).
 
 Options:
-- `--human` — Output in human-readable formatted text instead of JSON.
-- `--verbose` — With `--human`: also print the full DAX source of the test suite. With JSON output: adds a `"source"` field to the returned object.
+- `--test NAME` — The test suite to show; the same as the positional `NAME` (give one of them).
+- `--format json|text` — `json` (default) prints a JSON object; `text` prints formatted text. (The old `--human` flag still works as a deprecated alias.)
+- `-v, --verbose` — With `--format text`: also print the full DAX source of the test suite. With JSON output: adds a `"source"` field to the returned object.
+- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
@@ -29,6 +31,6 @@ Usage:
 pql-test retrieve-test ../examples "Calcs.DEV.Tests"
 pql-test retrieve-test local/SampleModel "Calcs.DEV.Tests"
 pql-test retrieve-test "MyWorkspace.MyModel" "Calcs.DEV.Tests" --tenant-id ... --client-id ... --client-secret ...
-pql-test retrieve-test ../examples "Calcs.DEV.Tests" --human
-pql-test retrieve-test ../examples "Calcs.DEV.Tests" --human --verbose
+pql-test retrieve-test ../examples "Calcs.DEV.Tests" --format text
+pql-test retrieve-test ../examples "Calcs.DEV.Tests" --format text --verbose
 ```

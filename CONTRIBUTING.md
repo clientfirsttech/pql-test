@@ -96,6 +96,40 @@ indented text and no connection diagnostic. See
 
 ---
 
+## CLI Argument Conventions
+
+The same option means the same thing on every command. The shared options live in
+[`python/pql_test/cli_options.py`](python/pql_test/cli_options.py); use them instead of
+declaring your own, and [`tests/test_cli_conventions.py`](python/tests/test_cli_conventions.py)
+fails when a command drifts.
+
+- **`-v/--verbose` and `-q/--quiet`** (`verbosity_options`) on every command that prints a
+  report. Quiet prints only the summary line, which the command marks with
+  `record_summary()`. Warnings and errors still go to stderr, and the exit code never
+  changes. A result printed on stdout (JSON, a contract, DAX) is never suppressed. Passing
+  both flags is a usage error.
+- **`--format text|json`** (`format_option`) is the one way to ask for machine-readable
+  output. With `--format json`, stdout carries only the JSON, printed with `emit_result()`;
+  every other line goes to stderr automatically. `retrieve-tests` and `retrieve-test` default
+  to `json` because tools and agents parse them; everything else defaults to `text`.
+- **`--output FILE` / `-o FILE`** (`output_option`) writes the command's result to FILE, as
+  well as the report on screen.
+- **Names:**
+  - `--env` is the test environment;
+  - `--cloud` is the Azure cloud;
+  - credentials are `--tenant-id`, `--client-id`, and `--client-secret`;
+  - `--test NAME` selects one test suite.
+- **Renaming an option:** keep the old spelling working with `deprecated_alias()`, placed
+  above the option it aliases. The alias is hidden from `--help`, warns once on stderr, and
+  behaves exactly as before. Today's aliases:
+  - `--human` for `--format text`;
+  - `-u`/`--user` for `--client-id`;
+  - `-p`/`--password` for `--client-secret`;
+  - `--tenant` for `--tenant-id`;
+  - `--environment` for `--cloud`.
+
+---
+
 ## Prerequisites
 
 | Requirement | Why | How to install |

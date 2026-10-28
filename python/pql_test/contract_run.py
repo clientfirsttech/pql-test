@@ -23,6 +23,13 @@ from pathlib import Path
 
 import click
 
+from pql_test.cli_options import (
+    emit_result,
+    format_option,
+    output_option,
+    record_summary,
+    verbosity_options,
+)
 from pql_test.runner import (
     TestResult,
     TestSuite,
@@ -105,12 +112,12 @@ def print_trace(report) -> None:
             click.echo(f"      {detail}")
     if report.unmatched:
         click.echo(f"  {len(report.unmatched)} result(s) did not come from this contract.")
-    click.echo(
-        banner(
-            f"{summary['passed']} passed, {summary['failed']} failed, {summary['error']} error, "
-            f"{summary['not_executed']} not executed, {summary['skipped']} skipped"
-        )
+    line = (
+        f"{summary['passed']} passed, {summary['failed']} failed, {summary['error']} error, "
+        f"{summary['not_executed']} not executed, {summary['skipped']} skipped"
     )
+    record_summary(f"Contract {report.contract_id}: {line}")
+    click.echo(banner(line))
 
 
 def deployed_library_version(conn) -> str | None:
@@ -241,8 +248,9 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         "leaves the PBIP project untouched.",
     )
     @click.option("--force", is_flag=True, help="With --write: overwrite suite files that pql-test did not generate.")
-    @click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail for every result.")
-    @click.option("--output", default=None, metavar="FILE", help="Write full JSON results to FILE.")
+    @format_option(help="Output format: the test and rule report (text), or the JSON results on stdout.")
+    @verbosity_options()
+    @output_option("Write the full JSON results (with the per-rule trace) to FILE, as well as the report.")
     @click.option(
         "--log-format",
         default=None,
@@ -261,6 +269,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         pql_assert: str,
         write: bool,
         force: bool,
+        output_format: str,
         verbose: bool,
         output: str | None,
         log_format: str | None,
@@ -296,6 +305,8 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         except ContractError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
+        if output_format == "json" and log_format:
+            raise click.UsageError("Use only one of --format json and --log-format.")
         if not write and (force or model_dir):
             raise click.UsageError(f"{'--force' if force else '--model-dir'} goes with --write: run writes no files otherwise.")
         folder, target = resolve_model_target(model_path, model_dir)
@@ -344,22 +355,26 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         tests = [suite_test(f) for f in files]
         results = run_tests(tests, conn, skip_message="No XMLA connection available; the suites were not run.")
         suite = summarise(abs_path, tests, results)
-        if log_format == "azuredevops":
+        suite_json = hooks.suite_to_dict(suite)
+        report = trace(plan, suite_json, suite_prefix=suite_prefix)
+        # run-tests' documented shape, plus the per-rule trace under "contract".
+        payload = json.dumps({**suite_json, "contract": report.to_json()}, indent=2)
+        if output_format == "json":
+            emit_result(payload)
+        elif log_format == "azuredevops":
             hooks.print_azuredevops(suite, pre_warnings=pre_warnings)
         elif log_format == "github":
             hooks.print_github(suite, pre_warnings=pre_warnings)
         else:
             hooks.print_results(suite, verbose, pre_warnings=pre_warnings, environment=env)
 
-        suite_json = hooks.suite_to_dict(suite)
-        report = trace(plan, suite_json, suite_prefix=suite_prefix)
         if output:
-            # run-tests' documented shape, plus the per-rule trace under "contract".
-            Path(output).write_text(json.dumps({**suite_json, "contract": report.to_json()}, indent=2), encoding="utf-8")
-            click.echo(f"\nJSON results written to: {output}")
+            Path(output).write_text(payload, encoding="utf-8")
+            # stdout carries the JSON itself with --format json, so the note goes to stderr then.
+            click.echo(f"\nJSON results written to: {output}", err=output_format == "json")
         if log_format:
             print_trace_annotations(report, log_format.lower())
-        else:
+        elif output_format != "json":
             print_trace(report)
 
         blocking = {f.function_name for f in files if f.blocking}
@@ -441,7 +456,9 @@ def print_doctor(report, conn=None, model_path: str | None = None) -> None:
         color, label = _DOCTOR_STATUS[check.status]
         click.echo(f"  {click.style(label.ljust(5), fg=STATUS_COLORS[color])}{check.name}: {check.detail}")
     failed = sum(c.status == "fail" for c in report.checks)
-    click.echo(banner(f"{failed} check(s) failed" if failed else "all checks passed"))
+    summary = f"{failed} check(s) failed" if failed else "all checks passed"
+    record_summary(f"contract doctor: {summary}")
+    click.echo(banner(summary))
     if report.recommended:
         click.echo(f"Use --pql-assert {report.recommended} with generate, coverage, and trace for this model.")
 
@@ -451,12 +468,13 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
 
     @click.command("doctor")
     @click.argument("model_path", metavar="[MODEL_PATH]", required=False)
-    @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+    @format_option()
     @_model_dir_option
+    @verbosity_options()
     @hooks.conn_options
     def doctor(
         model_path: str | None,
-        fmt: str,
+        output_format: str,
         model_dir: str | None,
         tenant_id: str | None,
         workspace_id: str | None,
@@ -488,8 +506,8 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
             credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
             _, conn = _connect(target, hooks, credentials, require_semantic_model_dir(folder))
             report.checks.extend(live_doctor_checks(conn, report.recommended, local_miss=_no_local_connection(target)))
-        if fmt == "json":
-            click.echo(json.dumps(report.to_json(), indent=2))
+        if output_format == "json":
+            emit_result(json.dumps(report.to_json(), indent=2))
         else:
             print_doctor(report, conn, model_path)
         if not report.ok:

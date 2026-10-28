@@ -542,3 +542,34 @@ def test_local_with_a_backslash_is_the_same_open_model(tmp_path):
     from pql_test.contract_run import resolve_model_target
 
     assert resolve_model_target("local\\Sample", None) == ("local/Sample", "local/Sample"), f"{given}: {should}"
+
+
+class TestRunFormat:
+    def test_format_json_prints_the_results_with_the_trace(self, tmp_path, monkeypatch):
+        given = "contract run --format json with no connection"
+        should = "print run-tests' JSON plus the per-rule trace on stdout, and no report"
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(
+            cli, ["contract", "run", str(FIXTURES / "marvel.odcs.yaml"), str(model), "--env", "DEV", "--format", "json"]
+        )
+
+        data = json.loads(result.stdout)  # stdout is only the JSON; notes go to stderr
+        assert (sorted(data)[:2], "contract rules" in result.stdout) == (["contract", "failed"], False), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_format_json_and_log_format_are_a_usage_error(self, tmp_path):
+        given = "contract run --format json --log-format github"
+        should = "exit 2: both would claim stdout"
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(
+            cli,
+            ["contract", "run", str(FIXTURES / "marvel.odcs.yaml"), str(tmp_path), "--env", "DEV", "--format", "json", "--log-format", "github"],
+        )
+
+        assert (result.exit_code, "--format json and --log-format" in result.output) == (2, True), f"{given}: {should}"

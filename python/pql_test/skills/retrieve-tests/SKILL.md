@@ -13,8 +13,9 @@ MODEL_PATH accepts three formats:
 
 Options:
 - `--test NAME` — Show only the named test suite.
-- `--human` — Output in human-readable formatted text instead of JSON.
-- `--verbose` — With `--human`: also show file paths and the resolved XMLA connection.
+- `--format json|text` — `json` (default) prints a JSON array; `text` prints a readable list. (The old `--human` flag still works as a deprecated alias.)
+- `-v, --verbose` — With `--format text`: also show file paths and the resolved XMLA connection.
+- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
@@ -30,12 +31,12 @@ Usage:
 pql-test retrieve-tests ../examples/SampleModel
 pql-test retrieve-tests local/SampleModel
 pql-test retrieve-tests "MyWorkspace.MyModel" --tenant-id ... --client-id ... --client-secret ...
-pql-test retrieve-tests ../examples/SampleModel.SemanticModel --human
-pql-test retrieve-tests ../examples --test "Calcs.DEV.Tests" --human --verbose
+pql-test retrieve-tests ../examples/SampleModel.SemanticModel --format text
+pql-test retrieve-tests ../examples --test "Calcs.DEV.Tests" --format text --verbose
 
 # Retrieve tests from RLS_Model (Row-Level Security)
 pql-test retrieve-tests ../examples/RLS_Model.SemanticModel \
-  --human \
+  --format text \
   --tenant-id $PQL_TENANT_ID \
   --workspace-id $PQL_WORKSPACE_ID \
   --dataset-id $PQL_DATASET_ID_RLS \
@@ -44,7 +45,7 @@ pql-test retrieve-tests ../examples/RLS_Model.SemanticModel \
 
 # Retrieve tests from OLS_Model (Object-Level Security)
 pql-test retrieve-tests ../examples/OLS_Model.SemanticModel \
-  --human --verbose \
+  --format text --verbose \
   --tenant-id $PQL_TENANT_ID \
   --workspace-id $PQL_WORKSPACE_ID \
   --dataset-id $PQL_DATASET_ID_OLS \
