@@ -84,7 +84,7 @@ class TestContractGroup:
         should = "offer the file-only commands plus run and doctor in one group"
         from pql_test.cli import cli
 
-        assert set(cli.commands["contract"].commands) == {"lint", "coverage", "generate", "trace", "run", "doctor"}, (
+        assert set(cli.commands["contract"].commands) == {"init", "lint", "coverage", "generate", "trace", "run", "doctor"}, (
             f"{given}: {should}"
         )
 

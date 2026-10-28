@@ -7,6 +7,7 @@ The commands come with pql-test (`pip install pql-test`). `lint`, `coverage`, `g
 ## Quick start
 
 ```bash
+pql-test contract init ./SalesModel -o orders.odcs.yaml                 # start the contract from the model
 pql-test contract doctor ./SalesModel                                   # which PQL.Assert? which --pql-assert?
 pql-test contract coverage orders.odcs.yaml                             # which rules can be enforced?
 pql-test contract lint orders.odcs.yaml ./SalesModel                    # contract valid, names resolve?
@@ -17,10 +18,22 @@ pql-test contract trace orders.odcs.yaml results.json                   # failur
 
 `pql-test contract run` never changes the PBIP project or the model: it builds the suites in memory and runs them as read-only queries. Writing suites into `DAXQueries/` (and so into git and Fabric Git integration) is always a separate act: `generate`, or `run --write`. `pql-test run-tests` runs the suites registered in the deployed model, so it sees generated suites only after the model is published.
 
+## Start a contract from the model
+
+```bash
+pql-test contract init ./SalesModel --output sales.odcs.yaml
+pql-test contract init local/SalesModel --table Sales --table Customer -o sales.odcs.yaml
+```
+
+`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure-only tables and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
+
+The starter states what the model already is, so `lint` and `run` pass on it as is. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`.
+
 ## Commands
 
 | Command | What it does |
 |---|---|
+| `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, and types (see [above](#start-a-contract-from-the-model)) |
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
 | `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
 | `lint CONTRACT [MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve and (with a MODEL_PATH) that every table and column exists in the model's TMDL |

@@ -1,6 +1,6 @@
 ---
 name: contract
-description: Turn an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 data contract into PQL.Assert DAX test suites for a PBIP semantic model, report which contract rules are enforced, run them, and trace failures back to contract rule ids.
+description: Write an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 data contract for a PBIP semantic model (starting from its TMDL), and turn it into PQL.Assert DAX test suites for a PBIP semantic model, report which contract rules are enforced, run them, and trace failures back to contract rule ids.
 version: 0.2.0
 ---
 
@@ -10,6 +10,7 @@ version: 0.2.0
 
 ```sudolang
 Interface Contract {
+  init MODEL_PATH [--output FILE]          // starter contract from the model's TMDL: tables, columns, types
   generate CONTRACT MODEL_PATH --env ENV   // writes <Prefix>.<Suite>.<ENV>.Tests.dax into MODEL_PATH/DAXQueries/
   coverage CONTRACT [--format text|json]   // every rule: mapped | approximated | skipped (+ reason)
   lint CONTRACT [MODEL_PATH]               // ODCS schema validation + every name resolves
@@ -50,6 +51,53 @@ Constraints {
   Never claim a rule is enforced when coverage reports it skipped; quote the reason instead
 }
 ```
+
+## Writing a contract
+
+Start from the model instead of a blank file. `init` reads the PBIP model's TMDL and writes a starter contract: one schema object per table, one property per column, and each column's `logicalType`. It only reads the model. The starter states what the model already is, so it lints clean and passes as is; the rules worth having are the ones you add on top.
+
+```
+pql-test contract init ./MyModel --output mymodel.odcs.yaml                        # every table
+pql-test contract init local/MyModel --table Sales --table Customer -o sales.odcs.yaml
+```
+
+`init` options: `--table NAME` (repeatable, any case), `--id ID` (default: the model name, lowercased with dashes), `--output FILE` / `-o` (default: stdout), and `--force` to overwrite the `--output` file. It leaves out measure-only tables and Power BI's automatic date tables. A column with no ODCS type (a calculated column, or `binary`) gets a `description` saying why instead of a `logicalType`.
+
+Then add the rules the data must meet, on the property or the schema object:
+
+```yaml
+apiVersion: v3.1.0
+kind: DataContract
+id: sales
+version: 1.0.0
+status: draft
+schema:
+  - name: Sales                      # the model table (or set customProperties pbiTable)
+    physicalType: table
+    properties:
+      - name: OrderID
+        logicalType: integer         # checked against the column's model type
+        required: true               # no nulls
+        primaryKey: true             # distinct, no nulls
+      - name: Amount
+        logicalType: number          # Number or Currency; pin one with pbiDataType
+        quality:
+          - metric: nullValues
+            mustBeLessOrEqualTo: 5
+            unit: percent            # --pql-assert 0.8
+    quality:
+      - metric: rowCount
+        mustBeGreaterThan: 0
+```
+
+Rules pql-test maps are listed below; any other rule is reported as skipped with its reason, never enforced. Use `customProperties` `pbiTable` / `pbiColumn` only when the ODCS name differs from the model name, and `pbiDataType` to pin an exact model type.
+
+Work in this loop, and fix each step before the next:
+1. `pql-test contract init MODEL --output c.odcs.yaml`
+2. edit the rules
+3. `pql-test contract lint c.odcs.yaml MODEL` — valid ODCS, names and types match the model
+4. `pql-test contract coverage c.odcs.yaml --pql-assert 0.8` — what is enforced, approximated, or skipped
+5. `pql-test contract run c.odcs.yaml MODEL --env DEV` — run it against the model (writes no files)
 
 ## What the default `--pql-assert 0.7` maps
 

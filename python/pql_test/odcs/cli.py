@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The file-only commands of ``pql-test contract``: generate, coverage, lint, trace.
+"""The file-only commands of ``pql-test contract``: init, generate, coverage, lint, trace.
 
 ``run`` and ``doctor`` connect to a model, so they live in ``pql_test.contract_run`` and are
 added to this group by ``pql_test.cli``. Exit codes: 0 success; 1 contract invalid, lint
@@ -134,6 +134,44 @@ def generate_cmd(
         err=True,
     )
     _fail_if_skipped(report, fail_on_skipped)
+
+
+@contract.command("init")
+@click.argument("model_path", metavar="MODEL_PATH")
+@click.option("--table", "tables", multiple=True, metavar="NAME", help="Describe only this table (repeatable).")
+@click.option("--id", "contract_id", help="Contract id (default: the model name, lowercased with dashes).")
+@click.option("--output", "-o", type=click.Path(dir_okay=False), help="Write the contract to FILE instead of stdout.")
+@click.option("--force", is_flag=True, help="With --output: overwrite an existing file.")
+def init_cmd(model_path, tables, contract_id, output, force):
+    """Start an ODCS contract from MODEL_PATH: its tables, columns, and types, read from the TMDL.
+
+    The starter passes against the model as is; add the quality rules the data must meet.
+    It only reads the model, and prints to stdout unless --output is given.
+
+    \b
+    Examples:
+      pql-test contract init ./MyModel > mymodel.odcs.yaml
+      pql-test contract init local/MyModel --table Sales --table Customer -o sales.odcs.yaml
+    """
+    from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+    from pql_test.odcs.scaffold import InitError, render_starter, starter_contract
+
+    if force and not output:
+        raise click.UsageError("--force goes with --output.")
+    try:
+        semantic_model_dir = require_semantic_model_dir(model_path)
+        text = render_starter(starter_contract(semantic_model_dir, tables, contract_id), semantic_model_dir.name)
+    except (ModelPathError, InitError) as exc:
+        raise click.UsageError(str(exc)) from None
+    if not output:
+        click.echo(text, nl=False)
+        return
+    path = Path(output)
+    if path.exists() and not force:
+        raise click.UsageError(f"{path} exists; pass --force to overwrite it.")
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    click.echo(f"wrote   {path}", err=True)
 
 
 @contract.command("coverage")

@@ -48,6 +48,9 @@ jobs:
           F=python/tests/odcs/fixtures
           M=examples/SampleModel.SemanticModel
           pql-test contract lint $F/marvel.odcs.yaml $M
+          # init starts a contract from the TMDL; the starter lints clean against the same model.
+          pql-test contract init $M --output /tmp/starter.odcs.yaml
+          pql-test contract lint /tmp/starter.odcs.yaml $M
           pql-test contract lint $F/marvel.odcs.yaml local/SampleModel
           pql-test contract coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
           python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"

@@ -1333,6 +1333,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 | Command | What it does |
 |---|---|
 | `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
+| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
 | `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
@@ -1342,6 +1343,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 MODEL_PATH means the same in every contract command: a PBIP folder, its `.pbip` file, or `local/<name>`, the `<name>.SemanticModel` folder in this repository. With `local/<name>`, `run` and `doctor` connect only to that model open in Power BI Desktop, even when `PQL_*` service credentials are set.
 
 ```bash
+pql-test contract init local/SalesModel --output orders.odcs.yaml                    # start from the model
 pql-test contract coverage orders.odcs.yaml
 pql-test contract lint orders.odcs.yaml local/SalesModel
 pql-test contract run orders.odcs.yaml local/SalesModel --env DEV                    # the model open in Power BI Desktop
