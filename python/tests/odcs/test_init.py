@@ -200,3 +200,69 @@ def test_the_skill_template_is_a_valid_contract_that_maps_every_rule():
     statuses = {o.rule_id: o.status.value for o in plan_contract(template, pql_assert="0.8").outcomes}
 
     assert set(statuses.values()) == {"mapped"}, f"{given}: {should}\n{statuses}"
+
+
+class TestReviewEdgeCases:
+    def test_measure_table_with_a_hidden_placeholder_column_is_left_out(self, tmp_path):
+        given = "a table with measures and one hidden placeholder column (SampleModel's _Measures pattern)"
+        should = "be left out like a measure-only table"
+        model = _tmdl_model(
+            tmp_path,
+            {
+                "_Measures": "\tmeasure Total = 1\n\n\tcolumn 'Measure Group'\n\t\tisHidden\n",
+                "Sales": "\tcolumn Amount\n\t\tdataType: double\n\t\tisHidden\n",
+            },
+        )
+
+        assert [o["name"] for o in starter_contract(model)["schema"]] == ["Sales"], f"{given}: {should}"
+
+    def test_tables_come_in_case_insensitive_order(self, tmp_path):
+        given = "tables b, A, and _c"
+        should = "come in the same case-insensitive order on every OS"
+        model = _tmdl_model(tmp_path, {n: "\tcolumn x\n\t\tdataType: int64\n" for n in ("b", "A", "_c")})
+
+        assert [o["name"] for o in starter_contract(model)["schema"]] == ["_c", "A", "b"], f"{given}: {should}"
+
+    def test_yaml_special_and_unicode_names_round_trip(self, tmp_path):
+        given = "table and column names YAML or ODCS could mangle"
+        should = "come back from the YAML unchanged, in a valid contract"
+        names = ["yes", "null", "1", " lead", "a: #b", 'it"s', "Año ñ 日本"]
+        body = "".join(f"\tcolumn '{n}'\n\t\tdataType: string\n" for n in names)
+        model = _tmdl_model(tmp_path, {"T": body})
+
+        result = _init(model)
+
+        props = load_contract(yaml.safe_load(result.output)).data["schema"][0]["properties"]
+        assert [p["name"] for p in props] == names, f"{given}: {should}\n{result.output}"
+
+    def test_init_leaves_the_model_folder_unchanged(self, tmp_path):
+        given = "init --output outside a copy of SampleModel"
+        should = "leave every file in the model folder byte-identical"
+        import shutil
+
+        model = tmp_path / "SampleModel.SemanticModel"
+        shutil.copytree(EXAMPLES / "SampleModel.SemanticModel", model)
+        before = {p: p.read_bytes() for p in model.rglob("*") if p.is_file()}
+
+        _init(model, "--output", tmp_path / "c.odcs.yaml")
+
+        assert {p: p.read_bytes() for p in model.rglob("*") if p.is_file()} == before, f"{given}: {should}"
+
+    @pytest.mark.parametrize(
+        ("where", "message"),
+        [("inside", "inside SampleModel.SemanticModel"), ("missing", "Cannot write")],
+    )
+    def test_bad_output_paths_are_usage_errors(self, tmp_path, where, message):
+        given = f"init --output into a folder that is {where}"
+        should = "exit 2 with a clear message, writing nothing"
+        import shutil
+
+        model = tmp_path / "SampleModel.SemanticModel"
+        shutil.copytree(EXAMPLES / "SampleModel.SemanticModel", model)
+        out = model / "DAXQueries" / "c.odcs.yaml" if where == "inside" else tmp_path / "nowhere" / "c.odcs.yaml"
+
+        result = _init(model, "--output", out)
+
+        assert (result.exit_code, message in result.output, out.exists()) == (2, True, False), (
+            f"{given}: {should}\n{result.output}"
+        )

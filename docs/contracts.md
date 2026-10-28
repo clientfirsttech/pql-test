@@ -25,9 +25,9 @@ pql-test contract init ./SalesModel --output sales.odcs.yaml
 pql-test contract init local/SalesModel --table Sales --table Customer -o sales.odcs.yaml
 ```
 
-`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure-only tables and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
+`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
 
-The starter states what the model already is, so `lint` and `run` pass on it as is. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`.
+The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`.
 
 ## Commands
 

@@ -1,6 +1,6 @@
 ---
 name: contract
-description: Write an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 data contract for a PBIP semantic model (starting from its TMDL), and turn it into PQL.Assert DAX test suites for a PBIP semantic model, report which contract rules are enforced, run them, and trace failures back to contract rule ids.
+description: Write an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 data contract for a PBIP semantic model (starting from its TMDL), and turn it into PQL.Assert DAX test suites, report which contract rules are enforced, run them, and trace failures back to contract rule ids.
 version: 0.2.0
 ---
 
@@ -61,7 +61,7 @@ pql-test contract init ./MyModel --output mymodel.odcs.yaml                     
 pql-test contract init local/MyModel --table Sales --table Customer -o sales.odcs.yaml
 ```
 
-`init` options: `--table NAME` (repeatable, any case), `--id ID` (default: the model name, lowercased with dashes), `--output FILE` / `-o` (default: stdout), and `--force` to overwrite the `--output` file. It leaves out measure-only tables and Power BI's automatic date tables. A column with no ODCS type (a calculated column, or `binary`) gets a `description` saying why instead of a `logicalType`.
+`init` options: `--table NAME` (repeatable, any case), `--id ID` (default: the model name, lowercased with dashes), `--output FILE` / `-o` (default: stdout), and `--force` to overwrite the `--output` file. It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables. A column with no ODCS type (a calculated table or column, or `binary`) gets a `description` saying why instead of a `logicalType`.
 
 Then add the rules the data must meet, on the property or the schema object:
 

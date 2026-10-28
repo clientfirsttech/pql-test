@@ -113,29 +113,51 @@ def _tmdl_name(raw: str) -> str:
     return raw
 
 
-def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
-    """``table -> {column: TMDL dataType or None}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
-    columns: dict[str, dict[str, str | None]] = {}
-    for tmdl in sorted((semantic_model_dir / "definition" / "tables").glob("*.tmdl")):
+def _scan_tables(semantic_model_dir: Path) -> dict[str, dict]:
+    """``table -> {"columns": {column: TMDL dataType or None}, "hidden": {columns}, "measures": bool}``.
+
+    Tables come in case-insensitive file-name order, so the order is the same on every OS.
+    """
+    tables: dict[str, dict] = {}
+    files = sorted((semantic_model_dir / "definition" / "tables").glob("*.tmdl"), key=lambda p: p.name.lower())
+    for tmdl in files:
         table, column = None, None
         for line in tmdl.read_text(encoding="utf-8-sig").splitlines():
             if table is None:
                 match = _TABLE_RE.match(line)
                 if match:
-                    table = _tmdl_name(match.group(1))
-                    columns[table] = {}
+                    table = tables[_tmdl_name(match.group(1))] = {"columns": {}, "hidden": set(), "measures": False}
                 continue
             if line.startswith("\t") and not line.startswith("\t\t"):
                 # A table-level line: a new column, or a measure/partition/... that ends the current one.
                 match = _COLUMN_RE.match(line)
                 column = _tmdl_name(match.group(1)) if match else None
                 if column is not None:
-                    columns[table][column] = None
+                    table["columns"][column] = None
+                table["measures"] = table["measures"] or line.lstrip().startswith("measure ")
+                continue
+            if column is None:
                 continue
             data_type = _DATA_TYPE_RE.match(line)
-            if column is not None and data_type:
-                columns[table][column] = data_type.group(1)
-    return columns
+            if data_type:
+                table["columns"][column] = data_type.group(1)
+            elif line.strip() in ("isHidden", "isHidden: true"):
+                table["hidden"].add(column)
+    return tables
+
+
+def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
+    """``table -> {column: TMDL dataType or None}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
+    return {name: t["columns"] for name, t in _scan_tables(semantic_model_dir).items()}
+
+
+def measure_tables(semantic_model_dir: Path) -> set[str]:
+    """Tables that hold measures and only hidden columns, such as a ``_Measures`` table's placeholder column."""
+    return {
+        name
+        for name, t in _scan_tables(semantic_model_dir).items()
+        if t["measures"] and set(t["columns"]) <= t["hidden"]
+    }
 
 
 def model_names(semantic_model_dir: Path) -> dict[str, set[str]]:

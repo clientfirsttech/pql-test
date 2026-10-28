@@ -1,6 +1,12 @@
 # Contract Init and Authoring Skill Epic
 
-**Status**: 📋 PLANNED
+**Status**: ✅ COMPLETED (2026-10-28)
+
+**Changed during the work (2026-10-28):**
+- An untyped column gets an ODCS `description` saying why, not a YAML comment: it is valid ODCS and survives editing.
+- Measure tables are also left out when their only columns are hidden placeholders (SampleModel's `_Measures[Measure Group]`).
+- `--output` refuses a path inside the model folder, and reports a missing folder as a usage error.
+- Tables are read in case-insensitive file-name order, so the starter is the same on Windows and Linux.
 **Goal**: Make writing an ODCS contract for a semantic model easy: a command that starts one from the model, and skill guidance that lets an AI agent write the rest.
 
 ## Overview
@@ -21,7 +27,7 @@ The contract skill teaches an agent to lint, generate, run, and trace an existin
 **Requirements**:
 - Given a PBIP model (any MODEL_PATH form, including `local/<name>`), should emit a valid ODCS v3.1.0 contract with one schema object per table and one property per column, in TMDL order
 - Given a column's TMDL `dataType`, should set the `logicalType` the type check maps back to the same model type: `string`→`string`, `int64`→`integer`, `double`→`number`, `decimal`→`number` with `pbiDataType: Currency`, `boolean`→`boolean`, `dateTime`→`date`; a column with no TMDL type (calculated) or a type with no ODCS equivalent (`binary`) gets no `logicalType`, and a `description` says why
-- Given tables with no columns (measure tables) or Power BI's automatic date tables (`LocalDateTable_*`, `DateTableTemplate_*`), should leave them out; given `--table NAME` (repeatable), should include only those tables
+- Given measure tables (no columns, or only hidden placeholder columns) or Power BI's automatic date tables (`LocalDateTable_*`, `DateTableTemplate_*`), should leave them out; given `--table NAME` (repeatable), should include only those tables
 - Given `--output FILE`, should write it and refuse an existing file unless `--force`; otherwise should print to stdout
 - Given the starter for each example model, `lint CONTRACT MODEL` should pass and `coverage` should report no skipped rules
 

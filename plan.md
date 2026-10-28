@@ -44,7 +44,6 @@
   - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`).
 
 - **Contract commands: optional** — Contents:
-  - a pbip importer (TMDL → starter ODCS contract);
   - a Bitol RFC for a Power BI / Fabric semantic model `servers` type.
   - An upstream `datacontract export pql-assert` would need code under a license datacontract-cli accepts (MIT), so it is only possible as a separately licensed contribution.
 

@@ -167,10 +167,16 @@ def init_cmd(model_path, tables, contract_id, output, force):
         click.echo(text, nl=False)
         return
     path = Path(output)
-    if path.exists() and not force:
-        raise click.UsageError(f"{path} exists; pass --force to overwrite it.")
-    with path.open("w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
+    if semantic_model_dir.resolve() in path.resolve().parents:
+        # Only generate (and run --write) change the project; a contract file never goes into the model.
+        raise click.UsageError(f"{path} is inside {semantic_model_dir.name}; write the contract outside the model folder.")
+    try:
+        with path.open("w" if force else "x", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+    except FileExistsError:
+        raise click.UsageError(f"{path} exists; pass --force to overwrite it.") from None
+    except OSError as exc:
+        raise click.UsageError(f"Cannot write {path}: {exc.strerror or exc}.") from None
     click.echo(f"wrote   {path}", err=True)
 
 
