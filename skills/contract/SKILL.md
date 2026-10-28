@@ -56,7 +56,7 @@ Constraints {
 | Schema object present | `Tbl.ShouldExist` |
 | Properties present | `Tbl.ShouldHaveColumns` (one per table) |
 | `--closed-schema` | `Tbl.ShouldNotHaveExtraColumns` |
-| `logicalType` string / integer / number / boolean / date | `Tbl.ColumnDataTypeShouldBe` with Text / Integer / Number or Currency / True/False / Date (timestamp and time check Date, approximated) |
+| `logicalType` string / integer / number / boolean | `Tbl.ColumnDataTypeShouldBe` with Text / Integer / Number or Currency / True/False; date, timestamp, and time check Date (approximated) |
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` (approximated on string columns) |
 | `primaryKey`, `unique`, `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one shared check per column; approximated, because blanks skew it) |
 | `rowCount` (all comparators except `mustNotBeBetween`) | `Tbl.ShouldHaveRows` / `ShouldHaveRowCount` / `ShouldHaveMoreRowsThan` / comparisons on `COUNTROWS` |

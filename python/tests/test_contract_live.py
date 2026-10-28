@@ -178,6 +178,47 @@ def _committed_catalog(model: str) -> str:
     return "0.8" if version_key(next(iter(versions))) >= (0, 8) else "0.7"
 
 
+# SampleModel's DataTypes table has one column of each type (INFO.VIEW.COLUMNS, 2026-10-28).
+TYPES_CONTRACT = """apiVersion: v3.1.0
+kind: DataContract
+id: types
+version: 1.0.0
+status: active
+schema:
+  - name: DataTypes
+    properties:
+      - {name: Whole Number, logicalType: integer}
+      - {name: Decimal Number, logicalType: number}
+      - {name: Currency, logicalType: number}
+      - {name: Boolean, logicalType: boolean}
+      - {name: Date, logicalType: date}
+      - name: Text
+        logicalType: number
+        customProperties: [{property: pbiDataType, value: Text}]
+      - {name: text_as_number, logicalType: number, customProperties: [{property: pbiColumn, value: Text}]}
+"""
+
+
+def test_column_types_accept_either_number_type_and_name_a_mismatch(sample_model_copy, tmp_path):
+    given = "type rules for every DataTypes column, including number on Number and Currency columns"
+    should = "pass every type check except number on the Text column, which fails"
+    contract = tmp_path / "types.odcs.yaml"
+    contract.write_text(TYPES_CONTRACT, encoding="utf-8")
+
+    result, statuses = _run(str(contract), sample_model_copy, tmp_path / "types.json", "0.7")
+
+    types = {rid: s for rid, s in statuses.items() if rid.endswith(".type")}
+    assert types == {
+        "DataTypes.Whole Number.type": "passed",
+        "DataTypes.Decimal Number.type": "passed",
+        "DataTypes.Currency.type": "passed",
+        "DataTypes.Boolean.type": "passed",
+        "DataTypes.Date.type": "passed",
+        "DataTypes.Text.type": "passed",
+        "DataTypes.text_as_number.type": "failed",
+    }, f"{given}: {should}\n{result.output}"
+
+
 def test_good_contract_passes_every_mapped_rule(sample_model_copy, tmp_path):
     given = "the good-data SampleModel contract on the 0.7 catalog"
     should = "pass every mapped rule and exit 0"

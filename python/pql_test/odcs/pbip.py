@@ -14,7 +14,8 @@ NOT_PBIP = (
 # Folders never searched for a local/<name> model's PBIP folder.
 _SKIP_DIRS = {"node_modules", "__pycache__", "site-packages"}
 _TABLE_RE = re.compile(r"^table\s+(.+?)\s*$")
-_COLUMN_RE = re.compile(r"^\s+column\s+(.+?)\s*(?:=.*)?$")
+# A quoted name ('a = b', with '' for ') is matched whole, so an "=" inside it does not end the name.
+_COLUMN_RE = re.compile(r"^\s+column\s+('(?:[^']|'')*'|[^'=]+?)\s*(?:=.*)?$")
 _DATA_TYPE_RE = re.compile(r"^\t\tdataType:\s*(\S+)\s*$")
 
 

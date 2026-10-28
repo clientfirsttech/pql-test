@@ -25,7 +25,7 @@ def _type_rule(p: dict, pql_assert: str = "0.7"):
 class TestMapping:
     @pytest.mark.parametrize(
         ("logical", "types"),
-        [("string", ["Text"]), ("integer", ["Integer"]), ("boolean", ["True/False"]), ("date", ["Date"])],
+        [("string", ["Text"]), ("integer", ["Integer"]), ("boolean", ["True/False"])],
     )
     @pytest.mark.parametrize("pql_assert", ["0.7", "0.8"])
     def test_logical_types_map_to_one_model_type(self, logical, types, pql_assert):
@@ -53,10 +53,10 @@ class TestMapping:
             f"{given}: {should}"
         )
 
-    @pytest.mark.parametrize("logical", ["timestamp", "time"])
+    @pytest.mark.parametrize("logical", ["date", "timestamp", "time"])
     def test_date_time_types_are_approximated(self, logical):
         given = f"logicalType {logical}"
-        should = "check Date, approximated: the model has one date/time type"
+        should = "check Date, approximated: the model has one date/time type for all three"
 
         outcome = _type_rule(prop("c", logical))
 
@@ -180,11 +180,12 @@ class TestLint:
 
         result = self._lint(tmp_path, prop("Text", "integer"))
 
-        assert (result.exit_code, "is Text in the model" in result.output, "expects Integer" in result.output) == (
-            1,
-            True,
-            True,
-        ), f"{given}: {should}\n{result.output}"
+        assert (
+            result.exit_code,
+            "is Text in the model" in result.output,
+            "expects Integer" in result.output,
+            "pbiDataType" in result.output,
+        ) == (1, True, True, True), f"{given}: {should}\n{result.output}"
 
     def test_column_without_a_tmdl_type_is_not_a_type_problem(self, tmp_path):
         given = "DateDim[Month Year], a calculated column with no dataType line, declared as integer"
@@ -194,3 +195,119 @@ class TestLint:
 
         assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
 
+
+
+class TestReviewEdgeCases:
+    def test_pbi_data_type_alone_maps(self):
+        given = "a property with pbiDataType Binary and no logicalType"
+        should = "check exactly Binary"
+        p = {"name": "c", "customProperties": custom(pbiDataType="Binary")}
+
+        outcome = _type_rule(p)
+
+        assert (outcome.status, outcome.assertions[0].args) == (Status.MAPPED, {"types": ["Binary"]}), f"{given}: {should}"
+
+    @pytest.mark.parametrize(("alias", "expected"), [("int64", "Integer"), ("dateTime", "Date"), ("double", "Number")])
+    def test_pbi_data_type_accepts_tmdl_names(self, alias, expected):
+        given = f"pbiDataType {alias} (the TMDL name)"
+        should = f"check {expected}"
+
+        outcome = _type_rule(prop("c", "number", customProperties=custom(pbiDataType=alias)))
+
+        assert outcome.assertions[0].args == {"types": [expected]}, f"{given}: {should}"
+
+    def test_tmdl_decimal_is_not_an_alias(self):
+        given = "pbiDataType decimal (TMDL's name for Currency, which reads like Decimal Number)"
+        should = "be skipped as unknown rather than guessed"
+
+        assert _type_rule(prop("c", "number", customProperties=custom(pbiDataType="decimal"))).status == Status.SKIPPED, (
+            f"{given}: {should}"
+        )
+
+    def test_pbi_data_type_on_a_nested_property_is_reported(self):
+        given = "pbiDataType on an object property (no model column)"
+        should = "appear as a skipped type rule, not be dropped"
+        p = {"name": "addr", "logicalType": "object", "customProperties": custom(pbiDataType="Text")}
+        plan = plan_contract(contract_dict(schema=[schema_object("T", [p])]))
+
+        outcome = {o.rule_id: o for o in plan.outcomes}["T.addr.type"]
+
+        assert outcome.status == Status.SKIPPED, f"{given}: {should}"
+
+    def test_type_check_without_a_column_is_an_emit_error(self):
+        given = "a column type assertion whose target has no column"
+        should = "raise EmitError instead of rendering an empty name"
+        from pql_test.odcs.catalog import load_catalog
+        from pql_test.odcs.emit.dax import EmitError, render_call
+        from pql_test.odcs.ir import Assertion
+
+        bad = Assertion("r", SCHEMA_SUITE, "tbl.column_type", Target("T"), {"types": ["Text"]}, "d")
+
+        with pytest.raises(EmitError, match="needs a column target"):
+            render_call(bad, "t", load_catalog("pql_assert_0_7"))
+        assert bad.target.column is None, f"{given}: {should}"
+
+    def test_names_are_escaped_in_both_arguments(self):
+        given = 'table It\'s "T" and column Col "A" with a number type'
+        should = "double the quotes in the name arguments and inside the SWITCH"
+        p = prop('Col "A"', "number")
+        plan = plan_contract(contract_dict(name="M", schema=[schema_object('It\'s "T"', [p])]))
+
+        dax = render(plan, env="DEV", version="GOLDEN")[0].content
+
+        assert (
+            '"It\'s ""T""", "Col ""A""", SWITCH(' in dax,
+            '[Table] = "It\'s ""T""" && [Name] = "Col ""A"""' in dax,
+        ) == (True, True), f"{given}: {should}\n{dax}"
+
+
+class TestLintPbiDataType:
+    def test_unknown_pbi_data_type_is_a_lint_problem(self, tmp_path):
+        given = "pbiDataType int (not a model type), with no MODEL_PATH"
+        should = "exit 1: the type check would silently be skipped"
+        import yaml
+
+        p = prop("c", "number", customProperties=custom(pbiDataType="int"))
+        path = tmp_path / "c.odcs.yaml"
+        path.write_text(yaml.safe_dump(contract_dict(schema=[schema_object("T", [p])])), encoding="utf-8")
+
+        result = CliRunner().invoke(contract, ["lint", str(path)])
+
+        assert (result.exit_code, "T.c.type: pbiDataType 'int'" in result.output) == (1, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+
+class TestModelColumnsParsing:
+    def _model(self, tmp_path, text: str, newline: str = "\n") -> Path:
+        tables = tmp_path / "M.SemanticModel" / "definition" / "tables"
+        tables.mkdir(parents=True)
+        (tables / "T.tmdl").write_bytes(text.replace("\n", newline).encode("utf-8"))
+        return tmp_path / "M.SemanticModel"
+
+    TMDL = (
+        "table T\n"
+        "\tlineageTag: x\n"
+        "\n"
+        "\tmeasure 'Total' = SUM(T[a])\n"
+        "\t\tdataType: double\n"
+        "\n"
+        "\tcolumn 'a = b'\n"
+        "\t\tlineageTag: y\n"
+        "\t\tdataType: int64\n"
+        "\n"
+        "\tcolumn 'Bob''s' = 1 + 1\n"
+        "\t\tdataType: string\n"
+        "\n"
+        "\tpartition T = m\n"
+        "\t\tmode: import\n"
+    )
+
+    @pytest.mark.parametrize("newline", ["\n", "\r\n"])
+    def test_quoted_names_measures_and_partitions(self, tmp_path, newline):
+        given = f"a table with a measure, a quoted name with '=', an escaped quote, and a partition ({newline!r})"
+        should = "read each column's type, and ignore the measure's"
+
+        columns = model_columns(self._model(tmp_path, self.TMDL, newline))
+
+        assert columns == {"T": {"a = b": "int64", "Bob's": "string"}}, f"{given}: {should}"

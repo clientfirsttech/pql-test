@@ -18,7 +18,7 @@ TEXT, INTEGER, NUMBER, CURRENCY, DATE, BOOLEAN, BINARY = (
     "True/False",
     "Binary",
 )
-MODEL_TYPES = (TEXT, INTEGER, NUMBER, CURRENCY, DATE, BOOLEAN, BINARY)
+MODEL_TYPES = (TEXT, INTEGER, NUMBER, CURRENCY, DATE, BOOLEAN, BINARY)  # Binary: assumed, not yet observed
 
 # TMDL `dataType:` value -> model type name.
 TMDL_TYPES = {
@@ -31,7 +31,7 @@ TMDL_TYPES = {
     "binary": BINARY,
 }
 
-ONE_DATE_TYPE = "the model has one date/time type (Date), so a date-only column also passes"
+ONE_DATE_TYPE = "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
 
 # ODCS logicalType -> (model types that satisfy it, approximation reason or None).
 LOGICAL_TYPES: dict[str, tuple[tuple[str, ...], str | None]] = {
@@ -39,16 +39,21 @@ LOGICAL_TYPES: dict[str, tuple[tuple[str, ...], str | None]] = {
     "integer": ((INTEGER,), None),
     "number": ((NUMBER, CURRENCY), None),  # decimal or fixed decimal; pin one with pbiDataType
     "boolean": ((BOOLEAN,), None),
-    "date": ((DATE,), None),
+    "date": ((DATE,), ONE_DATE_TYPE),
     "timestamp": ((DATE,), ONE_DATE_TYPE),
     "time": ((DATE,), ONE_DATE_TYPE),
 }
 
 
 def model_type(name: object) -> str | None:
-    """The canonical model type name for *name* (any case), or None when it is not one."""
+    """The canonical model type name for *name* (any case, or its TMDL name), or None when it is not one.
+
+    TMDL ``decimal`` is not accepted as an alias: it reads like "Decimal Number" (``double``,
+    model ``Number``) but is ``Currency``.
+    """
     wanted = str(name).strip().lower()
-    return next((t for t in MODEL_TYPES if t.lower() == wanted), None)
+    alias = TMDL_TYPES.get(wanted) if wanted != "decimal" else None
+    return next((t for t in MODEL_TYPES if t.lower() == wanted), alias)
 
 
 def tmdl_model_type(tmdl_data_type: str) -> str | None:

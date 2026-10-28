@@ -112,12 +112,11 @@ Each property's `logicalType` becomes a `Tbl.ColumnDataTypeShouldBe` check in th
 |---|---|---|
 | `string` | `Text` (`string`) | mapped |
 | `integer` | `Integer` (`int64`) | mapped |
-| `number` | `Number` (`double`) or `Currency` (`decimal`) | mapped |
+| `number` | `Number` (`double`) or `Currency` (`decimal`); an `Integer` (`int64`) column fails, so use `integer` or `pbiDataType` for whole numbers | mapped |
 | `boolean` | `True/False` (`boolean`) | mapped |
-| `date` | `Date` (`dateTime`) | mapped |
-| `timestamp`, `time` | `Date` (`dateTime`) | **approximated**: the model has one date/time type, so a date-only column also passes |
+| `date`, `timestamp`, `time` | `Date` (`dateTime`) | **approximated**: the model has one date/time type, so the check cannot tell a date column from a date/time one |
 
-To check one exact model type, add a `pbiDataType` custom property to the property. Its value is one of `Text`, `Integer`, `Number`, `Currency`, `Date`, `True/False`, or `Binary`, in any case:
+To check one exact model type, add a `pbiDataType` custom property to the property. Its value is one of `Text`, `Integer`, `Number`, `Currency`, `Date`, `True/False`, or `Binary`, in any case. The TMDL names (`string`, `int64`, `double`, `dateTime`, `boolean`, `binary`) work too, except `decimal`, which reads like Decimal Number but is `Currency`. `Binary` is the documented name but has not been seen in a model yet. `lint` reports a value that is not a model type, because the check would otherwise be skipped:
 
 ```yaml
       - name: amount
@@ -138,7 +137,7 @@ A `number` check accepts either type and still reports both when it fails, for e
 | Schema object present | `Tbl.ShouldExist` | mapped |
 | Properties present | `Tbl.ShouldHaveColumns` (one call per table) | mapped |
 | Closed schema (`--closed-schema`) | `Tbl.ShouldNotHaveExtraColumns` | mapped |
-| `logicalType` (or `pbiDataType`) | `Tbl.ColumnDataTypeShouldBe` (see [Column types](#column-types)) | mapped; **approximated** for `timestamp` and `time` |
+| `logicalType` (or `pbiDataType`) | `Tbl.ColumnDataTypeShouldBe` (see [Column types](#column-types)) | mapped; **approximated** for `date`, `timestamp`, and `time` |
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` | mapped; **approximated** on `string` columns (DAX treats empty strings as BLANK, so they count as nulls) |
 | `primaryKey`, `unique`, property `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one call per column, shared by every rule that asks for it) | **approximated**: it compares `DISTINCTCOUNT` (counts BLANK) with `COUNTA` (ignores blanks). A blank fails an otherwise distinct column, and one blank plus one duplicate still passes. See [PQL.Assert gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md) C4. |
 | `rowCount mustBeGreaterThan 0` | `Tbl.ShouldHaveRows` | mapped |

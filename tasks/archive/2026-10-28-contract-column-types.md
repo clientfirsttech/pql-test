@@ -1,6 +1,15 @@
 # Contract Column Type Checks Epic
 
-**Status**: 📋 PLANNED
+**Status**: ✅ COMPLETED (2026-10-28)
+
+**Changed during the work (2026-10-28):**
+- `date` is approximated like `timestamp` and `time`: the model has one date/time type, so a date check also passes a column that holds times.
+- `pbiDataType` also accepts the TMDL names, except `decimal` (it is Currency, but reads like Decimal Number).
+- `lint` reports a `pbiDataType` that is not a model type, because the type check would otherwise be skipped silently.
+- `pbiDataType` on an object or array property is reported as a skipped type rule, not dropped.
+- A quoted TMDL column name containing `=` is read whole (it was cut at the `=`).
+- A live test checks `number` on SampleModel's Number and Currency columns, and that a mismatch fails.
+
 **Goal**: Enforce an ODCS property's type (`logicalType`) against the semantic model, instead of reporting every type rule as skipped.
 
 ## Overview
@@ -30,9 +39,9 @@ The model's names were read from the deployed SampleModel on 2026-10-28, and mat
 ## Map logicalType to a model type check
 
 **Requirements**:
-- Given `logicalType` `string`, `integer`, `boolean`, or `date`, should map to `Tbl.ColumnDataTypeShouldBe` with `Text`, `Integer`, `True/False`, or `Date`, in the Schema suite, on both the 0.7 and 0.8 catalogs
+- Given `logicalType` `string`, `integer`, or `boolean`, should map to `Tbl.ColumnDataTypeShouldBe` with `Text`, `Integer`, or `True/False`, in the Schema suite, on both the 0.7 and 0.8 catalogs
 - Given `logicalType` `number`, should map to one check that passes for `Number` or `Currency`, and whose failure still names the expected and actual type
-- Given `logicalType` `timestamp` or `time`, should map to `Date` and be reported as approximated, because the model has one date/time type
+- Given `logicalType` `date`, `timestamp`, or `time`, should map to `Date` and be reported as approximated, because the model has one date/time type
 - Given a `pbiDataType` custom property, should check exactly that model type; given a value that is not a model type name, should skip the rule and list the valid names
 - Given only a `physicalType`, or a `logicalType` with no model type, should stay skipped with a reason that says how to make it checkable
 

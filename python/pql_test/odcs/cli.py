@@ -160,6 +160,7 @@ def lint_cmd(contract_path, model_path):
     from pql_test.odcs.datatypes import tmdl_model_type
     from pql_test.odcs.loader import ContractError
     from pql_test.odcs.mapping.context import is_column
+    from pql_test.odcs.naming import DATA_TYPE_KEY
     from pql_test.odcs.pbip import (
         ModelPathError,
         model_columns,
@@ -173,6 +174,11 @@ def lint_cmd(contract_path, model_path):
         plan, problems = None, exc.problems or [str(exc)]
     if plan is not None:
         problems.extend(plan.names.problems())
+        problems.extend(
+            f"{o.rule_id}: {o.reason}"
+            for o in plan.outcomes
+            if o.rule_id.endswith(".type") and (o.reason or "").startswith(DATA_TYPE_KEY)
+        )
         if model_path:
             try:
                 model = model_columns(require_semantic_model_dir(model_path))

@@ -117,11 +117,14 @@ def _primary_key(ctx: MapContext, obj: Mapping, scope: str, target: Target, comp
 
 def nested_rules(prop: Mapping, scope: str) -> list[RuleOutcome]:
     """Report attribute rules on a non-column property as skipped (never drop them)."""
-    return [
+    out = [
         skipped(f"{scope}.{key}", NO_COLUMN, f"{scope} {key}")
         for key in ("required", "primaryKey", "unique")
         if prop.get(key) is True
     ]
+    if custom_property(prop, DATA_TYPE_KEY) is not None:
+        out.append(skipped(f"{scope}.type", NO_COLUMN, f"{scope} is {custom_property(prop, DATA_TYPE_KEY)}"))
+    return out
 
 
 # logicalTypeOptions key groups -> where they land (reported as skipped until then).
@@ -145,7 +148,8 @@ def type_rule(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> RuleO
     rule_id = f"{scope}.type"
     reason = None
     if pinned is not None:
-        types = (model_type(pinned),) if model_type(pinned) else ()
+        pinned_type = model_type(pinned)
+        types = (pinned_type,) if pinned_type else ()
         if not types:
             return skipped(
                 rule_id,

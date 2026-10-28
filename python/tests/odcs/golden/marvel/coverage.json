@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 17,
-    "mapped": 16,
-    "approximated": 1,
+    "mapped": 15,
+    "approximated": 2,
     "skipped": 0
   },
   "rules": [
@@ -174,14 +174,14 @@
     },
     {
       "ruleId": "DateDim.Date.type",
-      "status": "mapped",
+      "status": "approximated",
       "description": "DateDim.Date is date (Date in the model)",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
       ],
       "severity": "error",
-      "reason": null
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
       "ruleId": "DateDim.Year.type",
