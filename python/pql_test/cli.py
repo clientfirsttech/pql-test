@@ -172,6 +172,22 @@ def _check_prereqs() -> list[dict]:
             ),
         }
     )
+    # Optional: never fails the check. Read from package metadata so pql-odcs is not imported.
+    try:
+        odcs_version = _pkg_version("pql-odcs")
+    except PackageNotFoundError:
+        odcs_version = None
+    results.append(
+        {
+            "name": "pql-odcs (optional, `pql-test contract` commands)",
+            "ok": True,
+            "detail": (
+                f"pql-odcs {odcs_version} available — run `pql-test contract doctor` to check a model"
+                if odcs_version
+                else "Not installed — pip install pql-test[contracts]  (optional, for ODCS data contracts)"
+            ),
+        }
+    )
     return results
 
 

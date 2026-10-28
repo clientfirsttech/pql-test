@@ -112,21 +112,37 @@ def print_trace(report) -> None:
     )
 
 
-def detect_pql_assert(conn) -> str:
-    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``.
+def deployed_library_version(conn) -> str | None:
+    """The connected model's ``PQL.Assert.LibraryVersion()``, or ``None`` when that call fails.
 
-    ``PQL.Assert.LibraryVersion`` only exists from 0.8.0, so a query error (older library,
-    no library, unreachable model) means 0.7.
+    ``LibraryVersion`` only exists from 0.8.0, so ``None`` means 0.7.x or older, no library,
+    or an unreachable model.
     """
     if conn is None:
-        return "0.7"
+        return None
     try:
         rows = _execute_dax_query(conn, "EVALUATE { PQL.Assert.LibraryVersion() }")
-        version = str(next(iter(rows[0].values())))
-        major, minor = (int(part) for part in version.split(".")[:2])
-    except Exception:  # noqa: BLE001 - any failure means "not 0.8"
+        return str(next(iter(rows[0].values())))
+    except Exception:  # noqa: BLE001 - any failure means "no LibraryVersion()"
+        return None
+
+
+def detect_pql_assert(conn) -> str:
+    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``."""
+    try:
+        major, minor = (int(part) for part in (deployed_library_version(conn) or "").split(".")[:2])
+    except ValueError:
         return "0.7"
     return "0.8" if (major, minor) >= (0, 8) else "0.7"
+
+
+def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path):
+    """``(absolute model path, connection or None)``, resolved like `run-tests` (dataset name from the folder)."""
+    opts = hooks.make_conn_opts(*credentials)
+    if not opts.dataset_id and not opts.dataset_name:
+        opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
+    abs_path = str(Path(model_path).resolve())
+    return abs_path, resolve_xmla_connection(abs_path, opts)
 
 
 def make_run_command(hooks: RunHooks) -> click.Command:
@@ -199,11 +215,8 @@ def make_run_command(hooks: RunHooks) -> click.Command:
             raise click.UsageError(str(exc)) from None
 
         # The connection comes first: `--pql-assert auto` asks the model which PQL.Assert it has.
-        opts = hooks.make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
-        if not opts.dataset_id and not opts.dataset_name:
-            opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
-        abs_path = str(Path(model_path).resolve())
-        conn = resolve_xmla_connection(abs_path, opts)
+        credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
+        abs_path, conn = _connect(model_path, hooks, credentials, semantic_model_dir)
         pre_warnings: list[str] = []
         if conn:
             click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
@@ -257,8 +270,103 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     return run
 
 
-def extend_contract_group(base: click.Group, run: click.Command) -> click.Group:
-    """A copy of pql-odcs's `contract` group with `run` added (the original stays untouched)."""
+# doctor status -> (cli_format status color key, label pql-test prints)
+_DOCTOR_STATUS = {"ok": ("PASS", "PASS"), "warn": ("SKIP", "WARN"), "fail": ("FAIL", "FAIL")}
+
+
+def live_doctor_checks(conn, recommended: str | None) -> list:
+    """Checks against the deployed model: the connection, its PQL.Assert, and drift from the model folder."""
+    from pql_odcs.doctor import FAIL, OK, WARN, Check
+
+    if conn is None:
+        return [
+            Check(
+                "XMLA connection",
+                WARN,
+                "none, so the deployed model was not checked. Open the model in Power BI Desktop, or supply "
+                "--tenant-id, --workspace-id, --dataset-id (and --client-id, --client-secret).",
+            )
+        ]
+    try:
+        _execute_dax_query(conn, "EVALUATE { 1 }")
+    except Exception as exc:  # noqa: BLE001 - report any failure as the check's detail
+        return [Check("XMLA connection", FAIL, f"{conn.server} / catalog: {conn.catalog}, but a test query failed: {exc}")]
+    version = deployed_library_version(conn)
+    checks = [
+        Check("XMLA connection", OK, f"{conn.server} / catalog: {conn.catalog}"),
+        Check("Deployed PQL.Assert", OK, version or "0.7.x or older (no PQL.Assert.LibraryVersion())"),
+    ]
+    deployed = detect_pql_assert(conn)
+    if recommended is None:
+        return checks
+    if deployed == recommended:
+        checks.append(Check("Deployed vs. model folder", OK, f"both support --pql-assert {deployed}"))
+    else:
+        checks.append(
+            Check(
+                "Deployed vs. model folder",
+                WARN,
+                f"the model folder supports --pql-assert {recommended} but the deployed model supports {deployed}. "
+                f"Publish the model, or generate with --pql-assert {deployed}; `contract run` follows the "
+                "deployed model.",
+            )
+        )
+    return checks
+
+
+def print_doctor(report) -> None:
+    """The doctor report in pql-test's CLI style."""
+    click.echo(banner("contract doctor"))
+    for check in report.checks:
+        color, label = _DOCTOR_STATUS[check.status]
+        click.echo(f"  {click.style(label.ljust(5), fg=STATUS_COLORS[color])}{check.name}: {check.detail}")
+    failed = sum(c.status == "fail" for c in report.checks)
+    click.echo(banner(f"{failed} check(s) failed" if failed else "all checks passed"))
+    if report.recommended:
+        click.echo(f"Use --pql-assert {report.recommended} with generate, coverage, and trace for this model.")
+
+
+def make_doctor_command(hooks: RunHooks) -> click.Command:
+    """`contract doctor`: pql-odcs's offline checks plus live checks against the deployed model."""
+
+    @click.command("doctor")
+    @click.argument("model_path", metavar="[MODEL_PATH]", required=False)
+    @click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+    @hooks.conn_options
+    def doctor(
+        model_path: str | None,
+        fmt: str,
+        tenant_id: str | None,
+        workspace_id: str | None,
+        dataset_id: str | None,
+        client_id: str | None,
+        client_secret: str | None,
+    ) -> None:
+        """Check the environment and, given a PBIP MODEL_PATH, its PQL.Assert library and deployed model.
+
+        Recommends the --pql-assert value the model folder supports, and warns when the
+        deployed model supports a different one. Exits 1 when a check fails.
+        """
+        from pql_odcs.doctor import run_doctor
+        from pql_odcs.pbip import require_semantic_model_dir
+
+        report = run_doctor(model_path)
+        if model_path and report.ok:
+            credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
+            _, conn = _connect(model_path, hooks, credentials, require_semantic_model_dir(model_path))
+            report.checks.extend(live_doctor_checks(conn, report.recommended))
+        if fmt == "json":
+            click.echo(json.dumps(report.to_json(), indent=2))
+        else:
+            print_doctor(report)
+        if not report.ok:
+            sys.exit(1)
+
+    return doctor
+
+
+def extend_contract_group(base: click.Group, *commands: click.Command) -> click.Group:
+    """A copy of pql-odcs's `contract` group with *commands* added or replaced (the original stays untouched)."""
     group = click.Group(
         name=base.name,
         commands=dict(base.commands),
@@ -268,14 +376,16 @@ def extend_contract_group(base: click.Group, run: click.Command) -> click.Group:
         context_settings=base.context_settings,
         no_args_is_help=base.no_args_is_help,
     )
-    group.add_command(run)
+    for command in commands:
+        group.add_command(command)
     return group
 
 
 def attach_contract_run(cli: click.Group, hooks: RunHooks) -> bool:
-    """Replace the plugin `contract` group with one that also has `run`, when pql-odcs provides it."""
+    """Replace the plugin `contract` group with one that has `run` and a live `doctor`, when pql-odcs provides it."""
     base = cli.commands.get("contract")
     if not isinstance(base, click.Group) or not (base.callback and base.callback.__module__.startswith("pql_odcs")):
         return False
-    cli.add_command(extend_contract_group(base, make_run_command(hooks)), "contract")
+    run, doctor = make_run_command(hooks), make_doctor_command(hooks)
+    cli.add_command(extend_contract_group(base, run, doctor), "contract")
     return True

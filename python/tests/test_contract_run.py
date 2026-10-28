@@ -76,12 +76,16 @@ class TestDetectPqlAssert:
 class TestExtendContractGroup:
     def test_adds_run_without_mutating_the_plugin_group(self):
         given = "pql-odcs's contract group"
-        should = "get a copy with `run` added and leave the original (used by `pql-odcs`) unchanged"
+        should = "get a copy with `run` added and `doctor` replaced, leaving the original (used by `pql-odcs`) unchanged"
         from pql_odcs.cli import contract
 
-        extended = extend_contract_group(contract, click.Command("run"))
+        extended = extend_contract_group(contract, click.Command("run"), click.Command("doctor"))
 
-        assert ("run" in extended.commands, "run" in contract.commands) == (True, False), f"{given}: {should}"
+        assert (
+            "run" in extended.commands,
+            "run" in contract.commands,
+            extended.commands["doctor"] is not contract.commands["doctor"],
+        ) == (True, False, True), f"{given}: {should}"
 
 
 class TestContractRunCommand:
@@ -193,3 +197,112 @@ class TestTraceAnnotations:
         print_trace_annotations(self._report(), "azuredevops")
 
         assert capsys.readouterr().out.startswith("##vso[task.logissue type=error]ODCS rule "), f"{given}: {should}"
+
+
+class TestContractDoctor:
+    @staticmethod
+    def _doctor(monkeypatch, conn, reported, *args):
+        """Run `pql-test contract doctor` on examples/SampleModel (PQL.Assert 0.8.0) with a stubbed connection."""
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: conn)
+
+        def query(_conn, dax):
+            if reported == "broken":
+                raise RuntimeError("token expired")
+            if "LibraryVersion" not in dax:
+                return [{"[Value]": 1}]
+            if reported is None:
+                raise RuntimeError("function not found")
+            return [{"[Value]": reported}]
+
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", query)
+        from pql_test.cli import cli
+
+        model = REPO_ROOT / "examples" / "SampleModel.SemanticModel"
+        return CliRunner().invoke(cli, ["contract", "doctor", str(model), "--format", "json", *args])
+
+    def test_deployed_model_behind_the_folder_is_flagged(self, monkeypatch):
+        given = "a model folder on PQL.Assert 0.8.0 whose deployed model has no LibraryVersion()"
+        should = "add the live checks and warn that the deployed model is behind the folder"
+        from types import SimpleNamespace
+
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), None)
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (
+            result.exit_code,
+            checks["XMLA connection"]["status"],
+            checks["Deployed PQL.Assert"]["detail"].startswith("0.7.x or older"),
+            checks["Deployed vs. model folder"]["status"],
+        ) == (0, "ok", True, "warn"), f"{given}: {should}\n{result.output}"
+
+    def test_matching_deployed_library(self, monkeypatch):
+        given = "a deployed model reporting PQL.Assert 0.8.0, like the folder"
+        should = "report the deployed version and no drift"
+        from types import SimpleNamespace
+
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "0.8.0")
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (checks["Deployed PQL.Assert"]["detail"], checks["Deployed vs. model folder"]["status"]) == (
+            "0.8.0",
+            "ok",
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_connection_that_cannot_query_fails(self, monkeypatch):
+        given = "a resolved connection whose queries fail (e.g. expired credentials)"
+        should = "fail the connection check with the error, not report an old PQL.Assert"
+        from types import SimpleNamespace
+
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "broken")
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (
+            result.exit_code,
+            checks["XMLA connection"]["status"],
+            "token expired" in checks["XMLA connection"]["detail"],
+            "Deployed PQL.Assert" in checks,
+        ) == (1, "fail", True, False), f"{given}: {should}\n{result.output}"
+
+    def test_no_connection_skips_the_live_checks(self, monkeypatch):
+        given = "no XMLA connection"
+        should = "warn once, skip the live checks, and still exit 0 on the offline result"
+
+        result = self._doctor(monkeypatch, None, None)
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (result.exit_code, checks["XMLA connection"]["status"], "Deployed PQL.Assert" in checks) == (
+            0,
+            "warn",
+            False,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_text_output_uses_pql_test_status_labels(self, monkeypatch):
+        given = "pql-test contract doctor in text format"
+        should = "print a banner and PASS / WARN status labels"
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "doctor", str(REPO_ROOT / "examples" / "SampleModel.SemanticModel")])
+
+        assert (result.exit_code, "contract doctor" in result.output, "PASS" in result.output, "WARN" in result.output) == (
+            0,
+            True,
+            True,
+            True,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_doctor_without_a_model_needs_no_connection(self, monkeypatch):
+        given = "pql-test contract doctor with no MODEL_PATH"
+        should = "run only the environment checks, never connecting"
+
+        def no_connection(*_a, **_k):
+            raise AssertionError("doctor without a model must not connect")
+
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", no_connection)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "doctor", "--format", "json"])
+
+        assert (result.exit_code, json.loads(result.output)["recommendedPqlAssert"]) == (0, None), (
+            f"{given}: {should}\n{result.output}"
+        )

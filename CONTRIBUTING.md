@@ -177,6 +177,7 @@ Prerequisites check:
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available
+  ✅ pql-odcs (optional, `pql-test contract` commands) — pql-odcs 0.1.0 available — run `pql-test contract doctor` to check a model
 
 All prerequisites met.
 ```

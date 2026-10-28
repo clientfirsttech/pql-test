@@ -27,6 +27,17 @@ _PQL_ASSERT = click.option(
     show_default=True,
     help="PQL.Assert version to target. 0.8 maps more rules exactly but needs a model with PQL.Assert 0.8.0+.",
 )
+_GENERATE_PQL_ASSERT = click.option(
+    "--pql-assert",
+    "pql_assert",
+    type=click.Choice(["0.7", "0.8", "auto"]),
+    default="0.7",
+    show_default=True,
+    help=(
+        "PQL.Assert version to target. 0.8 maps more rules exactly but needs a model with PQL.Assert 0.8.0+. "
+        "auto reads the model folder's functions.tmdl (see `doctor`)."
+    ),
+)
 _FAIL_ON_SKIPPED = click.option(
     "--fail-on-skipped", is_flag=True, help="Exit 1 when any contract rule is skipped (strict CI)."
 )
@@ -62,13 +73,34 @@ def contract() -> None:
     """Generate, check, and trace PQL.Assert tests from ODCS data contracts."""
 
 
+def _model_pql_assert(model_path: str) -> str:
+    """The catalog MODEL_PATH's PQL.Assert functions support, read offline from its TMDL."""
+    from pql_odcs.doctor import recommend_catalog
+    from pql_odcs.pbip import ModelPathError, require_semantic_model_dir
+    from pql_odcs.udf import model_functions
+
+    try:
+        choice, _ = recommend_catalog(model_functions(require_semantic_model_dir(model_path)))
+    except ModelPathError as exc:
+        raise click.UsageError(str(exc)) from None
+    if choice is None:
+        click.echo(
+            "--pql-assert auto: the model's functions.tmdl lacks functions every catalog calls (run `doctor`); "
+            "using 0.7.",
+            err=True,
+        )
+        return "0.7"
+    click.echo(f"--pql-assert auto: {choice} (read from the model's functions.tmdl).", err=True)
+    return choice
+
+
 @contract.command("generate")
 @_CONTRACT
 @click.argument("model_path", metavar="MODEL_PATH")
 @click.option("--env", "env", required=True, help="Environment token for suite names, e.g. DEV.")
 @click.option("--suite-prefix", help="Suite name prefix (default: from the contract's dataProduct, then name).")
 @_CLOSED
-@_PQL_ASSERT
+@_GENERATE_PQL_ASSERT
 @_FAIL_ON_SKIPPED
 @click.option("--dry-run", is_flag=True, help="Print the DAX to stdout instead of writing files.")
 @click.option("--force", is_flag=True, help="Overwrite suite files that pql-odcs did not generate.")
@@ -80,6 +112,8 @@ def generate_cmd(
     from pql_odcs.emit.dax import EmitError
     from pql_odcs.pbip import ModelPathError
 
+    if pql_assert == "auto":
+        pql_assert = _model_pql_assert(model_path)
     plan = _plan(contract_path, closed_schema, pql_assert)
     try:
         if dry_run:
@@ -189,6 +223,22 @@ def trace_cmd(contract_path, results_path, fmt, suite_prefix, closed_schema, pql
         click.echo(json.dumps(report.to_json(), indent=2))
     else:
         click.echo(format_text(report), nl=False)
+
+
+@contract.command("doctor")
+@click.argument("model_path", metavar="[MODEL_PATH]", required=False)
+@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", show_default=True)
+def doctor_cmd(model_path, fmt):
+    """Check the environment and, given a PBIP MODEL_PATH, its PQL.Assert library.
+
+    Recommends the --pql-assert value the model supports. Exits 1 when a check fails.
+    """
+    from pql_odcs.doctor import format_text, run_doctor
+
+    report = run_doctor(model_path)
+    click.echo(json.dumps(report.to_json(), indent=2) if fmt == "json" else format_text(report), nl=fmt == "json")
+    if not report.ok:
+        raise click.exceptions.Exit(1)
 
 
 def main() -> None:

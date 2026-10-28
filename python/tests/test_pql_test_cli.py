@@ -172,6 +172,31 @@ class TestCheckPrereqs:
         # Either ✅ or ❌ should appear for each item
         assert "\u2705" in stdout or "\u274c" in stdout
 
+    def test_reports_optional_pql_odcs(self):
+        given = "check-prereqs with pql-odcs installed (the dev environment)"
+        should = "list pql-odcs with its version and point to `pql-test contract doctor`"
+        stdout, _, _ = run_cli(["check-prereqs"])
+        assert ("pql-odcs" in stdout, "contract doctor" in stdout) == (True, True), f"{given}: {should}\n{stdout}"
+
+    def test_missing_pql_odcs_does_not_fail(self, monkeypatch):
+        given = "pql-odcs not installed"
+        should = "report it as optional and keep the check passing"
+        from importlib.metadata import PackageNotFoundError
+
+        import pql_test.cli as cli_module
+
+        real = cli_module._pkg_version
+
+        def version(name):
+            if name == "pql-odcs":
+                raise PackageNotFoundError(name)
+            return real(name)
+
+        monkeypatch.setattr(cli_module, "_pkg_version", version)
+
+        row = next(r for r in cli_module._check_prereqs() if r["name"].startswith("pql-odcs"))
+        assert (row["ok"], "pip install pql-test[contracts]" in row["detail"]) == (True, True), f"{given}: {should}"
+
     def test_outputs_psutil_check(self):
         """Mirrors Pester 'Module should exist': psutil prerequisite reported."""
         stdout, _, _ = run_cli(["check-prereqs"])
