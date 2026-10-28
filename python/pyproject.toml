@@ -43,11 +43,17 @@ dependencies = [
     "azure-identity>=1.19.0",
     "keyring>=25.0.0",
     "click>=8.1.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2; python_version >= '3.10'",  # PYSEC-2026-2270 (fix needs 3.10+)
+    "python-dotenv>=1.0.0; python_version < '3.10'",
     "psutil>=5.9.0",
     # Transitive via msal/azure-core -> requests; floor excludes the compromised
     # emSign ECC Root CA - G3 bundle (PYSEC-2026-4320).
     "certifi>=2026.10.19",
+    # Transitive via msal/azure-core; floors exclude published vulnerabilities
+    # (requests PYSEC-2026-2275; urllib3 PYSEC-2026-141/142/4175/4176/4177).
+    # The fixed releases need Python 3.10+, so Python 3.9 (end of life) keeps the old ones.
+    "requests>=2.33.0; python_version >= '3.10'",
+    "urllib3>=2.8.0; python_version >= '3.10'",
     # `pql-test contract ...`: ODCS contract loading and schema validation.
     "PyYAML>=6.0",
     "jsonschema>=4.18",
@@ -90,6 +96,11 @@ addopts = "-v"
 markers = [
     "live: marks tests that need a real Power BI / Fabric XMLA connection. They auto-skip when PQL_* credentials aren't available, so plain `pytest` is safe to run; configure `.env` to opt them in.",
 ]
+
+[tool.bandit]
+# Run by pre-commit and CI (security.yml) at medium severity and up. Mark a reviewed
+# false positive in the code with `# nosec <id>` and the reason, never a blanket skip.
+exclude_dirs = ["tests"]
 
 [tool.coverage.run]
 source = ["pql_test"]

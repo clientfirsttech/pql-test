@@ -1805,6 +1805,8 @@ dependencies = [
     { name = "python-dotenv", version = "1.2.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "python-dotenv", version = "1.2.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
     { name = "pyyaml" },
+    { name = "requests", version = "2.34.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
+    { name = "urllib3", version = "2.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 
 [package.optional-dependencies]
@@ -1835,9 +1837,12 @@ requires-dist = [
     { name = "pyadomd", marker = "sys_platform == 'win32'", specifier = ">=0.0.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-dotenv", marker = "python_full_version < '3.10'", specifier = ">=1.0.0" },
+    { name = "python-dotenv", marker = "python_full_version >= '3.10'", specifier = ">=1.2.2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", marker = "python_full_version >= '3.10'", specifier = ">=2.33.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0.0" },
+    { name = "urllib3", marker = "python_full_version >= '3.10'", specifier = ">=2.8.0" },
 ]
 provides-extras = ["dev"]
 

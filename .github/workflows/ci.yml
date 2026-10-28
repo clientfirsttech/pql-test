@@ -1,7 +1,13 @@
 # Master CI pipeline for the pql-test Copilot CLI plugin.
 #
-# Stages 1–2 run sequentially; stages 3a and 3b run in parallel once
-# stage 2 completes.  Any failed stage fails the pipeline.
+# Stage 0 runs alongside stage 1. Stages 1–2 run sequentially; stages 3a, 3b,
+# and 3c run in parallel once stage 2 completes.  Any failed stage fails the
+# pipeline.
+#
+#  Stage 0 – security
+#    gitleaks on the full history (pinned, checksum-verified), bandit on
+#    python/pql_test, pip-audit on the runtime dependencies, and the offline
+#    dead-link check of the documentation. No secrets.
 #
 #  Stage 1 – validate-plugin
 #    Static structural validation: plugin.json schema, skill directory layout,
@@ -67,6 +73,15 @@ on:
         default: 'Public'
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Stage 0: secrets, Python security flaws, vulnerable dependencies, dead links
+  # ---------------------------------------------------------------------------
+  security:
+    name: Stage 0 – Security
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+
   # ---------------------------------------------------------------------------
   # Stage 1: validate plugin structure
   # ---------------------------------------------------------------------------

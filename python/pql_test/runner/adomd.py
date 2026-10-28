@@ -145,6 +145,14 @@ def _adomd_auto_install_cache_dir() -> Optional[str]:
     )
 
 
+# SHA-512 of microsoft.analysisservices.adomdclient 19.114.0 (the nupkg), matching the
+# packageHash in NuGet's catalog entry (checked 2026-10-28). Bump it with the version.
+ADOMD_NUPKG_SHA512 = (
+    "4f564865082d7007b2590802e680a7ecd5e4991d758c6f589925a4a50b02e758"
+    "b3d3730ee0c8606419a297160e7312d37c79cfec8db90287caf0323e7c47a7fd"
+)
+
+
 def _auto_install_adomd_from_nuget() -> Optional[str]:
     """Download Microsoft.AnalysisServices.AdomdClient NuGet package.
 
@@ -189,16 +197,27 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         file=sys.stderr,
     )
 
+    import hashlib
     import tempfile
     import urllib.request
     import zipfile
 
     tmp_path: Optional[str] = None
     try:
+        # A fixed https URL; the package is verified against a pinned hash before use.
+        with urllib.request.urlopen(nupkg_url, timeout=120) as response:  # nosec B310
+            package = response.read()
+        digest = hashlib.sha512(package).hexdigest()
+        if digest != ADOMD_NUPKG_SHA512:
+            raise RuntimeError(
+                f"{pkg} {version} from nuget.org does not match its pinned SHA-512 "
+                f"(got {digest[:16]}…); refusing to load it"
+            )
         with tempfile.NamedTemporaryFile(suffix=".nupkg", delete=False) as f:
             tmp_path = f.name
-        urllib.request.urlretrieve(nupkg_url, tmp_path)
+            f.write(package)
         os.makedirs(cache_dir, exist_ok=True)
+        root = os.path.realpath(cache_dir)
         member_prefix = "lib/net472/"
         with zipfile.ZipFile(tmp_path) as z:
             for member in z.namelist():
@@ -211,7 +230,10 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
                 # messages.  Flattening would collide every culture's
                 # `*.resources.dll` to the same path.
                 rel = member[len(member_prefix):]
-                dest = os.path.join(cache_dir, *rel.split("/"))
+                dest = os.path.realpath(os.path.join(cache_dir, *rel.split("/")))
+                if os.path.commonpath([root, dest]) != root:
+                    # Zip slip: a member like lib/net472/../../x.dll would land outside the cache.
+                    raise RuntimeError(f"{pkg} contains a path outside its folder: {member}")
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with z.open(member) as src, open(dest, "wb") as out:
                     out.write(src.read())

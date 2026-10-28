@@ -46,7 +46,7 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 **Shared flags**:
 - `--closed-schema` also forbids columns the contract does not list.
 - `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
-- `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pql-assert-08).
+- `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08).
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `run`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
 - `--force` overwrites suite files that pql-test did not generate (`generate`, and `run --write`).

@@ -73,7 +73,8 @@ _NoTimestampLoader.yaml_implicit_resolvers = {
 
 def _read_yaml(path: Path) -> Any:
     try:
-        return yaml.load(path.read_text(encoding="utf-8"), Loader=_NoTimestampLoader)
+        # _NoTimestampLoader subclasses yaml.SafeLoader, so this is a safe load.
+        return yaml.load(path.read_text(encoding="utf-8"), Loader=_NoTimestampLoader)  # nosec B506
     except OSError as exc:
         raise ContractError(f"Cannot read contract {path}: {exc}") from exc
     except yaml.YAMLError as exc:

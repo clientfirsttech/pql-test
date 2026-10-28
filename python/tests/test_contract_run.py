@@ -531,7 +531,7 @@ class TestWithoutXmla:
 
         monkeypatch.setattr("sys.platform", "linux")
         monkeypatch.setattr(runner, "has_pyadomd", lambda: pytest.fail("loaded ADOMD.NET"), raising=False)
-        monkeypatch.setattr("urllib.request.urlretrieve", lambda *_a, **_k: pytest.fail("downloaded"))
+        monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: pytest.fail("downloaded"))
 
         assert (real_xmla_unavailable(), _auto_install_adomd_from_nuget()) == (self.REASON, None), f"{given}: {should}"
 

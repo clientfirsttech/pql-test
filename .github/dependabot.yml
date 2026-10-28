@@ -1,0 +1,13 @@
+# Keep dependencies and workflow actions current; security updates arrive as pull requests.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /python
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

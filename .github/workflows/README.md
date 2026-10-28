@@ -9,6 +9,7 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 - `promptfoo-eval.yml` — Evaluates Copilot CLI skills via GitHub Models
 - `run-tests-remote.yml` — Runs DAX tests against remote Power BI/Fabric workspace
 - `release.yml` — Publishes pql-test to PyPI on `vX.Y.Z` tags (Trusted Publishing is bound to this file name; do not rename)
+- `security.yml` — Stage 0: gitleaks on the full history, bandit, pip-audit, and the offline dead-link check
 - `pytest.yml` — The full pytest suite on Windows with ADOMD.NET (Stage 3a)
 - `linux.yml` — Stage 3c, pql-test on ubuntu without pyadomd (Python 3.9 and 3.13): the contract and platform tests, a smoke test of the file-based commands (`contract lint|coverage|generate|trace|doctor`, `retrieve-tests`), and a check that `run-tests`, `code-coverage`, and `contract run` stop with one Windows-only message
 

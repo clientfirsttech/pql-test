@@ -186,36 +186,50 @@ class TestAutoInstallAdomdFromNuget:
         monkeypatch.setattr(
             adomd_mod, "_adomd_auto_install_cache_dir", lambda: str(cache)
         )
-        # Guard: urlretrieve must NOT be called on the fast path.
-        with patch("urllib.request.urlretrieve") as retrieve:
+        # Guard: nothing is downloaded on the fast path.
+        with patch("urllib.request.urlopen") as urlopen:
             result = adomd_mod._auto_install_adomd_from_nuget()
         assert result == str(cache)
-        retrieve.assert_not_called()
+        urlopen.assert_not_called()
 
-    def test_downloads_and_extracts_nupkg(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("PQL_TEST_HERMETIC", raising=False)
-        monkeypatch.delenv("PQL_TEST_NO_AUTO_INSTALL_ADOMD", raising=False)
-        cache = tmp_path / "cache"
-        # Cache dir does not yet exist — installer creates it
-        monkeypatch.setattr(
-            adomd_mod, "_adomd_auto_install_cache_dir", lambda: str(cache)
-        )
-
-        # Build a tiny in-memory .nupkg (zip) containing lib/net472/x.dll
-        # and lib/net472/de/x.resources.dll (culture subdir).
+    @staticmethod
+    def _nupkg(*members: tuple[str, bytes]) -> bytes:
         buf = BytesIO()
         with zipfile.ZipFile(buf, "w") as z:
-            z.writestr("lib/net472/", "")
-            z.writestr("lib/net472/x.dll", b"\x00\x01")
-            z.writestr("lib/net472/de/x.resources.dll", b"\x02")
-            z.writestr("other/ignored.txt", b"skip")
-        buf.seek(0)
+            for name, data in members:
+                z.writestr(name, data)
+        return buf.getvalue()
 
-        def fake_urlretrieve(url, tmp_path_arg):
-            with open(tmp_path_arg, "wb") as fp:
-                fp.write(buf.getvalue())
+    @staticmethod
+    def _serve(monkeypatch, package: bytes, pinned: bool = True):
+        """Serve *package* from a fake nuget.org; pin its hash unless *pinned* is False."""
+        import hashlib
 
-        with patch("urllib.request.urlretrieve", side_effect=fake_urlretrieve):
+        response = MagicMock()
+        response.read.return_value = package
+        response.__enter__.return_value = response
+        if pinned:
+            monkeypatch.setattr(adomd_mod, "ADOMD_NUPKG_SHA512", hashlib.sha512(package).hexdigest())
+        monkeypatch.setattr(adomd_mod.sys, "platform", "win32")
+        return patch("urllib.request.urlopen", return_value=response)
+
+    def _install_env(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("PQL_TEST_HERMETIC", raising=False)
+        monkeypatch.delenv("PQL_TEST_NO_AUTO_INSTALL_ADOMD", raising=False)
+        cache = tmp_path / "cache"  # does not exist yet: the installer creates it
+        monkeypatch.setattr(adomd_mod, "_adomd_auto_install_cache_dir", lambda: str(cache))
+        return cache
+
+    def test_downloads_and_extracts_nupkg(self, tmp_path, monkeypatch):
+        cache = self._install_env(tmp_path, monkeypatch)
+        package = self._nupkg(
+            ("lib/net472/", b""),
+            ("lib/net472/x.dll", b"\x00\x01"),
+            ("lib/net472/de/x.resources.dll", b"\x02"),  # culture subdir is kept
+            ("other/ignored.txt", b"skip"),
+        )
+
+        with self._serve(monkeypatch, package):
             result = adomd_mod._auto_install_adomd_from_nuget()
 
         assert result == str(cache)
@@ -224,17 +238,34 @@ class TestAutoInstallAdomdFromNuget:
         # Members outside lib/net472/ are ignored
         assert not (cache / "ignored.txt").exists()
 
+    def test_refuses_a_package_whose_hash_does_not_match(self, tmp_path, monkeypatch, capsys):
+        # A tampered or substituted package must never be extracted or loaded.
+        cache = self._install_env(tmp_path, monkeypatch)
+        package = self._nupkg(("lib/net472/x.dll", b"evil"))
+
+        with self._serve(monkeypatch, package, pinned=False):
+            result = adomd_mod._auto_install_adomd_from_nuget()
+
+        assert result is None
+        assert not (cache / "x.dll").exists()
+        assert "does not match its pinned SHA-512" in capsys.readouterr().err
+
+    def test_refuses_members_outside_the_cache_folder(self, tmp_path, monkeypatch, capsys):
+        # Zip slip: lib/net472/../../outside.dll would be written outside the cache.
+        cache = self._install_env(tmp_path, monkeypatch)
+        package = self._nupkg(("lib/net472/../../outside.dll", b"evil"))
+
+        with self._serve(monkeypatch, package):
+            result = adomd_mod._auto_install_adomd_from_nuget()
+
+        assert result is None
+        assert not (tmp_path / "outside.dll").exists()
+        assert "outside its folder" in capsys.readouterr().err
+
     def test_returns_none_on_download_failure(self, tmp_path, monkeypatch, capsys):
-        monkeypatch.delenv("PQL_TEST_HERMETIC", raising=False)
-        monkeypatch.delenv("PQL_TEST_NO_AUTO_INSTALL_ADOMD", raising=False)
-        cache = tmp_path / "cache"
-        monkeypatch.setattr(
-            adomd_mod, "_adomd_auto_install_cache_dir", lambda: str(cache)
-        )
-        with patch(
-            "urllib.request.urlretrieve",
-            side_effect=RuntimeError("network unreachable"),
-        ):
+        self._install_env(tmp_path, monkeypatch)
+        monkeypatch.setattr(adomd_mod.sys, "platform", "win32")
+        with patch("urllib.request.urlopen", side_effect=RuntimeError("network unreachable")):
             result = adomd_mod._auto_install_adomd_from_nuget()
         assert result is None
         err = capsys.readouterr().err

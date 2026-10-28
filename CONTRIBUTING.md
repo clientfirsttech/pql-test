@@ -54,6 +54,40 @@ pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
 
 ---
 
+## Secrets and security checks
+
+This repository is public, so a committed secret is a leaked secret, even when a later commit removes it.
+
+- **Credentials live only in `.env` files** (`python/.env`, `python/tests/.env`), copied from `.env.example`. `.gitignore` covers `.env` files, certificates (`*.pem`, `*.p12`, `*.pfx`), and keys.
+- **Install the hooks once per clone:**
+
+  ```bash
+  pip install pre-commit      # or: uv tool install pre-commit
+  pre-commit install
+  pre-commit run --all-files  # optional: check everything now
+  ```
+
+  Before every commit, [`.pre-commit-config.yaml`](.pre-commit-config.yaml) runs:
+  - gitleaks on the staged changes;
+  - a private-key check;
+  - a large-file check;
+  - bandit on `python/pql_test` (medium severity and up).
+
+  Never bypass them with `--no-verify`.
+- **CI repeats them** in [`security.yml`](.github/workflows/security.yml) (Stage 0 of `ci.yml`), with gitleaks on the full history, pip-audit on the runtime dependencies, and the offline dead-link check.
+- **When gitleaks finds something:**
+  - **A real secret:** don't commit it. If it was already committed, treat it as leaked: rotate it first, then remove it from the change.
+  - **Not a secret** (for example a public client ID): allowlist that exact finding in [`.gitleaksignore`](.gitleaksignore) by its fingerprint, with a comment saying why.
+- **When bandit finds something:**
+  - fix it;
+  - or, for a reviewed false positive, add `# nosec <id>` on the flagged line, with the reason in a comment above it.
+  - Never skip a test for the whole project.
+- **Downloads that run code** are pinned and verified. For example, the ADOMD.NET auto-install checks the NuGet package against a pinned SHA-512, and the CI gitleaks binary is checked against its release checksum.
+- **Workflow inputs** reach shell scripts through `env:`, never as `${{ }}` inside `run:` text.
+- **Reporting a vulnerability:** see [SECURITY.md](SECURITY.md).
+
+---
+
 ## CLI Output Conventions
 
 Every `pql-test` command that prints a human-readable report to a terminal
@@ -140,7 +174,7 @@ fails when a command drifts.
 |---|---|---|
 | Python 3.9+ | Runs the CLI | `winget install Python.Python.3.12` (or [python.org](https://www.python.org/downloads/)) |
 | ADOMD.NET client DLL | `pyadomd` loads this at import time | See **ADOMD.NET install** below — required even if you have Power BI Desktop |
-| Power BI Desktop | Needed for the local-mode smoke test only | Microsoft Store or [powerbi.microsoft.com](https://powerbi.microsoft.com/desktop/) |
+| Power BI Desktop | Needed for the local-mode smoke test only | Microsoft Store or [powerbi.microsoft.com](https://www.microsoft.com/power-platform/products/power-bi/desktop) |
 | Service credentials | Needed for service-mode smoke test only | Service principal with `Dataset.Read.All` + Contributor on the workspace |
 
 ### ADOMD.NET install (required)

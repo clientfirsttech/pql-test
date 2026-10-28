@@ -13,6 +13,12 @@
 
 ## Open Items
 
+- **Before the repository goes public (2026-10-28).** See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
+  1. In the GitHub repository settings, turn on **secret scanning**, **push protection**, **private vulnerability reporting** (SECURITY.md points to it), and **Dependabot alerts**.
+  2. Each maintainer runs `pip install pre-commit && pre-commit install` once per clone (CONTRIBUTING, "Secrets and security checks").
+  3. Decide whether to raise `requires-python` to `>=3.10`. Python 3.9 is end of life, and the fixes for `requests`, `urllib3`, and `python-dotenv` need 3.10+, so 3.9 installs keep known-vulnerable versions. It changes the vision's "Python >= 3.9" constraint and the Linux CI matrix.
+  4. The old, expired client secret in `python/tests/.env` was never committed; delete or update that file.
+
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
   2. Open a PR from `dev-odcs` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.

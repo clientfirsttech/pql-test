@@ -209,18 +209,25 @@ jobs:
       - name: Run DAX tests for ${{ matrix.model }}
         id: run-tests
         shell: bash
+        # Inputs reach the script as environment variables, never as ${{ }} in the
+        # script text, so a crafted value cannot inject shell commands.
+        env:
+          MODEL: ${{ matrix.model }}
+          RESULT_FILE: ${{ steps.result-name.outputs.filename }}
+          TEST_NAME: ${{ inputs.test_name }}
+          VERBOSE: ${{ inputs.verbose }}
         run: |
-          ARGS=("${{ matrix.model }}")
+          ARGS=("$MODEL")
           ARGS+=(--log-format github)
-          ARGS+=(--output "${{ steps.result-name.outputs.filename }}")
+          ARGS+=(--output "$RESULT_FILE")
 
           # Optional: single test suite (workflow_dispatch only)
-          if [ -n "${{ inputs.test_name }}" ]; then
-            ARGS+=(--test "${{ inputs.test_name }}")
+          if [ -n "$TEST_NAME" ]; then
+            ARGS+=(--test "$TEST_NAME")
           fi
 
           # Optional: verbose output (workflow_dispatch only)
-          if [ "${{ inputs.verbose }}" = "true" ]; then
+          if [ "$VERBOSE" = "true" ]; then
             ARGS+=(--verbose)
           fi
 
