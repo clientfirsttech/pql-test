@@ -1,6 +1,6 @@
 # pql-odcs Doctor and Skill Epic
 
-**Status**: ✅ COMPLETED (2026-10-27), pending the maintainer checks in plan.md Open Items
+**Status**: ✅ COMPLETED (2026-10-27). Partly superseded on 2026-10-28 by the [merge epic](2026-10-28-merge-pql-odcs-agpl.md): `doctor` is now one `pql-test contract doctor`, and the standalone pql-odcs skill and `pql-odcs skill` command were removed.
 **Goal**: Give standalone pql-odcs users (Bitol, datacontract-cli) the two pql-test conveniences that make sense without XMLA: a readiness check, and an installable AI skill.
 
 ## Overview

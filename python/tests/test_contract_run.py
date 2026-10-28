@@ -11,6 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from pql_test.contract_run import detect_pql_assert, exit_code
+from pql_test.contract_run import xmla_unavailable as real_xmla_unavailable
 from pql_test.runner import TestResult
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -498,3 +499,23 @@ class TestWithoutXmla:
             True,
             True,
         ), f"{given}: {should}\n{result.output}"
+
+    def test_off_windows_nothing_loads_or_downloads_adomd(self, monkeypatch):
+        given = "Linux: the XMLA check, then the ADOMD.NET NuGet auto-install"
+        should = "report Windows-only without starting the loader, and never download"
+        from pql_test import runner
+        from pql_test.runner.adomd import _auto_install_adomd_from_nuget
+
+        monkeypatch.setattr("sys.platform", "linux")
+        monkeypatch.setattr(runner, "has_pyadomd", lambda: pytest.fail("loaded ADOMD.NET"), raising=False)
+        monkeypatch.setattr("urllib.request.urlretrieve", lambda *_a, **_k: pytest.fail("downloaded"))
+
+        assert (real_xmla_unavailable(), _auto_install_adomd_from_nuget()) == (self.REASON, None), f"{given}: {should}"
+
+
+def test_local_with_a_backslash_is_the_same_open_model(tmp_path):
+    given = "local\\Sample (a Windows-style separator)"
+    should = "become the local/Sample target, so the resolver connects to that open model only"
+    from pql_test.contract_run import resolve_model_target
+
+    assert resolve_model_target("local\\Sample", None) == ("local/Sample", "local/Sample"), f"{given}: {should}"

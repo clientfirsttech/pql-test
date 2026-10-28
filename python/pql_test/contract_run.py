@@ -142,13 +142,14 @@ def detect_pql_assert(conn) -> str:
 
 def xmla_unavailable() -> str | None:
     """Why this machine cannot query a model over XMLA (no pyadomd / ADOMD.NET), or None when it can."""
+    # Checked first: off Windows there is nothing to load, so never start the ADOMD.NET loader.
+    if sys.platform != "win32":
+        return "XMLA needs ADOMD.NET, which runs on Windows only"
     from pql_test.runner import HAS_PYADOMD
 
     if HAS_PYADOMD:
         return None
-    if sys.platform != "win32":
-        return "XMLA needs ADOMD.NET, which runs on Windows only"
-    return "pyadomd (ADOMD.NET) is not installed: pip install pyadomd"
+    return "ADOMD.NET is not available (pyadomd or its assemblies are missing); run `pql-test check-prereqs`"
 
 
 def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path):
@@ -175,11 +176,14 @@ def resolve_model_target(model_path: str, model_dir: str | None) -> tuple[str, s
     """
     from pql_test.odcs.pbip import local_model_name
 
-    if local_model_name(model_path) is None:
+    name = local_model_name(model_path)
+    if name is None:
         if model_dir:
             raise click.UsageError("--model-dir goes with a local/<model_name> MODEL_PATH; pass the folder as MODEL_PATH instead.")
         return model_path, model_path
-    return model_dir or model_path, model_path
+    # One spelling (local/<name>, never local\<name>), so the resolver connects to that open model only.
+    target = f"local/{name}"
+    return model_dir or target, target
 
 
 def _model_dir_option(command: Callable) -> Callable:

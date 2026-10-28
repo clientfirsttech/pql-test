@@ -1,6 +1,6 @@
 # pql-odcs PQL.Assert 0.8 Live CI Epic
 
-**Status**: 🔄 IN PROGRESS. Offline work is done; the live runs wait on a renewed service-principal secret and a republished SampleModel (see plan.md Open Items)
+**Status**: ✅ COMPLETED (2026-10-28). SampleModel was republished with PQL.Assert 0.8.0, and `python/tests/test_contract_live.py` passed (14 tests) over the service connection once the secret was renewed. pql-odcs was later merged into pql-test ([merge epic](2026-10-28-merge-pql-odcs-agpl.md)).
 **Goal**: Prove in the existing CI pipeline that pql-odcs's 0.8 output and `contract run` auto-detection work against a real model with PQL.Assert 0.8.0, and run the library variants the gap plan has not yet checked.
 
 ## Overview

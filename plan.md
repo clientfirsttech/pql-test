@@ -13,14 +13,14 @@
 
 ## Open Items
 
-- **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/merge-pql-odcs-agpl-epic.md](tasks/merge-pql-odcs-agpl-epic.md). In order:
+- **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
   2. Open a PR from `dev-odcs` to `main`. Its first CI run is also the first run of the new Linux job, [contracts.yml](.github/workflows/contracts.yml), which could not be run locally.
   3. Decide whether pql-test will ever sell commercial (dual) licenses. If so, replace the DCO sign-off with a contributor license agreement before accepting outside contributions; DCO alone does not allow relicensing them.
   4. If a PyPI or TestPyPI pending publisher was registered for `pql-odcs`, delete it; nothing will be published under that name.
   5. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
 
-- **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md) and [tasks/pql-odcs-doctor-and-skill-epic.md](tasks/pql-odcs-doctor-and-skill-epic.md).
+- **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
 
 - **Local-machine service smoke validation** — `python/tests/.env` is not configured on the maintainer's machine. CI's [run-tests-remote.yml](.github/workflows/run-tests-remote.yml) exercises the service path on every push, so the gap is informational only.
 
@@ -73,7 +73,7 @@
 
 ### 2026-10-28 — pql-odcs merged into pql-test; AGPL-3.0-only (branch `dev-odcs`)
 
-- See [tasks/merge-pql-odcs-agpl-epic.md](tasks/merge-pql-odcs-agpl-epic.md).
+- See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md).
 - One package and one CLI: `pql-test contract lint|coverage|generate|trace|run|doctor`, with the same MODEL_PATH forms everywhere (`local/<name>` included). The standalone `pql-odcs` CLI, its skill command, the plugin loader, and the `contracts` extra are gone.
 - The repository is AGPL-3.0-only; the license-boundary CI checks are replaced by a Linux job for the file-only contract commands ([contracts.yml](.github/workflows/contracts.yml)).
 

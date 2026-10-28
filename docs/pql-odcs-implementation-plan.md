@@ -1,6 +1,6 @@
 # pql-odcs: ODCS Contracts → PQL.Assert — Implementation Plan
 
-> **Superseded 2026-10-28.** pql-odcs was merged into pql-test before it was published, and the whole repository moved to AGPL-3.0-only ([epic](../tasks/merge-pql-odcs-agpl-epic.md)). The MIT package, the license boundary, and the `pql-odcs` CLI described below no longer exist; see [contracts.md](contracts.md) for `pql-test contract`. This plan is kept as the design record for the rule mapping.
+> **Superseded 2026-10-28.** pql-odcs was merged into pql-test before it was published, and the whole repository moved to AGPL-3.0-only ([epic](../tasks/archive/2026-10-28-merge-pql-odcs-agpl.md)). The MIT package, the license boundary, and the `pql-odcs` CLI described below no longer exist; see [contracts.md](contracts.md) for `pql-test contract`. This plan is kept as the design record for the rule mapping.
 
 Originally drafted 2026-10-24 by John Kerski. Imported and adjusted during AIDD discovery on 2026-10-25. The v0.1 work is tracked in [tasks/archive/2026-10-25-pql-odcs-v0.1.md](../tasks/archive/2026-10-25-pql-odcs-v0.1.md).
 

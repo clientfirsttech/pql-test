@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 #
 # PQL.Assert 0.8.0 additions. Every 0.7 op is inherited unchanged; this file only
 # adds ops, so a model on 0.8.0 keeps every 0.7.1 function. Selected with

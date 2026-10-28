@@ -155,9 +155,12 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
     standard "ADOMD.NET not loaded" path when it returns None.
 
     Opt-outs:
+    - not Windows — skip (the net472 assemblies only load on Windows)
     - PQL_TEST_HERMETIC=1 — skip (test mode)
     - PQL_TEST_NO_AUTO_INSTALL_ADOMD=1 — skip (user preference)
     """
+    if sys.platform != "win32":
+        return None
     if os.environ.get("PQL_TEST_HERMETIC") or os.environ.get(
         "PQL_TEST_NO_AUTO_INSTALL_ADOMD"
     ):
