@@ -127,13 +127,18 @@ def deployed_library_version(conn) -> str | None:
         return None
 
 
-def detect_pql_assert(conn) -> str:
-    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``."""
+def _catalog_for_version(version: str | None) -> str:
+    """``"0.8"`` for a LibraryVersion() of 0.8 or later, else ``"0.7"``."""
     try:
-        major, minor = (int(part) for part in (deployed_library_version(conn) or "").split(".")[:2])
+        major, minor = (int(part) for part in (version or "").split(".")[:2])
     except ValueError:
         return "0.7"
     return "0.8" if (major, minor) >= (0, 8) else "0.7"
+
+
+def detect_pql_assert(conn) -> str:
+    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``."""
+    return _catalog_for_version(deployed_library_version(conn))
 
 
 def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path):
@@ -291,12 +296,23 @@ def live_doctor_checks(conn, recommended: str | None) -> list:
         _execute_dax_query(conn, "EVALUATE { 1 }")
     except Exception as exc:  # noqa: BLE001 - report any failure as the check's detail
         return [Check("XMLA connection", FAIL, f"{conn.server} / catalog: {conn.catalog}, but a test query failed: {exc}")]
+    checks = [Check("XMLA connection", OK, f"{conn.server} / catalog: {conn.catalog}")]
     version = deployed_library_version(conn)
-    checks = [
-        Check("XMLA connection", OK, f"{conn.server} / catalog: {conn.catalog}"),
-        Check("Deployed PQL.Assert", OK, version or "0.7.x or older (no PQL.Assert.LibraryVersion())"),
-    ]
-    deployed = detect_pql_assert(conn)
+    if version is None:
+        # Before 0.8.0 there is no LibraryVersion(): check that some PQL.Assert is deployed at all.
+        try:
+            _execute_dax_query(conn, 'EVALUATE PQL.Assert.ShouldBeTrue("pql-test contract doctor", TRUE())')
+        except Exception:  # noqa: BLE001 - the function is missing (or unusable) in the deployed model
+            checks.append(
+                Check(
+                    "Deployed PQL.Assert",
+                    FAIL,
+                    "not found in the deployed model: install PQL.Assert from DAX Lib and publish the model",
+                )
+            )
+            return checks
+    checks.append(Check("Deployed PQL.Assert", OK, version or "0.7.x or older (no PQL.Assert.LibraryVersion())"))
+    deployed = _catalog_for_version(version)
     if recommended is None:
         return checks
     if deployed == recommended:
@@ -314,9 +330,14 @@ def live_doctor_checks(conn, recommended: str | None) -> list:
     return checks
 
 
-def print_doctor(report) -> None:
-    """The doctor report in pql-test's CLI style."""
-    click.echo(banner("contract doctor"))
+def print_doctor(report, conn=None, model_path: str | None = None) -> None:
+    """The doctor report in pql-test's CLI style (connection line, session banner, model line, rows)."""
+    if conn is not None:
+        click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
+    click.echo(banner("contract doctor session starts"))
+    if model_path:
+        click.echo(f"model: {model_path}")
+        click.echo("")
     for check in report.checks:
         color, label = _DOCTOR_STATUS[check.status]
         click.echo(f"  {click.style(label.ljust(5), fg=STATUS_COLORS[color])}{check.name}: {check.detail}")
@@ -350,7 +371,7 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
         from pql_odcs.doctor import run_doctor
         from pql_odcs.pbip import require_semantic_model_dir
 
-        report = run_doctor(model_path)
+        report, conn = run_doctor(model_path), None
         if model_path and report.ok:
             credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
             _, conn = _connect(model_path, hooks, credentials, require_semantic_model_dir(model_path))
@@ -358,7 +379,7 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
         if fmt == "json":
             click.echo(json.dumps(report.to_json(), indent=2))
         else:
-            print_doctor(report)
+            print_doctor(report, conn, model_path)
         if not report.ok:
             sys.exit(1)
 

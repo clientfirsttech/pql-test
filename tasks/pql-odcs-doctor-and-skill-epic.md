@@ -15,7 +15,11 @@ pql-test users get `check-prereqs` (pql-test has no `doctor` command; `check-pre
 - `--pql-assert auto` is offered on `generate` only. `coverage` and `trace` take no model to read.
 - pql-odcs stays at the unreleased 0.1.0, and these features join its 0.1.0 CHANGELOG entry. pql-test's `contracts` extra pins `pql-odcs>=0.1,<0.2`. pql-test stays at the unreleased 0.2.0.
 - The Copilot install target is `.github/skills/pql-odcs/SKILL.md`, a separate file, rather than an edit to the shared `copilot-instructions.md`.
-- `pql-test contract doctor` probes the connection with a query, so a connection that cannot query fails instead of reading as an old library.
+- `pql-test contract doctor` probes the connection with a query, so a connection that cannot query fails instead of reading as an old library. A deployed model with no PQL.Assert at all fails too.
+- `skill` takes no list or NAME argument: pql-odcs ships one skill, so it prints that one. `--all` is spelled `--install all`.
+- Drift is compared per catalog (0.7 vs 0.8), not per exact version, because the catalog is what `generate` and `run` choose.
+- A missing `DAXQueries/` is fine, because `generate` creates it.
+- `skill` refuses to downgrade a newer installed skill, never writes through a symlink, and reports each harness as it goes.
 
 ---
 

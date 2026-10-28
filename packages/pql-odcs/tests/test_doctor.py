@@ -107,6 +107,16 @@ class TestModel:
             f"{given}: {should}"
         )
 
+    def test_unannotated_library_warns(self, tmp_path):
+        given = "PQL.Assert functions with no DAXLIB_PackageVersion annotation"
+        should = "warn that the version is unknown"
+        text = "function 'PQL.Assert.A' =\n\t\t() => 1\n\tannotation DAXLIB_PackageId = PQL.Assert\n"
+
+        report = run_doctor(_model(tmp_path, text))
+
+        check = next(c for c in report.checks if c.name == "PQL.Assert library")
+        assert (check.status, "DAXLIB_PackageVersion" in check.detail) == ("warn", True), f"{given}: {should}"
+
     def test_dax_queries_folder_is_optional(self, tmp_path):
         given = "a PBIP model with no DAXQueries/ folder"
         should = "not fail, since generate creates it"

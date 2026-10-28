@@ -181,6 +181,7 @@ def _check_prereqs() -> list[dict]:
         {
             "name": "pql-odcs (optional, `pql-test contract` commands)",
             "ok": True,
+            "icon": None if odcs_version else "\u2796",  # optional and absent: neither pass nor fail
             "detail": (
                 f"pql-odcs {odcs_version} available — run `pql-test contract doctor` to check a model"
                 if odcs_version
@@ -234,7 +235,7 @@ def _suite_to_dict(suite: TestSuite) -> dict:
 def _print_prereqs(results: list[dict]) -> None:
     click.echo("\nPrerequisites check:")
     for r in results:
-        icon = "\u2705" if r["ok"] else "\u274c"
+        icon = r.get("icon") or ("\u2705" if r["ok"] else "\u274c")
         click.echo(f"  {icon} {r['name']} \u2014 {r['detail']}")
     all_ok = all(r["ok"] for r in results)
     click.echo(

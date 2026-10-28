@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: MIT
 """The ``contract`` click group, mounted as ``pql-odcs`` and as ``pql-test contract``.
 
-Exit codes: 0 success; 1 contract invalid, lint problems, or ``--fail-on-skipped``
-triggered; 2 usage error (bad option, MODEL_PATH, or a file pql-odcs would overwrite).
+Exit codes: 0 success; 1 contract invalid, lint problems, a failed ``doctor`` check, a
+``skill`` file refused or not written, or ``--fail-on-skipped`` triggered; 2 usage error (bad
+option, MODEL_PATH, or a suite file pql-odcs would overwrite).
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from functools import partial
 from pathlib import Path
 
 import click
@@ -263,7 +265,7 @@ def doctor_cmd(model_path, fmt):
 def skill_cmd(harness, uninstall, show, root, dry_run, force):
     """Print the pql-odcs skill for AI coding agents, or install, show, or remove it in a project.
 
-    
+    \b
     Examples:
       pql-odcs skill                    print the skill
       pql-odcs skill --install claude   write .claude/skills/pql-odcs/SKILL.md
@@ -273,19 +275,25 @@ def skill_cmd(harness, uninstall, show, root, dry_run, force):
 
     if sum(bool(x) for x in (harness, uninstall, show)) > 1:
         raise click.UsageError("Use only one of --install, --uninstall, and --show.")
+    if dry_run and not (harness or uninstall):
+        raise click.UsageError("--dry-run applies to --install and --uninstall.")
     harnesses = list(skill.HARNESSES)
     if harness:
-        actions = [skill.install(h, root, force=force, dry_run=dry_run) for h in (harnesses if harness == "all" else [harness])]
+        targets = harnesses if harness == "all" else [harness]
+        run = partial(skill.install, root=root, force=force, dry_run=dry_run)
     elif uninstall:
-        actions = [skill.uninstall(h, root, dry_run=dry_run) for h in harnesses]
+        targets, run = harnesses, partial(skill.uninstall, root=root, dry_run=dry_run)
     elif show:
-        actions = [skill.status(h, root) for h in harnesses]
+        targets, run = harnesses, partial(skill.status, root=root)
     else:
         click.echo(skill.skill_text(), nl=False)
         return
-    for action in actions:
+    failed = False
+    for target in targets:  # report each harness as it is done, so a later failure keeps earlier lines
+        action = run(target)
         click.echo(action.line(dry_run))
-    if any(a.status == "refused" for a in actions if not show):
+        failed = failed or action.status in ("refused", "error")
+    if failed and not show:
         raise click.exceptions.Exit(1)
 
 

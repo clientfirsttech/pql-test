@@ -6,7 +6,7 @@ version: 0.1.0
 
 # pql-odcs
 
-`pql-odcs` reads an ODCS data contract and writes PQL.Assert `*.Tests.dax` suites into a PBIP model's `DAXQueries/` folder. Every contract rule is reported as **mapped** (checked exactly), **approximated** (checked, with a stated difference), or **skipped** (with the reason and the release that will add it). No rule is dropped silently. It runs on Windows, macOS, and Linux, and never connects to a model. To run the suites, use `pql-test contract run` from pql-test (`pip install pql-test[contracts]`, Windows only).
+`pql-odcs` reads an ODCS data contract and writes PQL.Assert `*.Tests.dax` suites into a PBIP model's `DAXQueries/` folder. Every contract rule is reported as **mapped** (checked exactly), **approximated** (checked, with a stated difference), or **skipped** (with the reason, and the planned release where there is one). No rule is dropped silently. It runs on Windows, macOS, and Linux, and never connects to a model. To run the suites, use `pql-test contract run` from pql-test (`pip install pql-test[contracts]`, Windows only).
 
 ## Behavioral Contract
 
@@ -46,10 +46,10 @@ PqlOdcs {
 
 ## PQL.Assert versions
 
-- `--pql-assert 0.7` (the default) works with PQL.Assert 0.7.x and later. Some rules are approximated, for example `required` on a text column also counts empty strings as missing.
+- `--pql-assert 0.7` (the default) needs the PQL.Assert functions the 0.7 catalog calls, which `doctor` checks. Some rules are approximated, for example `required` on a text column also counts empty strings as missing.
 - `--pql-assert 0.8` needs PQL.Assert 0.8.0 or later in the model. Null, key, duplicate, `rowCount mustNotBeBetween`, and simple pattern rules (`^literal`, `literal$`, or a bare literal, matched case-sensitively) then map exactly, and a `latency` SLA becomes an approximated freshness check. Suites generated for 0.8 fail on a model that still has 0.7.
 - Column types, value ranges, value lists, `missingValues`, and relationships are skipped in this release.
 
 ## Exit codes
 
-`0` success; `1` invalid contract, lint problems, a failed doctor check, or `--fail-on-skipped` triggered; `2` usage error, such as a bad option, a MODEL_PATH that is not PBIP, or a suite file pql-odcs did not generate.
+`0` success; `1` invalid contract, lint problems, a failed doctor check (including a MODEL_PATH that is not PBIP), a skill file that was refused or not written, or `--fail-on-skipped` triggered; `2` usage error, such as a bad option, a MODEL_PATH that is not PBIP for `generate`, or a suite file pql-odcs did not generate.

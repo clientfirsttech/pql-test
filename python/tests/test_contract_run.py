@@ -208,6 +208,8 @@ class TestContractDoctor:
         def query(_conn, dax):
             if reported == "broken":
                 raise RuntimeError("token expired")
+            if reported == "no library" and "PQL.Assert" in dax:
+                raise RuntimeError("function not found")
             if "LibraryVersion" not in dax:
                 return [{"[Value]": 1}]
             if reported is None:
@@ -262,6 +264,41 @@ class TestContractDoctor:
             "token expired" in checks["XMLA connection"]["detail"],
             "Deployed PQL.Assert" in checks,
         ) == (1, "fail", True, False), f"{given}: {should}\n{result.output}"
+
+    def test_deployed_model_without_pql_assert_fails(self, monkeypatch):
+        given = "a deployed model with no PQL.Assert functions at all"
+        should = "fail the deployed-library check instead of reporting 0.7.x"
+        from types import SimpleNamespace
+
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "no library")
+
+        checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
+        assert (result.exit_code, checks["Deployed PQL.Assert"]["status"], "Deployed vs. model folder" in checks) == (
+            1,
+            "fail",
+            False,
+        ), f"{given}: {should}{chr(10)}{result.output}"
+
+    def test_text_output_opens_like_other_connected_commands(self, monkeypatch):
+        given = "pql-test contract doctor in text format with a connection"
+        should = "open with the XMLA connection line, the session banner, and the model line"
+        from types import SimpleNamespace
+
+        monkeypatch.setattr(
+            "pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: SimpleNamespace(server="srv", catalog="cat")
+        )
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", lambda *_a: [{"[Value]": "0.8.0"}])
+        from pql_test.cli import cli
+
+        model = str(REPO_ROOT / "examples" / "SampleModel.SemanticModel")
+        result = CliRunner().invoke(cli, ["contract", "doctor", model])
+
+        lines = result.output.splitlines()
+        assert (lines[0], "contract doctor session starts" in lines[1], lines[2]) == (
+            "XMLA connection: srv / catalog: cat",
+            True,
+            f"model: {model}",
+        ), f"{given}: {should}{chr(10)}{result.output}"
 
     def test_no_connection_skips_the_live_checks(self, monkeypatch):
         given = "no XMLA connection"

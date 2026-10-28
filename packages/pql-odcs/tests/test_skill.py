@@ -139,3 +139,114 @@ class TestInstall:
         should = "be a usage error"
 
         assert _skill("--install", "claude", "--uninstall", "--dir", tmp_path).exit_code == 2, f"{given}: {should}"
+
+
+class TestEdgeCases:
+    def test_newer_installed_version_is_not_downgraded(self, tmp_path):
+        given = "an installed pql-odcs skill newer than this package's"
+        should = "refuse with exit 1 and keep it, unless --force"
+        target = tmp_path / HARNESSES["claude"] / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("---\nname: pql-odcs\nversion: 99.0.0\n---\nnewer\n", encoding="utf-8")
+
+        refused = _skill("--install", "claude", "--dir", tmp_path)
+        kept = "newer" in target.read_text(encoding="utf-8")
+        forced = _skill("--install", "claude", "--dir", tmp_path, "--force")
+
+        assert (refused.exit_code, kept, forced.exit_code, target.read_text(encoding="utf-8") == skill_text()) == (
+            1,
+            True,
+            0,
+            True,
+        ), f"{given}: {should}\n{refused.output}"
+
+    def test_unreadable_file_is_foreign(self, tmp_path):
+        given = "a UTF-16 SKILL.md at the target path"
+        should = "be refused by install and uninstall, shown as foreign, and replaced by --force"
+        target = tmp_path / HARNESSES["claude"] / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_bytes("---\nname: pql-odcs\n---\n".encode("utf-16"))
+
+        install, uninstall, show = (
+            _skill("--install", "claude", "--dir", tmp_path),
+            _skill("--uninstall", "--dir", tmp_path),
+            _skill("--show", "--dir", tmp_path),
+        )
+        forced = _skill("--install", "claude", "--dir", tmp_path, "--force")
+
+        assert (install.exit_code, uninstall.exit_code, "foreign" in show.output, forced.exit_code) == (1, 1, True, 0), (
+            f"{given}: {should}\n{install.output}{uninstall.output}{show.output}{forced.output}"
+        )
+
+    def test_symlinked_target_is_never_written(self, tmp_path):
+        given = "a SKILL.md that is a symlink to a file elsewhere"
+        should = "be refused, even with --force, leaving the link target unchanged"
+        outside = tmp_path / "outside.md"
+        outside.write_text("---\nname: pql-odcs\nversion: 0.0.1\n---\n", encoding="utf-8")
+        target = tmp_path / "proj" / HARNESSES["claude"] / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        try:
+            target.symlink_to(outside)
+        except OSError:
+            pytest.skip("creating symlinks needs extra privileges here")
+
+        result = _skill("--install", "claude", "--dir", tmp_path / "proj", "--force")
+
+        assert (result.exit_code, "symlink" in result.output, outside.read_text(encoding="utf-8").endswith("---\n")) == (
+            1,
+            True,
+            True,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_a_failing_harness_does_not_hide_the_others(self, tmp_path):
+        given = "--install all where .github is a file, so the Copilot folder cannot be created"
+        should = "install the other harnesses, report the Copilot error on its own line, and exit 1"
+        (tmp_path / ".github").write_text("not a folder", encoding="utf-8")
+
+        result = _skill("--install", "all", "--dir", tmp_path)
+
+        lines = {line.split()[0]: line.split()[1] for line in result.output.splitlines()}
+        assert (result.exit_code, lines) == (
+            1,
+            {"claude": "installed", "copilot": "error", "cursor": "installed", "windsurf": "installed"},
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_foreign_file_survives_uninstall(self, tmp_path):
+        given = "a different skill at a pql-odcs path"
+        should = "be left in place by --uninstall, which exits 1"
+        target = tmp_path / HARNESSES["cursor"] / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("---\nname: mine\n---\n", encoding="utf-8")
+
+        result = _skill("--uninstall", "--dir", tmp_path)
+
+        assert (result.exit_code, target.exists()) == (1, True), f"{given}: {should}\n{result.output}"
+
+    def test_uninstall_dry_run_keeps_files(self, tmp_path):
+        given = "an installed skill and --uninstall --dry-run"
+        should = "say would remove and keep the file"
+        _skill("--install", "claude", "--dir", tmp_path)
+
+        result = _skill("--uninstall", "--dir", tmp_path, "--dry-run")
+
+        assert ("would remove" in result.output, (tmp_path / HARNESSES["claude"] / "SKILL.md").exists()) == (
+            True,
+            True,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_show_reports_a_stale_install(self, tmp_path):
+        given = "an older pql-odcs skill installed"
+        should = "show it with the version this package ships"
+        target = tmp_path / HARNESSES["claude"] / "SKILL.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("---\nname: pql-odcs\nversion: 0.0.1\n---\n", encoding="utf-8")
+
+        result = _skill("--show", "--dir", tmp_path)
+
+        assert f"v0.0.1, this pql-odcs ships v{__version__}" in result.output, f"{given}: {should}\n{result.output}"
+
+    def test_dry_run_without_a_change_is_a_usage_error(self, tmp_path):
+        given = "--show --dry-run"
+        should = "be a usage error rather than silently ignored"
+
+        assert _skill("--show", "--dry-run", "--dir", tmp_path).exit_code == 2, f"{given}: {should}"

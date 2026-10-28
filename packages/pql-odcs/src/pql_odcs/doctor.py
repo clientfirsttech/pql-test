@@ -65,7 +65,7 @@ def environment_checks() -> list[Check]:
         checks.append(Check(dep, OK if found else FAIL, found or f"not installed: pip install {dep}"))
     schemas = sorted(
         p.name[len("odcs-json-schema-v") : -len(".json")]
-        for p in files("pql_odcs.schemas").iterdir()
+        for p in files("pql_odcs").joinpath("schemas").iterdir()
         if p.name.startswith("odcs-json-schema-v")
     )
     checks.append(Check("ODCS schemas", OK if schemas else FAIL, ", ".join(schemas) or "none bundled"))
@@ -77,7 +77,7 @@ def environment_checks() -> list[Check]:
             OK,
             f"{pql_test} (`pql-test contract run` available)"
             if pql_test
-            else "not installed; needed only to run suites: pip install pql-test[contracts]",
+            else "not installed; needed only to run suites (Windows): pip install pql-test[contracts]",
         )
     )
     return checks
@@ -129,6 +129,8 @@ def model_checks(model_path: str | Path) -> tuple[list[Check], str | None]:
     found = ", ".join(f"{v} ({n} functions)" for v, n in sorted(versions.items(), key=lambda kv: version_key(kv[0])))
     if len(versions) > 1:
         checks.append(Check("PQL.Assert library", WARN, f"mixed versions: {found}; reinstall one release"))
+    elif "?" in versions:
+        checks.append(Check("PQL.Assert library", WARN, f"{found}: no DAXLIB_PackageVersion annotation; reinstall from DAX Lib"))
     else:
         checks.append(Check("PQL.Assert library", OK, found))
 

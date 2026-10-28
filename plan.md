@@ -13,6 +13,13 @@
 
 ## Open Items
 
+- **Maintainer steps for the pql-odcs 0.8 live CI and doctor/skill epics (2026-10-27).** All code is committed on `dev-odcs` and passes offline: pql-odcs on Python 3.9 and 3.12, and pql-test's full suite. In order:
+  1. Renew the client secret of the test service principal (app `b15e489a-…`); it expired (AADSTS7000222). Update `python/tests/.env` and the `PQL_CLIENT_SECRET` repository secret. Until then every live test and Stage 3 CI job fails to authenticate.
+  2. Open the upgraded `examples/SampleModel.pbip` (now PQL.Assert 0.8.0) in Power BI Desktop and run `pql-test run-tests local/SampleModel`. Its suites should still pass. 0.8.0 changes the bodies of some functions they call (NULL policy); a review found no NULL actuals, but this has not been run.
+  3. Publish SampleModel to the CI workspace. Then `pql-test contract doctor examples/SampleModel.SemanticModel` should report the deployed PQL.Assert as 0.8.0 with no drift warning. Until then, `test_auto_detection_matches_the_committed_library[SampleModel]` fails by design.
+  4. Run `cd python && pytest tests/test_contract_live.py -v` (14 tests). If an `EXPECTED_0_8` or library-smoke value differs, compare it with the gap plan's live checks before changing the expectation.
+  5. Open a PR from `dev-odcs` to `main`; no CI run exists yet for this branch.
+
 - **pql-odcs PQL.Assert 0.8 live CI** — planned 2026-10-27. Reuses Stage 3a (pytest.yml) as is. Phase A runs the 0.8 suites with query-scoped 0.8.0 functions, so the workspace does not change. Phase B upgrades SampleModel in place to 0.8.0 (decided 2026-10-27); it must be republished for the auto-detection check to pass. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md).
 
 - **pql-odcs doctor and skill** — planned 2026-10-27. Adds an offline `contract doctor` that detects the PQL.Assert version from TMDL, plus live checks when run as `pql-test contract doctor`, and an installable pql-odcs skill. Decided 2026-10-27: the command is `doctor`, and the skill is written fresh under MIT. See [tasks/pql-odcs-doctor-and-skill-epic.md](tasks/pql-odcs-doctor-and-skill-epic.md).
