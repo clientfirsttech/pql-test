@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import glob
 import os
+import shutil
 import sys
 from typing import Optional
 
@@ -153,6 +154,18 @@ ADOMD_NUPKG_SHA512 = (
 )
 
 
+# Written into the cache after a verified install: the SHA-512 the package was checked against.
+_MARKER = ".pql-test-verified"
+
+
+def _read_marker(cache_dir: str) -> Optional[str]:
+    try:
+        with open(os.path.join(cache_dir, _MARKER), encoding="ascii") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
 def _auto_install_adomd_from_nuget() -> Optional[str]:
     """Download Microsoft.AnalysisServices.AdomdClient NuGet package.
 
@@ -178,10 +191,9 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
     if cache_dir is None:
         return None
 
-    # Already cached from a prior run — fast path.
-    if os.path.isdir(cache_dir) and any(
-        f.lower().endswith(".dll") for f in os.listdir(cache_dir)
-    ):
+    # Already installed and verified by a prior run — fast path. A cache without the
+    # marker (an older, unverified install, or one cut short) is replaced below.
+    if _read_marker(cache_dir) == ADOMD_NUPKG_SHA512:
         return cache_dir
 
     pkg = "microsoft.analysisservices.adomdclient"
@@ -203,6 +215,7 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
     import zipfile
 
     tmp_path: Optional[str] = None
+    staging: Optional[str] = None
     try:
         # A fixed https URL; the package is verified against a pinned hash before use.
         with urllib.request.urlopen(nupkg_url, timeout=120) as response:  # nosec B310
@@ -216,8 +229,11 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         with tempfile.NamedTemporaryFile(suffix=".nupkg", delete=False) as f:
             tmp_path = f.name
             f.write(package)
-        os.makedirs(cache_dir, exist_ok=True)
-        root = os.path.realpath(cache_dir)
+        # Extract into a fresh folder next to the cache, and swap it in only when complete.
+        parent = os.path.dirname(os.path.abspath(cache_dir))
+        os.makedirs(parent, exist_ok=True)
+        staging = tempfile.mkdtemp(prefix=".adomd-", dir=parent)
+        root = os.path.realpath(staging)
         member_prefix = "lib/net472/"
         with zipfile.ZipFile(tmp_path) as z:
             for member in z.namelist():
@@ -230,13 +246,19 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
                 # messages.  Flattening would collide every culture's
                 # `*.resources.dll` to the same path.
                 rel = member[len(member_prefix):]
-                dest = os.path.realpath(os.path.join(cache_dir, *rel.split("/")))
+                dest = os.path.realpath(os.path.join(staging, *rel.split("/")))
                 if os.path.commonpath([root, dest]) != root:
                     # Zip slip: a member like lib/net472/../../x.dll would land outside the cache.
                     raise RuntimeError(f"{pkg} contains a path outside its folder: {member}")
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with z.open(member) as src, open(dest, "wb") as out:
                     out.write(src.read())
+        with open(os.path.join(staging, _MARKER), "w", encoding="ascii") as marker:
+            marker.write(ADOMD_NUPKG_SHA512)
+        if os.path.isdir(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.replace(staging, cache_dir)
+        staging = None
         print(
             f"ADOMD.NET assemblies installed to {cache_dir}.  Subsequent runs "
             "use the cached install.",
@@ -253,6 +275,8 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         )
         return None
     finally:
+        if staging and os.path.isdir(staging):
+            shutil.rmtree(staging, ignore_errors=True)
         if tmp_path:
             try:
                 os.unlink(tmp_path)

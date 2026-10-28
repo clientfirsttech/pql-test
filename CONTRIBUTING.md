@@ -73,7 +73,9 @@ This repository is public, so a committed secret is a leaked secret, even when a
   - a large-file check;
   - bandit on `python/pql_test` (medium severity and up).
 
-  Never bypass them with `--no-verify`.
+  Never bypass them with `--no-verify`. The gitleaks hook scans what you stage. To scan the
+  working tree too, run `gitleaks dir .`; it also reports your ignored `.env` files, which is
+  expected.
 - **CI repeats them** in [`security.yml`](.github/workflows/security.yml) (Stage 0 of `ci.yml`), with gitleaks on the full history, pip-audit on the runtime dependencies, and the offline dead-link check.
 - **When gitleaks finds something:**
   - **A real secret:** don't commit it. If it was already committed, treat it as leaked: rotate it first, then remove it from the change.

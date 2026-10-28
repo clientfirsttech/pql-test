@@ -13,11 +13,24 @@
 
 ## Open Items
 
-- **Before the repository goes public (2026-10-28).** See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
-  1. In the GitHub repository settings, turn on **secret scanning**, **push protection**, **private vulnerability reporting** (SECURITY.md points to it), and **Dependabot alerts**.
-  2. Each maintainer runs `pip install pre-commit && pre-commit install` once per clone (CONTRIBUTING, "Secrets and security checks").
-  3. Decide whether to raise `requires-python` to `>=3.10`. Python 3.9 is end of life, and the fixes for `requests`, `urllib3`, and `python-dotenv` need 3.10+, so 3.9 installs keep known-vulnerable versions. It changes the vision's "Python >= 3.9" constraint and the Linux CI matrix.
-  4. The old, expired client secret in `python/tests/.env` was never committed; delete or update that file.
+- **Before the repository goes public (2026-10-28).** gitleaks found no committed credential (196 commits, all branches). See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
+  1. **Decide on identifying data gitleaks cannot detect**, before the first public push (after it, forks and caches keep the history):
+     - in current files: company emails (`…@cftechnologiesllc.com`) as RLS/OLS test members in `examples/OLS_Model.SemanticModel` (TMDLScripts and functions.tmdl) and `examples/RLS_Model.SemanticModel/definition/functions.tmdl`, and a SharePoint URL (`kerski.sharepoint.com/sites/DataOpsDemo`) in `research/Low-Code Coverage.SemanticModel/definition/expressions.tmdl`. The live RLS/OLS tests may depend on these accounts, so replacing them with placeholders needs matching test accounts;
+     - in history only: another person's company email, the `pqlint-demos` workspace name, a `C:\Users\giorg` path, and `examples/RLS_Model.pbix` (whose `Connections` part holds real workspace, dataset, and report IDs). Removing them needs a history rewrite (`git filter-repo`) and a force-push.
+  2. Run `git fetch origin '+refs/pull/*/head:refs/pr/*'` and re-run `gitleaks git . --log-opts=--all`: old pull request refs become public too, and a rewrite cannot remove them (only GitHub Support can).
+  3. Review or delete old GitHub Actions run logs and artifacts (DAX results, coverage); they become public with the repository.
+  4. In the repository settings, turn on:
+     - secret scanning and push protection;
+     - private vulnerability reporting (SECURITY.md links to it; the link 404s until then);
+     - Dependabot alerts;
+     - "Require approval for all outside collaborators" for fork pull request workflows;
+     - a read-only default `GITHUB_TOKEN`;
+     - branch protection requiring CI (including Stage 0) and a Code Owners review of `.github/`.
+  5. After launch, GitHub Environments are free: add a `pypi` environment with required reviewers to `release.yml`'s publish job, and set it in the PyPI trusted publisher (the header of `release.yml` explains).
+  6. Decide what the issue-review agent may do with outsider-written issues: it is triggered only by maintainers (a label), but the issue text it reads is untrusted, so treat its pull requests as untrusted or turn it off at launch.
+  7. Decide whether to raise `requires-python` to `>=3.10` (Python 3.9 is end of life, and the fixes for `requests`, `urllib3`, and `python-dotenv` need 3.10+). It changes the vision's "Python >= 3.9" constraint and the Linux CI matrix; SECURITY.md already warns 3.9 users.
+  8. Every maintainer runs `pip install pre-commit && pre-commit install` once per clone, and confirms they are fine with the author and maintainer details in `python/pyproject.toml`.
+  9. The old, expired client secret in `python/tests/.env` was never committed; delete or update that file.
 
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.

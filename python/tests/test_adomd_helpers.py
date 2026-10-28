@@ -183,6 +183,9 @@ class TestAutoInstallAdomdFromNuget:
         cache = tmp_path / "cache"
         cache.mkdir()
         (cache / "AlreadyThere.dll").write_bytes(b"")
+        # A verified install leaves a marker with the hash it was checked against.
+        (cache / ".pql-test-verified").write_text(adomd_mod.ADOMD_NUPKG_SHA512, encoding="ascii")
+        monkeypatch.setattr(adomd_mod.sys, "platform", "win32")
         monkeypatch.setattr(
             adomd_mod, "_adomd_auto_install_cache_dir", lambda: str(cache)
         )
@@ -237,6 +240,20 @@ class TestAutoInstallAdomdFromNuget:
         assert (cache / "de" / "x.resources.dll").is_file()
         # Members outside lib/net472/ are ignored
         assert not (cache / "ignored.txt").exists()
+
+    def test_an_unverified_cache_is_replaced(self, tmp_path, monkeypatch):
+        # DLLs from an older install (no marker) are not trusted: download, verify, and swap in.
+        cache = self._install_env(tmp_path, monkeypatch)
+        cache.mkdir()
+        (cache / "Old.dll").write_bytes(b"unverified")
+        package = self._nupkg(("lib/net472/x.dll", b"\x00"))
+
+        with self._serve(monkeypatch, package):
+            result = adomd_mod._auto_install_adomd_from_nuget()
+
+        assert result == str(cache)
+        assert sorted(p.name for p in cache.iterdir()) == [".pql-test-verified", "x.dll"]
+        assert not list(tmp_path.glob(".adomd-*"))  # no staging folder left behind
 
     def test_refuses_a_package_whose_hash_does_not_match(self, tmp_path, monkeypatch, capsys):
         # A tampered or substituted package must never be extracted or loaded.

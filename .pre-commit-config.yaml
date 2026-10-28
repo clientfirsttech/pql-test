@@ -3,7 +3,8 @@
 #   pip install pre-commit      (or: uv tool install pre-commit)
 #   pre-commit install
 #
-# Run them on every file at any time with `pre-commit run --all-files`.
+# Run them on every file at any time with `pre-commit run --all-files`. The gitleaks hook
+# scans only staged changes (it ignores --all-files); scan the working tree with `gitleaks dir .`.
 # CI (.github/workflows/security.yml) runs the same checks, plus gitleaks on the full history.
 # See CONTRIBUTING.md, "Secrets and security checks". Never bypass them with --no-verify.
 

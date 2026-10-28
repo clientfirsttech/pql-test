@@ -26,11 +26,11 @@ def test_bearer_token_and_effective_user_name_compose():
         server="powerbi://api.powerbi.com/v1.0/myorg/WS",
         catalog="OLS_Model",
         access_token="bearer-abc",
-        effective_user_name="atlas.kerski@cftechnologiesllc.com",
+        effective_user_name="test.user@contoso.com",
     )
     cs = _build_connection_string(conn)
     assert "Password=bearer-abc;" in cs
-    assert "EffectiveUserName=atlas.kerski@cftechnologiesllc.com;" in cs
+    assert "EffectiveUserName=test.user@contoso.com;" in cs
 
 
 def test_bearer_token_and_roles_compose():
@@ -81,3 +81,23 @@ def test_roles_takes_priority_when_both_set_with_bearer_token():
     cs = _build_connection_string(conn)
     assert "Roles=West;" in cs
     assert "EffectiveUserName" not in cs
+
+
+def test_values_cannot_add_or_override_keys():
+    """A role, user, or catalog holding ';' or quotes stays one quoted value (no injected keys)."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog='Model";Data Source=evil',
+        access_token="bearer-abc",
+        roles="Reader;Data Source=evil",
+    )
+    cs = _build_connection_string(conn)
+    assert 'Initial Catalog="Model"";Data Source=evil";' in cs
+    assert 'Roles="Reader;Data Source=evil";' in cs
+    assert cs.startswith("Provider=MSOLAP;Data Source=powerbi://api.powerbi.com/v1.0/myorg/WS;")
+
+
+def test_plain_values_are_not_quoted():
+    """Ordinary names keep the exact form ADOMD.NET has always received."""
+    conn = ResolvedXmlaConnection(server="localhost:1234", catalog="Sample Model", roles="Reader,Writer")
+    assert _build_connection_string(conn) == "Provider=MSOLAP;Data Source=localhost:1234;Initial Catalog=Sample Model;Roles=Reader,Writer;"
