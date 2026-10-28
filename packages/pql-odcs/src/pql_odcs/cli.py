@@ -241,6 +241,68 @@ def doctor_cmd(model_path, fmt):
         raise click.exceptions.Exit(1)
 
 
+@click.command("skill")
+@click.option(
+    "--install",
+    "harness",
+    type=click.Choice(["all", "claude", "copilot", "cursor", "windsurf"]),
+    help="Install the skill into the project for this coding agent (or all of them).",
+)
+@click.option("--uninstall", is_flag=True, help="Remove the pql-odcs skill from every agent in the project.")
+@click.option("--show", is_flag=True, help="Show where the skill is installed in the project.")
+@click.option(
+    "--dir",
+    "root",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("."),
+    show_default=True,
+    help="Project root.",
+)
+@click.option("--dry-run", is_flag=True, help="Show what --install or --uninstall would change.")
+@click.option("--force", is_flag=True, help="Overwrite a file at the target path that is not this skill, or reinstall.")
+def skill_cmd(harness, uninstall, show, root, dry_run, force):
+    """Print the pql-odcs skill for AI coding agents, or install, show, or remove it in a project.
+
+    
+    Examples:
+      pql-odcs skill                    print the skill
+      pql-odcs skill --install claude   write .claude/skills/pql-odcs/SKILL.md
+      pql-odcs skill --install all --dry-run
+    """
+    from pql_odcs import skill
+
+    if sum(bool(x) for x in (harness, uninstall, show)) > 1:
+        raise click.UsageError("Use only one of --install, --uninstall, and --show.")
+    harnesses = list(skill.HARNESSES)
+    if harness:
+        actions = [skill.install(h, root, force=force, dry_run=dry_run) for h in (harnesses if harness == "all" else [harness])]
+    elif uninstall:
+        actions = [skill.uninstall(h, root, dry_run=dry_run) for h in harnesses]
+    elif show:
+        actions = [skill.status(h, root) for h in harnesses]
+    else:
+        click.echo(skill.skill_text(), nl=False)
+        return
+    for action in actions:
+        click.echo(action.line(dry_run))
+    if any(a.status == "refused" for a in actions if not show):
+        raise click.exceptions.Exit(1)
+
+
+def standalone() -> click.Group:
+    """The `pql-odcs` command: the contract commands plus `skill`.
+
+    pql-test mounts only `contract` (it has its own `pql-test skill`), so `skill` lives here.
+    """
+    return click.Group(
+        name="pql-odcs",
+        commands={**contract.commands, "skill": skill_cmd},
+        callback=contract.callback,
+        params=list(contract.params),
+        help=contract.help,
+    )
+
+
 def main() -> None:
     # Windows consoles default to cp1252, which cannot encode the em dash in reports.
     for stream in (sys.stdout, sys.stderr):
@@ -249,4 +311,4 @@ def main() -> None:
                 stream.reconfigure(encoding="utf-8")
             except (OSError, ValueError):  # pragma: no cover - exotic streams
                 pass
-    contract(prog_name="pql-odcs")
+    standalone()(prog_name="pql-odcs")

@@ -82,10 +82,15 @@ Options shared by `generate`, `coverage`, and `run`:
 - `--dry-run` — print the DAX instead of writing files (generate).
 - `--force` — overwrite suite files that pql-odcs did not generate (generate/run).
 
+`doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json` and the same connection options as `run`.
+
 `run` also accepts `--verbose`, `--output FILE`, and `--log-format azuredevops|github`, plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 
 Usage:
 ```
+# Check the model's PQL.Assert library, locally and deployed, and which --pql-assert to use
+pql-test contract doctor ./MyModel
+
 # See which contract rules can be enforced before generating anything
 pql-test contract coverage orders.odcs.yaml
 

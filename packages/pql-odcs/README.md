@@ -14,12 +14,15 @@ pip install "pql-test[contracts]" # pql-test with `pql-test contract …`, inclu
 ## Quick start
 
 ```bash
+pql-odcs doctor ./SalesModel                                    # which PQL.Assert? which --pql-assert?
 pql-odcs coverage orders.odcs.yaml                              # which rules can be enforced?
 pql-odcs lint orders.odcs.yaml --model ./SalesModel             # contract valid, names resolve?
 pql-odcs generate orders.odcs.yaml ./SalesModel --env DEV       # write *.Tests.dax suites
-pql-test run-tests ./SalesModel --env DEV --output results.json # run them (pql-test)
+pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate, run, trace (pql-test)
 pql-odcs trace orders.odcs.yaml results.json                    # failures by contract rule id
 ```
+
+`pql-test contract run` runs the generated suites from their files. `pql-test run-tests` runs the suites registered in the deployed model, so it sees generated suites only after the model is published.
 
 ## Commands
 
@@ -29,18 +32,20 @@ pql-odcs trace orders.odcs.yaml results.json                    # failures by co
 | `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
 | `lint CONTRACT [--model MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve and (with `--model`) that every table and column exists in the model's TMDL |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
+| `doctor [MODEL_PATH] [--format text\|json]` | Checks Python, the dependencies, and the bundled schemas and catalogs. With a PBIP model, reads its PQL.Assert library from `definition/functions.tmdl` and recommends the `--pql-assert` value whose every function the model defines. `pql-test contract doctor` also checks the deployed model |
+| `skill [--install AGENT\|all] [--show] [--uninstall]` | Prints the pql-odcs skill for AI coding agents, or installs it into a project for `claude`, `copilot`, `cursor`, or `windsurf` (`--dir`, `--dry-run`, `--force`). Standalone `pql-odcs` only |
 
 **Shared flags**:
 - `--closed-schema` also forbids columns the contract does not list.
 - `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
-- `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). See [PQL.Assert 0.8](#pql-assert-08).
+- `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does. See [PQL.Assert 0.8](#pql-assert-08).
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
 - `--force` overwrites suite files that pql-odcs did not generate (`generate`).
 
 **Exit codes**:
 - 0 means success.
-- 1 means the contract is invalid, `lint` found problems, or `--fail-on-skipped` was triggered.
+- 1 means the contract is invalid, `lint` found problems, a `doctor` check failed, `skill` refused to overwrite a file that is not its own, or `--fail-on-skipped` was triggered.
 - 2 means a usage error: a bad `--env` token, a MODEL_PATH that is not a PBIP folder, a file pql-odcs would refuse to overwrite, or an unreadable results file.
 
 In v0.1, `MODEL_PATH` must be a PBIP folder: the root containing the `.pbip` file, the `*.SemanticModel` folder, or the `.pbip` file itself. Query-scoped XMLA runs (`--target query`) arrive in v0.2, and persistent deploys (`--target deploy`) in v0.3.

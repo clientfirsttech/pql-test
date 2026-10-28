@@ -1334,6 +1334,7 @@ pip install "pql-test[contracts]"
 
 | Command | What it does |
 |---|---|
+| `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
 | `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract lint CONTRACT [--model MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |

@@ -127,6 +127,12 @@ jobs:
           /tmp/odcs/bin/pql-odcs coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
           /tmp/odcs/bin/python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"
           /tmp/odcs/bin/pql-odcs generate $F/marvel.odcs.yaml examples --env DEV --dry-run | grep -q "EVALUATE Marvel.Schema.DEV.Tests()"
+          # doctor reads SampleModel's PQL.Assert 0.8.0 from its TMDL and recommends the 0.8 catalog.
+          /tmp/odcs/bin/pql-odcs doctor examples/SampleModel.SemanticModel --format json > /tmp/doctor.json
+          /tmp/odcs/bin/python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.8', r"
+          # The skill ships in the wheel and installs into a project.
+          /tmp/odcs/bin/pql-odcs skill --install claude --dir /tmp/project
+          grep -q "^name: pql-odcs$" /tmp/project/.claude/skills/pql-odcs/SKILL.md
           # Exit code 1 is the contract: every-row has rules that v0.1 skips.
           if /tmp/odcs/bin/pql-odcs coverage $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
             echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
@@ -157,6 +163,8 @@ jobs:
           set -e
           help=$(pql-test contract --help)
           echo "$help"
-          for cmd in generate coverage lint trace run; do
+          for cmd in generate coverage lint trace doctor run; do
             echo "$help" | grep -qE "^  $cmd " || { echo "::error::pql-test contract is missing '$cmd'"; exit 1; }
           done
+          # `skill` is standalone-only: pql-test has its own `pql-test skill`.
+          if echo "$help" | grep -qE "^  skill "; then echo "::error::pql-test contract should not list 'skill'"; exit 1; fi
