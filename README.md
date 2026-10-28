@@ -93,6 +93,8 @@ The only thing you install manually is **Python 3.9+** ([python.org](https://www
 | ADOMD.NET assemblies (the .NET XMLA client) | **Automatic on first use** — when no ADOMD.NET install is detected, pql-test downloads the official `Microsoft.AnalysisServices.AdomdClient` NuGet package (~5 MB) from `nuget.org` to `%USERPROFILE%\.pql-test\adomd\` and uses it for every subsequent run. No admin rights, no manual MSI. Set `PQL_TEST_NO_AUTO_INSTALL_ADOMD=1` if you'd rather provide ADOMD yourself. |
 | Power BI Desktop *(optional)* | Only needed for `local/<model_name>` mode against a locally-open model. Skip if you only target the service. |
 
+**Windows or Linux.** Commands that query a model over XMLA (`run-tests`, `code-coverage`, `contract run`, and `doctor`'s live checks) need ADOMD.NET, which runs on Windows only; elsewhere they stop with one message saying so. The file-based commands also run on Linux, for example in a CI pipeline: `retrieve-tests` and `retrieve-test` with a PBIP folder, and `contract lint|coverage|generate|trace`.
+
 Run the built-in check to verify your environment (this is also when the one-time ADOMD download will fire, if needed):
 
 ```powershell
@@ -1394,8 +1396,8 @@ pql-test run-tests local/SampleModel
 ```
 
 > **Note:** Local auto-detection only works on Windows where Power BI
-> Desktop runs natively. On Linux/macOS CI agents, use the explicit remote
-> connection flags.
+> Desktop runs natively. Running tests over XMLA, locally or against the
+> service, needs a Windows machine or agent (ADOMD.NET is Windows-only).
 
 ### Remote Power BI Premium / Fabric Workspace
 

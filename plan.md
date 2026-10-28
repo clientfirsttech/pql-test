@@ -15,10 +15,9 @@
 
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
-  2. Open a PR from `dev-odcs` to `main`. Its first CI run is also the first run of the new Linux job, [contracts.yml](.github/workflows/contracts.yml), which could not be run locally.
-  3. Decide whether pql-test will ever sell commercial (dual) licenses. If so, replace the DCO sign-off with a contributor license agreement before accepting outside contributions; DCO alone does not allow relicensing them.
-  4. If a PyPI or TestPyPI pending publisher was registered for `pql-odcs`, delete it; nothing will be published under that name.
-  5. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
+  2. Open a PR from `dev-odcs` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.
+  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions, and have counsel review its text. DCO sign-off alone does not allow relicensing contributions.
+  4. Release 0.2.0, the first AGPL-3.0-only release, after the counsel review below. v0.1.x stays BUSL-1.1.
 
 - **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
 
@@ -64,7 +63,7 @@
 - **LAST EPIC — counsel review of the AGPL-3.0 relicensing.** Have counsel review:
   - [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and [LICENSES.md](LICENSES.md) (the AGPL-3.0-only choice, the BUSL-1.1 history note, and the two third-party exceptions);
   - that the AGPL's system-library exception covers ADOMD.NET and `pyadomd`;
-  - whether a contributor license agreement is needed (see Open Items step 3);
+  - the contributor license agreement chosen in Open Items step 3;
   - a trademark notice for "pql-test" and "PQL.Assert", which no license covers.
 
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
@@ -75,7 +74,7 @@
 
 - See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md).
 - One package and one CLI: `pql-test contract lint|coverage|generate|trace|run|doctor`, with the same MODEL_PATH forms everywhere (`local/<name>` included). The standalone `pql-odcs` CLI, its skill command, the plugin loader, and the `contracts` extra are gone.
-- The repository is AGPL-3.0-only; the license-boundary CI checks are replaced by a Linux job for the file-only contract commands ([contracts.yml](.github/workflows/contracts.yml)).
+- The repository is AGPL-3.0-only; the license-boundary CI checks are replaced by a Linux stage for the file-based commands ([linux.yml](.github/workflows/linux.yml), ci.yml Stage 3c).
 
 ### 2026-10-27 — pql-odcs adopts PQL.Assert 0.8.0 (branch `dev-odcs`)
 

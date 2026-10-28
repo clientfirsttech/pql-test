@@ -610,6 +610,23 @@ def _format_local_miss_diagnostic(
     return "\n".join(lines)
 
 
+def _exit_unless_windows(command: str) -> None:
+    """Stop an XMLA command off Windows with one clear message, before any connection attempt.
+
+    ADOMD.NET only runs on Windows, so elsewhere every test would otherwise fail
+    with its own pyadomd error.
+    """
+    if sys.platform == "win32":
+        return
+    click.echo(
+        f"Error: `pql-test {command}` queries the model over XMLA, which needs ADOMD.NET and runs on "
+        "Windows only. On this platform, `pql-test retrieve-tests` with a PBIP folder and `pql-test contract "
+        "lint|coverage|generate|trace` work from the PBIP files.",
+        err=True,
+    )
+    sys.exit(1)
+
+
 def _make_conn_opts(
     tenant_id: str | None,
     workspace_id: str | None,
@@ -723,6 +740,8 @@ def cmd_retrieve_tests(
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
     ident = parse_model_identifier(model_path)
+    if ident.kind in ("local", "service"):
+        _exit_unless_windows("retrieve-tests")  # these forms only exist over XMLA
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
@@ -771,8 +790,9 @@ def cmd_retrieve_tests(
         # auto-detected even when no flags are supplied — matches cmd_run_tests
         # behavior and the README's "Local Power BI Desktop (auto-detected)"
         # section.  Returns None when nothing is available, in which case the
-        # caller falls back to the offline DAXQueries/ file scan.
-        conn = resolve_xmla_connection(abs_path, opts)
+        # caller falls back to the offline DAXQueries/ file scan, which is
+        # all there is off Windows (no ADOMD.NET).
+        conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     if test_name:
         test = retrieve_test_by_name(
@@ -842,6 +862,8 @@ def cmd_retrieve_test(
     splits it into multiple arguments and the CLI never sees the full name.
     """
     ident = parse_model_identifier(model_path)
+    if ident.kind in ("local", "service"):
+        _exit_unless_windows("retrieve-test")  # these forms only exist over XMLA
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
@@ -876,7 +898,7 @@ def cmd_retrieve_test(
             _sem_name = Path(abs_path).name
             if _sem_name.endswith(".SemanticModel"):
                 opts.dataset_name = _sem_name[: -len(".SemanticModel")]
-        conn = resolve_xmla_connection(abs_path, opts)
+        conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
     if not test:
@@ -979,6 +1001,7 @@ def cmd_run_tests(
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
       pql-test run-tests local/SampleModel --log-format github
     """
+    _exit_unless_windows("run-tests")
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
@@ -1305,6 +1328,7 @@ def cmd_code_coverage(
     if output and output_format != "json":
         raise click.UsageError("--output requires --format json.")
 
+    _exit_unless_windows("code-coverage")
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
     abs_path = model_path
