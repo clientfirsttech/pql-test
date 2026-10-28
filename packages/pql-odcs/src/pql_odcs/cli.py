@@ -304,11 +304,23 @@ RUN_HINT = (
 )
 
 
+CONTRACT_HINT = (
+    "pql-odcs has no `contract` group: its commands stand alone, for example `pql-odcs {command} ...`. "
+    "`pql-test contract {command}` is how pql-test spells the same command."
+)
+
+
 class _StandaloneGroup(click.Group):
-    """`pql-odcs` points `run` at pql-test instead of answering "No such command"."""
+    """`pql-odcs` points pql-test spellings (`run`, `contract ...`) at the right command instead of "No such command"."""
 
     def resolve_command(self, ctx, args):
-        if args and args[0] == "run" and "run" not in self.commands:
+        name = args[0] if args else None
+        if name == "contract" and name not in self.commands:
+            sub = args[1] if len(args) > 1 else None
+            if sub == "run":
+                raise click.UsageError(RUN_HINT, ctx)
+            raise click.UsageError(CONTRACT_HINT.format(command=sub if sub in self.commands else "lint"), ctx)
+        if name == "run" and name not in self.commands:
             raise click.UsageError(RUN_HINT, ctx)
         return super().resolve_command(ctx, args)
 

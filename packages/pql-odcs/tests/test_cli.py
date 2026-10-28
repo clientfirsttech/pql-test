@@ -245,6 +245,21 @@ class TestStandalone:
             f"{given}: {should}\n{result.output}"
         )
 
+    def test_contract_prefix_points_to_the_right_spelling(self):
+        given = "pql-odcs contract run, then pql-odcs contract lint (pql-test's spellings)"
+        should = "send run to pql-test, and say lint is `pql-odcs lint`, both exiting 2"
+        from pql_odcs.cli import standalone
+
+        run = CliRunner().invoke(standalone(), ["contract", "run", "c.odcs.yaml"])
+        lint = CliRunner().invoke(standalone(), ["contract", "lint", "c.odcs.yaml"])
+
+        assert (
+            run.exit_code,
+            "pql-test contract run CONTRACT MODEL_PATH" in run.output,
+            lint.exit_code,
+            "`pql-odcs lint ...`" in lint.output,
+        ) == (2, True, 2, True), f"{given}: {should}\n{run.output}\n{lint.output}"
+
     def test_other_unknown_commands_keep_clicks_error(self):
         given = "an unknown pql-odcs command other than run"
         should = "keep click's 'No such command' usage error"
