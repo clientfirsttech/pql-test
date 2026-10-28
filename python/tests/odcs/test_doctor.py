@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """`pql-test contract doctor`: environment and PBIP model file checks."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Property-based tests: random valid contracts never crash the pipeline, and every rule gets a status."""
 
 from __future__ import annotations

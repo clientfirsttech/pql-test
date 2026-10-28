@@ -58,7 +58,7 @@ ops:
     fn: PQL.Assert.ShouldBeBetween
     args: [testName, lower, upper, rowCount]
   col.null_rate_at_most:
-    # maxPct is a percentage (0-100). v0.1 only emits 0. Col.ShouldNotBeNull is
+    # maxPct is a percentage (0-100). This catalog only emits 0. Col.ShouldNotBeNull is
     # not used: in 0.7.1 it passes when any value is non-null (gap plan C1).
     fn: PQL.Assert.Col.NullRateShouldBeAtMost
     args: [testName, columnRef, maxPct]

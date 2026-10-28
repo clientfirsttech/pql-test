@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Coverage report: every contract rule with its status (mapped / approximated / skipped).
 
 JSON shape (``schemaVersion`` 1)::

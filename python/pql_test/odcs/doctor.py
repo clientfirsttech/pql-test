@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """File checks for ``pql-test contract doctor``: is this environment, and this PBIP model, ready?
 
 Offline only. The model's PQL.Assert version and functions are read from its TMDL, and

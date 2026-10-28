@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """``pql-test contract``: generate PQL.Assert DAX test suites from ODCS data contracts."""
 
 from __future__ import annotations

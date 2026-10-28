@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """The file-only commands of ``pql-test contract``: generate, coverage, lint, trace.
 
 ``run`` and ``doctor`` connect to a model, so they live in ``pql_test.contract_run`` and are

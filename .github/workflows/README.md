@@ -9,12 +9,8 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 - `promptfoo-eval.yml` — Evaluates Copilot CLI skills via GitHub Models
 - `run-tests-remote.yml` — Runs DAX tests against remote Power BI/Fabric workspace
 - `release.yml` — Publishes pql-test to PyPI on `vX.Y.Z` tags (Trusted Publishing is bound to this file name; do not rename)
-- `pql-odcs.yml` — pql-odcs (MIT) CI on every PR, all jobs blocking:
-  - license-boundary guardrails: SPDX headers, the import-linter boundary, wheel contents, and dependency licenses;
-  - the test matrix: Linux, macOS, and Windows on Python 3.9 and 3.13;
-  - a standalone install with no pql-test;
-  - the `pql-test[contracts]` plugin install.
-- `release-pql-odcs.yml` — Publishes pql-odcs to PyPI on `pql-odcs-vX.Y.Z` tags, built from `packages/pql-odcs/` only
+- `pytest.yml` — The full pytest suite on Windows with ADOMD.NET (Stage 3a)
+- `contracts.yml` — `pql-test contract` on Linux (Python 3.9 and 3.13): the contract tests, a CLI smoke test, and a check that `contract run` without XMLA fails cleanly
 
 ## Agentic Workflows
 

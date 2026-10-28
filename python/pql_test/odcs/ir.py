@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Neutral intermediate representation between ODCS rule mapping and DAX emission."""
 
 from __future__ import annotations

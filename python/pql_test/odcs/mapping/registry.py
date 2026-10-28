@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Walk a contract, dispatch every rule to a mapper, and return one outcome per rule."""
 
 from __future__ import annotations

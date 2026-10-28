@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: MIT
-"""Library-rule mappers (rowCount and the v0.1 skip list) and the rule registry."""
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Library-rule mappers (rowCount and the skip list) and the rule registry."""
 
 from __future__ import annotations
 
@@ -59,10 +59,10 @@ class TestRowCount:
 
     def test_must_not_be_between_waits_for_fallback_r2(self):
         given = "rowCount mustNotBeBetween"
-        should = "be skipped with a reason naming fallback R2 and v0.2"
+        should = "be skipped with a reason naming fallback R2, as planned"
         outcome = _object_rule({"metric": "rowCount", "mustNotBeBetween": [1, 5]})
 
-        assert (outcome.status, "R2" in outcome.reason, "v0.2" in outcome.reason) == (Status.SKIPPED, True, True), (
+        assert (outcome.status, "R2" in outcome.reason, "planned" in outcome.reason) == (Status.SKIPPED, True, True), (
             f"{given}: {should}"
         )
 
@@ -99,15 +99,15 @@ class TestRegistry:
     @pytest.mark.parametrize(
         ("rule", "release"),
         [
-            ({"metric": "missingValues", "mustBe": 0}, "v0.2"),
-            ({"metric": "invalidValues", "mustBe": 0, "arguments": {"validValues": ["a"]}}, "v0.2"),
-            ({"metric": "invalidValues", "mustBe": 0, "arguments": {"pattern": "^a$"}}, "v0.3"),
-            ({"metric": "duplicateValues", "mustBe": 5}, "v0.3"),
+            ({"metric": "missingValues", "mustBe": 0}, "is planned"),
+            ({"metric": "invalidValues", "mustBe": 0, "arguments": {"validValues": ["a"]}}, "is planned"),
+            ({"metric": "invalidValues", "mustBe": 0, "arguments": {"pattern": "^a$"}}, "a later release"),
+            ({"metric": "duplicateValues", "mustBe": 5}, "a later release"),
         ],
     )
-    def test_metrics_scheduled_after_v0_1_name_their_release(self, rule, release):
-        given = f"a {rule['metric']} rule that v0.1 cannot map"
-        should = f"be skipped with a reason naming {release}"
+    def test_metrics_not_mapped_yet_say_when(self, rule, release):
+        given = f"a {rule['metric']} rule that is not mapped yet"
+        should = f"be skipped with a reason saying it {release}"
         data = contract_dict(schema=[schema_object("T", [prop("c", quality=[rule])])])
 
         outcome = {o.rule_id: o for o in _map_contract(data)}["T.c.quality[0]"]

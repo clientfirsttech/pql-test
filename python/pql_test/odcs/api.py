@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Python API behind ``pql-test contract``, also usable by adapters."""
 
 from __future__ import annotations

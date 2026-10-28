@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Factory helpers that build fresh ODCS contract dicts for each test (no shared state)."""
 
 from __future__ import annotations

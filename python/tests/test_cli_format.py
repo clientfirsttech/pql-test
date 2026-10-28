@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Unit tests for [python/pql_test/runner/cli_format.py](../pql_test/runner/cli_format.py).
 

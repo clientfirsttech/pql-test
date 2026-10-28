@@ -79,9 +79,7 @@ jobs:
           # exe-replacement race.  Use that form for forward compatibility.
           python -m pip install --upgrade pip
           # The [dev] extras pull in pytest + pytest-cov per pyproject.toml.
-          # [contracts] adds `pql-test contract`; pql-odcs is installed from
-          # source first so the extra resolves to it instead of PyPI.
-          pip install ./packages/pql-odcs "./python[dev,contracts]"
+          pip install "./python[dev]"
 
       # ---------------------------------------------------------------------
       # ADOMD.NET — same install recipe as run-tests-remote.yml.  See that

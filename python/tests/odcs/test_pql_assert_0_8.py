@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """PQL.Assert 0.8 catalog: selection, exact mappings, and the 0.7 fallbacks."""
 
 from __future__ import annotations
@@ -189,7 +189,7 @@ class TestThresholds:
 
     def test_null_thresholds_stay_skipped_on_0_7(self):
         given = "an absolute null threshold under 0.7"
-        should = "keep the v0.2 skip"
+        should = "keep the planned skip"
 
         outcome = _column_rule({"metric": "nullValues", "mustBeLessOrEqualTo": 5}, "0.7")
 
@@ -287,7 +287,7 @@ class TestPatterns:
 
     def test_pattern_rules_stay_skipped_on_0_7(self):
         given = "a simple pattern under 0.7"
-        should = "keep the v0.3 skip"
+        should = "keep the later-release skip"
         rule = {"metric": "invalidValues", "mustBe": 0, "arguments": {"pattern": "ABC"}}
 
         assert _column_rule(rule, "0.7").status is Status.SKIPPED, f"{given}: {should}"
@@ -342,7 +342,7 @@ class TestFreshness:
 
     def test_slas_stay_skipped_on_0_7(self):
         given = "a latency SLA under 0.7"
-        should = "keep the v0.1 skip"
+        should = "keep the skip"
 
         outcome = _outcomes(_table(prop("a", "date")), "0.7", slaProperties=[_sla()])["slaProperties[0]"]
 

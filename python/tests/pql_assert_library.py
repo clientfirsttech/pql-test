@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Query-scoped PQL.Assert 0.8.0 for live tests against a model that has an older library.
 

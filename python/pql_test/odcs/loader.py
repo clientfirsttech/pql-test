@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Load an ODCS contract from YAML or a dict, gate its version, and schema-validate it."""
 
 from __future__ import annotations

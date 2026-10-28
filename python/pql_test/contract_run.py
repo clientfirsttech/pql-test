@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 The connected `pql-test contract` commands: `run` (generate PQL.Assert suites
 from an ODCS contract, run them, and trace the results back to contract rule
@@ -140,14 +140,30 @@ def detect_pql_assert(conn) -> str:
     return _catalog_for_version(deployed_library_version(conn))
 
 
+def xmla_unavailable() -> str | None:
+    """Why this machine cannot query a model over XMLA (no pyadomd / ADOMD.NET), or None when it can."""
+    from pql_test.runner import HAS_PYADOMD
+
+    if HAS_PYADOMD:
+        return None
+    if sys.platform != "win32":
+        return "XMLA needs ADOMD.NET, which runs on Windows only"
+    return "pyadomd (ADOMD.NET) is not installed: pip install pyadomd"
+
+
 def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path):
-    """``(absolute model path, connection or None)``, resolved like `run-tests` (dataset name from the folder)."""
+    """``(absolute model path, connection or None)``, resolved like `run-tests` (dataset name from the folder).
+
+    None without looking for a model when XMLA is unavailable here (see ``xmla_unavailable``).
+    """
     opts = hooks.make_conn_opts(*credentials)
     if not opts.dataset_id and not opts.dataset_name:
         opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
     # local/<name> stays as is: the resolver connects to that open Desktop model and nothing else.
     is_local = parse_model_identifier(model_path).kind == "local"
     abs_path = model_path if is_local else str(Path(model_path).resolve())
+    if xmla_unavailable():
+        return abs_path, None
     return abs_path, resolve_xmla_connection(abs_path, opts)
 
 
@@ -269,8 +285,11 @@ def make_run_command(hooks: RunHooks) -> click.Command:
             click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
             pre_warnings.append("No XMLA connection detected. Tests will be reported as skipped.")
+            unavailable = xmla_unavailable()
             click.echo(
-                _no_local_connection(target)
+                f"Warning: {unavailable}. The suites are generated but not run."
+                if unavailable
+                else _no_local_connection(target)
                 or "Warning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
                 "--tenant-id, --workspace-id, --dataset-id (and --client-id, --client-secret).",
                 err=True,
@@ -425,8 +444,16 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
         from pql_test.odcs.pbip import require_semantic_model_dir
 
         folder, target = resolve_model_target(model_path, model_dir) if model_path else (None, None)
+        from pql_test.odcs.doctor import FAIL, WARN, Check
+        from pql_test.odcs.pbip import local_model_name
+
         report, conn = run_doctor(folder), None
-        if folder and report.ok:
+        unavailable = xmla_unavailable() if folder and report.ok else None
+        if unavailable:
+            # local/<name> asks for the open model, so not reaching it fails; otherwise the live checks are optional.
+            status = FAIL if local_model_name(target) else WARN
+            report.checks.append(Check("XMLA connection", status, f"{unavailable}; the live checks were skipped"))
+        elif folder and report.ok:
             credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
             _, conn = _connect(target, hooks, credentials, require_semantic_model_dir(folder))
             report.checks.extend(live_doctor_checks(conn, report.recommended, local_miss=_no_local_connection(target)))

@@ -80,7 +80,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "orders.order_id.quality[0]",
@@ -111,7 +111,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "orders.customer_id.quality[0]",
@@ -131,7 +131,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "nullValues percent thresholds arrive in v0.2 (units per gap plan C2)"
+      "reason": "nullValues percent thresholds are planned (units per gap plan C2)"
     },
     {
       "ruleId": "orders.customer_id.quality[2]",
@@ -140,7 +140,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "nullValues absolute thresholds arrive in v0.2 (fallback R4: COUNTBLANK)"
+      "reason": "nullValues absolute thresholds are planned (fallback R4: COUNTBLANK)"
     },
     {
       "ruleId": "orders.status.type",
@@ -149,7 +149,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "orders.status.quality[0]",
@@ -158,7 +158,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "invalidValues arrives in v0.2 (Col.ValuesShouldBeInSet, fallback R5)"
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
     },
     {
       "ruleId": "orders.status.quality[1]",
@@ -167,7 +167,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "missingValues arrives in v0.2 (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
     },
     {
       "ruleId": "orders.status.quality[2]",
@@ -176,7 +176,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "invalidValues with a pattern arrives in v0.3 (ShouldMatch per gap plan C3 / R7)"
+      "reason": "invalidValues with a pattern is planned for a later release (ShouldMatch per gap plan C3 / R7)"
     },
     {
       "ruleId": "orders.status.quality[3]",
@@ -185,7 +185,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "invalidValues arrives in v0.2 (Col.ValuesShouldBeInSet, fallback R5)"
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
     },
     {
       "ruleId": "orders.status.quality[4]",
@@ -194,7 +194,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "non-zero duplicateValues thresholds arrive in v0.3 (fallback R6)"
+      "reason": "non-zero duplicateValues thresholds are planned for a later release (fallback R6)"
     },
     {
       "ruleId": "orders.amount.type",
@@ -203,7 +203,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "orders.amount.logicalTypeOptions",
@@ -212,7 +212,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "minimum, maximum arrive in v0.2 (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
+      "reason": "minimum, maximum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
     },
     {
       "ruleId": "orders.code.type",
@@ -221,7 +221,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "orders.code.logicalTypeOptions",
@@ -230,7 +230,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "minLength, maxLength arrive in v0.2 (Col.TextLengthShouldBeInRange)"
+      "reason": "minLength, maxLength checks are planned (Col.TextLengthShouldBeInRange)"
     },
     {
       "ruleId": "orders.address.zip.required",
@@ -248,7 +248,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks arrive in v0.2 (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
     },
     {
       "ruleId": "orders.quality[0]",
@@ -345,7 +345,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "mustNotBeBetween arrives in v0.2 (fallback R2: ShouldBeTrue with an OR)"
+      "reason": "mustNotBeBetween is planned (fallback R2: ShouldBeTrue with an OR)"
     },
     {
       "ruleId": "orders.quality[9]",
@@ -354,7 +354,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "two-column duplicateValues arrives in v0.2 (Col.ComboShouldBeDistinct)"
+      "reason": "two-column duplicateValues is planned (Col.ComboShouldBeDistinct)"
     },
     {
       "ruleId": "orders.quality[10]",
@@ -363,7 +363,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "3+ column duplicateValues arrives in v0.2 (fallback R3: SUMMARIZE)"
+      "reason": "3+ column duplicateValues is planned (fallback R3: SUMMARIZE)"
     },
     {
       "ruleId": "orders.quality[11]",
@@ -432,7 +432,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "composite primary key (a, b); multi-column keys arrive in v0.2"
+      "reason": "composite primary key (a, b); multi-column keys are planned"
     },
     {
       "ruleId": "bridge.a.type",
@@ -441,7 +441,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "bridge.b.primaryKey",
@@ -450,7 +450,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "composite primary key (a, b); multi-column keys arrive in v0.2"
+      "reason": "composite primary key (a, b); multi-column keys are planned"
     },
     {
       "ruleId": "bridge.b.type",
@@ -459,7 +459,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "slaProperties[0]",
@@ -468,7 +468,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "SLA and freshness checks are out of scope for v0.1 (gap plan R8)"
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
     }
   ]
 }

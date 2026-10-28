@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Render IR assertions through the catalog into PQL.Assert ``*.Tests.dax`` suites."""
 
 from __future__ import annotations

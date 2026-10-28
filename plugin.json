@@ -5,7 +5,7 @@
   "author": {
     "name": "clientfirsttech"
   },
-  "license": "BUSL-1.1",
+  "license": "AGPL-3.0-only",
   "keywords": ["power-bi", "power-query", "dax", "xmla", "testing", "pql", "fabric"],
   "skills": "skills/"
 }

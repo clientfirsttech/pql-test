@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Mappers for rules implied by the schema itself: tables, columns, required, keys."""
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ def _primary_key(ctx: MapContext, obj: Mapping, scope: str, target: Target, comp
         if not ctx.supports("tbl.rows_distinct"):
             return skipped(
                 rule_id,
-                f"composite primary key ({', '.join(composite_key)}); multi-column keys arrive in v0.2",
+                f"composite primary key ({', '.join(composite_key)}); multi-column keys are planned",
                 f"{scope} is a primary key (distinct)",
             )
         table = Target(target.table)
@@ -126,23 +126,23 @@ def nested_rules(prop: Mapping, scope: str) -> list[RuleOutcome]:
 _TYPE_OPTION_RELEASES = (
     (
         ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"),
-        "v0.2 (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)",
+        "planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)",
     ),
-    (("minLength", "maxLength"), "v0.2 (Col.TextLengthShouldBeInRange)"),
-    (("pattern",), "v0.3 (ShouldMatch per gap plan C3 / R7)"),
+    (("minLength", "maxLength"), "planned (Col.TextLengthShouldBeInRange)"),
+    (("pattern",), "planned for a later release (ShouldMatch per gap plan C3 / R7)"),
 )
-RELATIONSHIP_REASON = "relationship checks arrive in v0.2 (Relationship.ShouldExist with cardinality and direction)"
+RELATIONSHIP_REASON = "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
 
 
 def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> list[RuleOutcome]:
-    """Column type and logicalTypeOptions rules, which arrive after v0.1 (patterns from PQL.Assert 0.8)."""
+    """Column type and logicalTypeOptions rules, which are not mapped yet (patterns from PQL.Assert 0.8)."""
     out = []
     if prop.get("logicalType") or prop.get("physicalType"):
         declared = prop.get("physicalType") or prop.get("logicalType")
         out.append(
             skipped(
                 f"{scope}.type",
-                "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)",
+                "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)",
                 f"{scope} is {declared}",
             )
         )
@@ -151,7 +151,7 @@ def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope
         out.append(
             skipped(
                 f"{scope}.enum",
-                "enum (allowed values, ODCS 3.2) arrives in v0.2 (Col.ValuesShouldBeInSet)",
+                "enum (allowed values, ODCS 3.2) is planned (Col.ValuesShouldBeInSet)",
                 f"{scope} is one of {', '.join(values)}",
             )
         )
@@ -169,7 +169,7 @@ def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope
     for keys, release in _TYPE_OPTION_RELEASES:
         present = [k for k in keys if k in options and k not in handled]
         if present:
-            checkable.append(f"{', '.join(present)} arrive in {release}")
+            checkable.append(f"{', '.join(present)} checks are {release}")
     if checkable:
         remaining = sorted(k for k in options if k not in handled)
         out.append(
@@ -179,7 +179,7 @@ def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope
 
 
 def relationship_rules(element: Mapping, scope: str) -> list[RuleOutcome]:
-    """v3.1 relationships on a schema object or property (v0.2)."""
+    """v3.1 relationships on a schema object or property (planned)."""
     return [
         skipped(f"{scope}.relationships[{i}]", RELATIONSHIP_REASON, f"{scope} relationship to {rel.get('to', '?')}")
         for i, rel in enumerate(element.get("relationships") or [])
@@ -200,7 +200,7 @@ def sla_rules(ctx: MapContext, contract_data: Mapping) -> list[RuleOutcome]:
         rule_id, description = f"slaProperties[{i}]", f"SLA {sla.get('property', '?')}"
         if not ctx.supports("col.max_date_within_days"):
             out.append(
-                skipped(rule_id, "SLA and freshness checks are out of scope for v0.1 (gap plan R8)", description)
+                skipped(rule_id, "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)", description)
             )
             continue
         out.append(_latency(ctx, sla, rule_id, description))

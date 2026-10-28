@@ -1,4 +1,4 @@
-# Mode B LLM evaluations for the contract skill (pql-test[contracts] / pql-odcs).
+# Mode B LLM evaluations for the contract skill (`pql-test contract`).
 
 - description: Generate tests from a data contract
   vars:
@@ -10,8 +10,8 @@
     - type: llm-rubric
       value: |
         The response should use `pql-test contract generate ... --env DEV` and mention
-        that it needs `pip install pql-test[contracts]` and writes *.Tests.dax files into
-        the model's DAXQueries/ folder.
+        that it writes *.Tests.dax files into the model's DAXQueries/ folder. It should not
+        tell the user to install a separate package or extra.
 
 - description: Which rules are enforced
   vars:
@@ -44,6 +44,6 @@
   assert:
     - type: llm-rubric
       value: |
-        The response must say that in v0.1 MODEL_PATH must be a PBIP folder, that service
-        paths and local/<name> are not accepted yet, and that query-scoped XMLA runs arrive
-        in v0.2. It should suggest running against a local PBIP checkout instead.
+        The response must say that the <workspace>.Workspace/<model>.SemanticModel form is
+        not accepted yet, and suggest a PBIP folder (with PQL_* service credentials for the
+        workspace) or local/<name> for the model open in Power BI Desktop instead.

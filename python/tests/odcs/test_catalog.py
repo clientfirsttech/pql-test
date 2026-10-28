@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit tests for pql_test.odcs.ir and pql_test.odcs.catalog."""
 
 from __future__ import annotations

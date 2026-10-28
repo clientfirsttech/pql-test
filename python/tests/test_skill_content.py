@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """Mode A skill content assertions.
 
 Verifies each SKILL.md documents the actual CLI surface so LLMs never receive

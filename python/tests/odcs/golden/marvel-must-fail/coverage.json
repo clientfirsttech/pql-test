@@ -47,7 +47,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "marvel_fact_exactly_one_row",
@@ -100,7 +100,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     },
     {
       "ruleId": "date_dim_fewer_than_one_row",
@@ -142,7 +142,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+      "reason": "column data type checks are planned (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
     }
   ]
 }

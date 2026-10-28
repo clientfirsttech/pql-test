@@ -1,0 +1,72 @@
+# `pql-test contract` on Linux: the file-only commands (lint, coverage, generate,
+# trace, doctor's file checks) need no ADOMD.NET, so pipelines can run them on
+# ubuntu. The XMLA commands and the full suite run on Windows in pytest.yml.
+
+name: contracts
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: contract commands (ubuntu, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.13']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install pql-test with dev extras
+        run: pip install "./python[dev]"
+
+      - name: pyadomd is not installed on Linux
+        run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('pyadomd') is not None)"
+
+      - name: Contract unit, golden, trace, and property tests
+        working-directory: python
+        run: pytest tests/odcs tests/test_contract_run.py --no-cov -q
+
+      - name: CLI smoke tests
+        run: |
+          set -e
+          F=python/tests/odcs/fixtures
+          M=examples/SampleModel.SemanticModel
+          pql-test contract lint $F/marvel.odcs.yaml $M
+          pql-test contract lint $F/marvel.odcs.yaml local/SampleModel
+          pql-test contract coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
+          python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"
+          pql-test contract generate $F/marvel.odcs.yaml $M --env DEV --dry-run | grep -q "EVALUATE Marvel.Schema.DEV.Tests()"
+          # doctor reads SampleModel's PQL.Assert 0.8.0 from its TMDL; with no XMLA here the live checks only warn.
+          pql-test contract doctor $M --format json > /tmp/doctor.json
+          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.8', r"
+          # Exit code 1 is the contract: every-row has rules the 0.7 catalog skips.
+          if pql-test contract coverage $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
+            echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
+          fi
+
+      - name: contract run without XMLA fails cleanly
+        run: |
+          cp -r examples/SampleModel.SemanticModel /tmp/SampleModel.SemanticModel
+          set +e
+          pql-test contract run python/tests/odcs/fixtures/marvel.odcs.yaml /tmp/SampleModel.SemanticModel --env DEV > /tmp/run.txt 2>&1
+          code=$?
+          set -e
+          cat /tmp/run.txt
+          test "$code" -eq 1 || { echo "::error::expected exit 1 (nothing ran), got $code"; exit 1; }
+          if grep -q "Traceback" /tmp/run.txt; then echo "::error::contract run printed a traceback"; exit 1; fi

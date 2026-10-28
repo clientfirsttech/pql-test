@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Resolve ODCS schema objects and properties to semantic model tables and columns.
 
 The model name comes from the contract itself, so it travels with the contract

@@ -13,17 +13,19 @@ smoke test in about 15 minutes.
 
 ```
 pql-test/
-├── pyproject.toml              ← uv workspace root only (members: python, packages/pql-odcs)
-├── LICENSES.md                 ← which license covers which path
-├── python/                     ← pql-test (BUSL-1.1)
+├── pyproject.toml              ← uv workspace root only (member: python)
+├── LICENSE.txt, NOTICE         ← AGPL-3.0-only, and third-party attributions
+├── LICENSES.md                 ← the license, and the files that carry their own
+├── python/                     ← pql-test
 │   ├── pql_test/               ← CLI implementation
 │   │   ├── cli.py              ← entry point (`pql-test` command)
-│   │   ├── runner.py           ← XMLA + test discovery + execution
-│   │   └── auth/               ← persistent Fabric-CLI-style auth
-│   ├── tests/                  ← pytest suite (mocked + live integration)
+│   │   ├── runner/             ← XMLA + test discovery + execution
+│   │   ├── auth/               ← persistent Fabric-CLI-style auth
+│   │   ├── odcs/               ← ODCS contracts → PQL.Assert suites (`pql-test contract`)
+│   │   └── contract_run.py     ← `pql-test contract run` and `doctor` (the connected commands)
+│   ├── tests/                  ← pytest suite (mocked + live integration); tests/odcs/ for contracts
 │   ├── pyproject.toml          ← single source of truth for version & deps
 │   └── .env.example            ← copy to .env for service-mode credentials
-├── packages/pql-odcs/          ← pql-odcs (MIT): ODCS contracts → PQL.Assert suites
 ├── examples/                   ← three example PBIP models (see "Examples")
 ├── ai/                         ← aidd skills, commands, scaffolds (not shipped)
 ├── tasks/                      ← epic/task documents (historical context)
@@ -34,42 +36,21 @@ pql-test/
 
 pql-test's source lives only in `python/`. The CI workflow installs from
 `./python` (`pip install ./python`); local installs do the same with `-e`.
-`packages/pql-odcs/` is a separate, MIT-licensed package with its own version
-and release tag. See [Contributing to pql-odcs](#contributing-to-pql-odcs-mit).
 
 ---
 
-## Contributing to pql-odcs (MIT)
+## License and sign-off
 
-`packages/pql-odcs/` is licensed under MIT, and the rest of the repository under
-BUSL-1.1 ([LICENSES.md](LICENSES.md)). Keeping that boundary clean is a hard rule:
+pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
 
-- **Never import, copy, or adapt pql-test code** in `packages/pql-odcs/`. That
-  includes `cli_format.py` and the result-JSON parser. pql-odcs knows two things
-  about pql-test, both as data: PQL.Assert function signatures in
-  `src/pql_odcs/catalog/`, and the `--output` JSON shape documented in README.md.
-- **Start every `.py` file with an SPDX header**:
-  `# SPDX-License-Identifier: MIT` under `packages/pql-odcs/`, and
-  `# SPDX-License-Identifier: BUSL-1.1` under `python/`. CI rejects files that
-  are missing the header or carry the wrong one.
-- **Sign off every commit** that touches `packages/pql-odcs/` with the
-  [Developer Certificate of Origin](https://developercertificate.org/):
-  `git commit -s`. The sign-off certifies that you have the right to submit the
-  change under MIT.
-- **Expect a CODEOWNERS review.** Every change under `packages/pql-odcs/` needs
-  approval from a pql-odcs maintainer ([.github/CODEOWNERS](.github/CODEOWNERS)).
-
-Develop both packages together with uv. From the repo root:
-
-```powershell
-uv sync                                       # one .venv; pql-test resolves pql-odcs from source
-.\.venv\Scripts\pytest packages/pql-odcs      # pql-odcs suite (no Power BI needed)
-.\.venv\Scripts\lint-imports --config packages/pql-odcs/pyproject.toml  # license import boundary
-```
-
-pql-odcs is versioned in `packages/pql-odcs/pyproject.toml` and recorded in its
-`CHANGELOG.md`. It is released from `pql-odcs-vX.Y.Z` tags and is **not** part of
-the pql-test version bump.
+- **Start every `.py` file with an SPDX header**: `# SPDX-License-Identifier: AGPL-3.0-only`
+  (after the shebang line, when there is one).
+- **Sign off every commit** with the [Developer Certificate of Origin](https://developercertificate.org/):
+  `git commit -s`. The sign-off certifies that you have the right to submit the change under AGPL-3.0-only.
+- **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, LGPL, or GPL-3.0 licensed packages.
+- **Keep the contract file commands free of XMLA.** `pql-test contract lint|coverage|generate|trace`
+  only read and write files, so they run on Linux CI. Import ADOMD.NET-dependent code lazily, inside
+  `run` and `doctor` only.
 
 ---
 
@@ -177,7 +158,6 @@ Prerequisites check:
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available
-  ✅ pql-odcs (optional, `pql-test contract` commands) — pql-odcs 0.1.0 available — run `pql-test contract doctor` to check a model
 
 All prerequisites met.
 ```

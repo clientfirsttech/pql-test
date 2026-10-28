@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Join pql-test ``--output`` JSON results back to contract rule ids.
 
 Written from pql-test's documented ``--output`` format (README, "Save JSON results"):

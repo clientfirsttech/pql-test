@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """CLI tests for the file-only `pql-test contract` commands."""
 
 from __future__ import annotations

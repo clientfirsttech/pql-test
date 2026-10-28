@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """DAX user-defined functions in TMDL: read them, and the PQL.Assert version they carry.
 
 Reads both a PBIP model's ``definition/functions.tmdl`` and a DAX Lib package's

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Every catalog op must call a function that the released PQL.Assert library defines.
 
 The fixture under ``fixtures/pql-assert-0.8.0/`` is the released PQL.Assert 0.8.0 package

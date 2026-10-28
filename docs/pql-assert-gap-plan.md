@@ -1,8 +1,8 @@
 # PQL.Assert Gap Plan (0.7.1 → 0.8.0)
 
 **Audience:** PQL.Assert maintainers and contributors.
-**Status:** proposed, 2026-10-25. PQL.Assert 0.8.0 released; pql-odcs adopts it with `--pql-assert 0.8` (2026-10-27, see [the adoption epic](../tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md)). Four of the names proposed below did not ship. pql-odcs calls the released functions instead: `Col.NonNullValuesShouldBeDistinct` for `NonBlankValuesShouldBeDistinct`, and the existing `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString` (with `matchCase`) for the R7 `ValuesShould…` functions. `tests/test_library_conformance.py` checks pql-odcs's catalogs against a vendored copy of 0.8.0. The `BlankRate…V2`, `NullOrBlankRate…V2`, and pattern live checks are written (`python/tests/test_contract_live.py`) but have not yet run, because the test service principal's secret expired (2026-10-27).
-**Why it exists:** [pql-odcs](../packages/pql-odcs/README.md) turns ODCS data-contract rules into PQL.Assert calls. Building it surfaced places where PQL.Assert 0.7.1 is missing a function, or where an existing function behaves differently from what its name suggests. This plan closes those gaps in 0.8.0 **without breaking anything written against 0.7.1**.
+**Status:** proposed, 2026-10-25. PQL.Assert 0.8.0 released; `pql-test contract` adopts it with `--pql-assert 0.8` (2026-10-27, see [the adoption epic](../tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md)). Four of the names proposed below did not ship. pql-odcs calls the released functions instead: `Col.NonNullValuesShouldBeDistinct` for `NonBlankValuesShouldBeDistinct`, and the existing `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString` (with `matchCase`) for the R7 `ValuesShould…` functions. `tests/test_library_conformance.py` checks pql-odcs's catalogs against a vendored copy of 0.8.0. The `BlankRate…V2`, `NullOrBlankRate…V2`, and pattern live checks are written (`python/tests/test_contract_live.py`) but have not yet run, because the test service principal's secret expired (2026-10-27).
+**Why it exists:** [`pql-test contract`](contracts.md) (developed as pql-odcs) turns ODCS data-contract rules into PQL.Assert calls. Building it surfaced places where PQL.Assert 0.7.1 is missing a function, or where an existing function behaves differently from what its name suggests. This plan closes those gaps in 0.8.0 **without breaking anything written against 0.7.1**.
 
 Every finding below was reproduced with read-only DAX queries against `examples/SampleModel` (dev workspace) on 2026-10-25. Every function whose full body appears below was parsed and run there as a query-scoped `DEFINE FUNCTION`; nothing was deployed to the model. Results are under **Live check**. The variants described only as "same shape" have **not** been run yet: `BlankRate…V2`, `NullOrBlankRate…V2`, and `ValuesShouldContain`. Validate them before release.
 
@@ -219,7 +219,7 @@ function 'PQL.Assert.Col.ValuesShouldStartWith' =
 ```
 
 - Add `Col.ValuesShouldEndWith` (using `RIGHT`) and `Col.ValuesShouldContain` (using `CONTAINSSTRINGEXACT`) in the same shape.
-- pql-odcs will translate only simple anchored regexes into these: `^literal`, `literal$`, and a bare literal. Every other pattern stays reported as skipped.
+- `pql-test contract` translates only simple anchored regexes into these: `^literal`, `literal$`, and a bare literal. Every other pattern stays reported as skipped.
 - **Live check:** `MarvelSource[EYE]` ends with "Eyes" fails, with 4 distinct values that don't (e.g. "Black Eyeballs").
 
 ### R8 — Freshness
@@ -243,7 +243,7 @@ function 'PQL.Assert.Col.MaxDateShouldBeWithinDays' =
 
 ## Summary of 0.8.0
 
-| ID | New in 0.8.0 | Replaces (kept, deprecated) | ODCS rule it unlocks in pql-odcs |
+| ID | New in 0.8.0 | Replaces (kept, deprecated) | ODCS rule it unlocks in `pql-test contract` |
 |---|---|---|---|
 | R1 | `LibraryVersion` | — | catalog selection |
 | C1 / R4 | `Col.NullCountShouldBeAtMost` | `Col.ShouldNotBeNull` (docs only) | `required`, `nullValues` with an absolute threshold |
@@ -258,9 +258,9 @@ function 'PQL.Assert.Col.MaxDateShouldBeWithinDays' =
 
 That is 16 new functions, 0 changed signatures, and 0 removals.
 
-## How pql-odcs adopts 0.8.0
+## How `pql-test contract` adopts 0.8.0
 
-pql-odcs keeps working against 0.7.1 models while adopting the new functions:
+`pql-test contract` keeps working against 0.7.1 models while adopting the new functions:
 
 1. Add a second catalog, `catalog/pql_assert_0_8.yaml`, alongside the existing `pql_assert_0_7.yaml`, which stays as it is.
 2. The new catalog maps `col.distinct`/`col.primary_key` to the C4 functions and `required` to `NullCountShouldBeAtMost(…, 0)`. It adds ops for R2–R8.

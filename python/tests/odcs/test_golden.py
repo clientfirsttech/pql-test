@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Golden files: fixture contracts must regenerate byte-identical DAX and coverage JSON.
 
 Regenerate after an intended change with:

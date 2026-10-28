@@ -1,4 +1,4 @@
-# Exercises every row of the mapping catalog (docs/pql-odcs-implementation-plan.md),
+# Exercises every row of the mapping catalog (docs/contracts.md),
 # including rows scheduled for later releases, which must appear as skipped.
 apiVersion: v3.1.0
 kind: DataContract

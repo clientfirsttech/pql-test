@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit tests for pql_test.odcs.results (pql-test --output JSON -> contract rule ids)."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Unit tests for pql_test.odcs.api (plan + generate) and pql_test.odcs.pbip (model folder helpers)."""
 
 from __future__ import annotations

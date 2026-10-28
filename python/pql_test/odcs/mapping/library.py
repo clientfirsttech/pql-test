@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Mapper for ODCS library quality rules (rowCount, nullValues, duplicateValues, ...)."""
 
 from __future__ import annotations
@@ -123,18 +123,18 @@ def map_library(
     if metric == "missingValues":
         return skipped(
             rule_id,
-            "missingValues arrives in v0.2 (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)",
+            "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)",
             description,
         )
     if metric == "invalidValues":
         pattern = (rule.get("arguments") or {}).get("pattern")
         if pattern and not ctx.supports("col.contains"):
             return skipped(
-                rule_id, "invalidValues with a pattern arrives in v0.3 (ShouldMatch per gap plan C3 / R7)", description
+                rule_id, "invalidValues with a pattern is planned for a later release (ShouldMatch per gap plan C3 / R7)", description
             )
         if pattern:
             return _invalid_pattern(ctx, rule_id, obj, prop, cmp, description, severity_of(rule), pattern)
-        return skipped(rule_id, "invalidValues arrives in v0.2 (Col.ValuesShouldBeInSet, fallback R5)", description)
+        return skipped(rule_id, "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)", description)
     return skipped(rule_id, f"unrecognised library metric {metric!r}", description)
 
 
@@ -162,7 +162,7 @@ def _row_count(ctx, rule_id, obj, prop, cmp, description, severity) -> RuleOutco
             return emit("tbl.rows_between", **bounds)
         if ctx.supports("tbl.rows_not_between"):
             return emit("tbl.rows_not_between", **bounds)
-        return skipped(rule_id, "mustNotBeBetween arrives in v0.2 (fallback R2: ShouldBeTrue with an OR)", description)
+        return skipped(rule_id, "mustNotBeBetween is planned (fallback R2: ShouldBeTrue with an OR)", description)
     if not _is_number(value):
         return skipped(rule_id, f"{op} needs a number, got {value!r}", description)
     whole = float(value).is_integer()
@@ -200,7 +200,7 @@ def _null_values(rule, ctx, rule_id, obj, prop, cmp, description, severity) -> R
         return approximated(rule_id, EMPTY_STRING_IS_BLANK, assertion) if is_text(prop) else mapped(rule_id, assertion)
     if rule.get("unit") == "percent":
         if not ctx.supports("col.null_pct_at_most"):
-            return skipped(rule_id, "nullValues percent thresholds arrive in v0.2 (units per gap plan C2)", description)
+            return skipped(rule_id, "nullValues percent thresholds are planned (units per gap plan C2)", description)
         op, value = cmp
         if op == "mustBeLessOrEqualTo" and _is_number(value) and 0 <= value <= 100:
             return mapped(rule_id, emit("col.null_pct_at_most", maxPct=value))
@@ -208,7 +208,7 @@ def _null_values(rule, ctx, rule_id, obj, prop, cmp, description, severity) -> R
             rule_id, f"nullValues percent maps only for mustBeLessOrEqualTo 0-100, got {op} {value!r}", description
         )
     if not ctx.supports("col.null_count_at_most"):
-        return skipped(rule_id, "nullValues absolute thresholds arrive in v0.2 (fallback R4: COUNTBLANK)", description)
+        return skipped(rule_id, "nullValues absolute thresholds are planned (fallback R4: COUNTBLANK)", description)
     ceiling = _whole_ceiling(cmp)
     if ceiling is None:
         return skipped(
@@ -241,7 +241,7 @@ def _duplicate_values(rule, ctx, rule_id, obj, prop, cmp, description, severity)
         return mapped(rule_id, assertion)
     if ceiling is None and ctx.supports("col.duplicates_at_most"):
         return skipped(rule_id, f"duplicateValues maps only as a ceiling, got {cmp[0]} {cmp[1]!r}", description)
-    return skipped(rule_id, "non-zero duplicateValues thresholds arrive in v0.3 (fallback R6)", description)
+    return skipped(rule_id, "non-zero duplicateValues thresholds are planned for a later release (fallback R6)", description)
 
 
 def _duplicate_columns(rule, ctx, rule_id, obj, cmp, description, severity) -> RuleOutcome:
@@ -251,9 +251,9 @@ def _duplicate_columns(rule, ctx, rule_id, obj, cmp, description, severity) -> R
         return skipped(rule_id, "duplicateValues on a schema object needs arguments.properties", description)
     if not ctx.supports("tbl.rows_distinct"):
         reason = (
-            "two-column duplicateValues arrives in v0.2 (Col.ComboShouldBeDistinct)"
+            "two-column duplicateValues is planned (Col.ComboShouldBeDistinct)"
             if len(names) == 2
-            else "3+ column duplicateValues arrives in v0.2 (fallback R3: SUMMARIZE)"
+            else "3+ column duplicateValues is planned (fallback R3: SUMMARIZE)"
         )
         return skipped(rule_id, reason, description)
     if not _is_zero_ceiling(cmp):

@@ -17,7 +17,9 @@ What makes it unique:
 - GitHub Copilot CLI plugin with installable skills for AI-assisted testing workflows
 - Built-in CI pipeline for structural validation, skill evaluation, and remote DAX test execution
 
-**pql-odcs** is a companion package in the same repository, under the MIT license. It converts [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.x data contract quality rules into PQL.Assert `*.Tests.dax` suites, and reports every contract rule as mapped, approximated, or skipped, so no rule is dropped silently. It ships standalone on PyPI (the `pql-odcs` CLI) for Bitol and datacontract-cli users. pql-test exposes it as `pql-test contract …` through the optional `pql-test[contracts]` extra.
+**`pql-test contract`** converts [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.x data contract quality rules into PQL.Assert `*.Tests.dax` suites, runs them, and reports every contract rule as mapped, approximated, or skipped, so no rule is dropped silently. It is part of pql-test, with one CLI and one license. Tools such as datacontract-cli integrate CLI-to-CLI: they hand a contract to `pql-test contract run` and read its `--output` JSON.
+
+pql-test is licensed under AGPL-3.0-only (Client First Technologies).
 
 ## Target Users
 
@@ -37,13 +39,13 @@ What makes it unique:
 
 ## Architecture
 
-- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`, plus plugin groups from the `pql_test.commands` entry point (`contract` from pql-odcs, with the BUSL `contract run` in `python/pql_test/contract_run.py`)
+- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`, and `contract` (`lint`, `coverage`, `generate`, `trace` from `python/pql_test/odcs/cli.py`; `run` and `doctor` from `python/pql_test/contract_run.py`)
 - **Core Runner** (`python/pql_test/runner/`) — Refactored module package for test discovery and execution via XMLA/ADOMD.NET
 - **Skill Distribution** (`python/pql_test/skills/`, `python/pql_test/skills_resolver.py`) — Version-matched skills packaged in wheel, installable to any harness (Claude, Copilot, Cursor, Windsurf)
 - **Plugin Skills** (`skills/`) — Source skills with YAML frontmatter (name, description, version), SudoLang behavioral contracts
 - **CI Pipeline** (`.github/workflows/`) — 3-stage pipeline: validate-plugin → promptfoo-eval → run-tests-remote
 - **AIDD Framework** (`ai/`, `.github/agents/`) — AI-Driven Development skills and agent definitions
-- **pql-odcs** (`packages/pql-odcs/`, MIT) — Contract loader, name resolution, rule mappers, versioned PQL.Assert catalog, DAX emitter, coverage, and result tracing. Plugs into pql-test through the `pql_test.commands` entry point group. Has its own version, changelog, release tag (`pql-odcs-v*`), and cross-platform CI.
+- **Contracts** (`python/pql_test/odcs/`) — ODCS contract loader, name resolution, rule mappers, versioned PQL.Assert catalog, DAX emitter, coverage, and result tracing, behind `pql-test contract`.
 
 ## Constraints
 
@@ -52,8 +54,8 @@ What makes it unique:
 - Service principal authentication requires Azure AD app registration
 - Python >= 3.9 is the minimum supported version
 - DAX test files must follow `*.Tests.dax` naming convention in `DAXQueries/` directory
-- **One-way license boundary** — pql-test (BUSL-1.1) may depend on pql-odcs (MIT). pql-odcs never imports, vendors, or copies pql-test code. Its only knowledge of pql-test is data: PQL.Assert function signatures in its catalog, and pql-test's documented `--output` JSON shape.
-- pql-odcs runtime dependencies are limited to MIT, BSD, or Apache-2.0 licensed packages. It needs no ADOMD.NET and must run on Linux, macOS, and Windows. All XMLA transport stays in pql-test.
+- **One license** — Everything is AGPL-3.0-only, except unmodified third-party files that keep their own license (the Bitol ODCS JSON schemas, the vendored PQL.Assert test fixture). Runtime dependencies must be AGPL-compatible.
+- The file-only contract commands (`lint`, `coverage`, `generate`, `trace`) need no ADOMD.NET and should run on Linux for CI pipelines. XMLA commands stay Windows-only.
 
 ## Success Criteria
 
@@ -66,4 +68,4 @@ What makes it unique:
 - CI guards prevent skill format drift or missing frontmatter
 - Developers can discover and run tests with a single CLI command
 - An ODCS contract generates byte-identical PQL.Assert suites on every run, and every contract rule appears in the coverage report
-- CI blocks any change that crosses the license boundary (imports, SPDX headers, wheel contents, dependency licenses)
+- Every source file carries the AGPL-3.0-only SPDX header

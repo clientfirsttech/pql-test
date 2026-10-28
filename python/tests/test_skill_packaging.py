@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for skill packaging and format validation."""
 
 from __future__ import annotations
@@ -136,3 +136,29 @@ def test_pyproject_includes_package_data():
     
     assert 'skills/**/*.md' in pql_test_data, \
         "pyproject.toml missing skills/**/*.md in package-data"
+
+
+def test_pyproject_ships_contract_data_and_license_files():
+    """Given pyproject.toml, should ship the ODCS schemas, PQL.Assert catalogs, LICENSE.txt, and NOTICE."""
+    try:
+        import tomllib  # Python 3.11+ stdlib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
+
+    with open(Path(__file__).parent.parent / 'pyproject.toml', 'rb') as f:
+        project = tomllib.load(f)
+    package_data = project['tool']['setuptools']['package-data']
+
+    assert (
+        package_data.get('pql_test.odcs'),
+        package_data.get('pql_test.odcs.catalog'),
+        project['project']['license'],
+        project['project']['license-files'],
+    ) == (['schemas/*.json', 'schemas/*.txt'], ['*.yaml'], 'AGPL-3.0-only', ['LICENSE.txt', 'NOTICE'])
+
+
+def test_license_and_notice_copies_match():
+    """Given the repo-root and python/ copies, should keep LICENSE.txt and NOTICE byte-identical."""
+    repo, package = Path(__file__).parents[2], Path(__file__).parents[1]
+
+    assert [(repo / n).read_bytes() == (package / n).read_bytes() for n in ('LICENSE.txt', 'NOTICE')] == [True, True]

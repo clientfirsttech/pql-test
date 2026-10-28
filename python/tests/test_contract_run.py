@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for `pql-test contract run` (pql_test.contract_run)."""
 
 from __future__ import annotations
@@ -15,6 +15,12 @@ from pql_test.runner import TestResult
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def _xmla_available(monkeypatch):
+    """Act as if pyadomd were installed (it is not on Linux CI); the tests stub the connection itself."""
+    monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: None)
 
 
 def _result(suite: str, passed: bool = True, skipped: bool = False) -> TestResult:
@@ -437,4 +443,58 @@ class TestLocalModelPath:
             1,
             "fail",
             "No instance for 'Sample'.",
+        ), f"{given}: {should}\n{result.output}"
+
+
+class TestWithoutXmla:
+    """No pyadomd here (Linux): the file checks still run, and nothing tries to connect."""
+
+    REASON = "XMLA needs ADOMD.NET, which runs on Windows only"
+
+    @pytest.fixture(autouse=True)
+    def _no_xmla(self, monkeypatch):
+        monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: self.REASON)
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: pytest.fail("connected"))
+
+    @staticmethod
+    def _doctor(model_path: str):
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "doctor", model_path, "--format", "json"])
+        return result, {c["name"]: c for c in json.loads(result.output)["checks"]}
+
+    def test_doctor_warns_and_still_recommends(self):
+        given = "contract doctor on examples/SampleModel where XMLA is unavailable"
+        should = "pass with a warning that names the reason, and still recommend 0.8 from the TMDL"
+
+        result, checks = self._doctor(str(REPO_ROOT / "examples" / "SampleModel.SemanticModel"))
+
+        assert (result.exit_code, checks["XMLA connection"]["status"], self.REASON in checks["XMLA connection"]["detail"]) == (
+            0,
+            "warn",
+            True,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_doctor_local_fails(self, monkeypatch):
+        given = "contract doctor local/SampleModel where XMLA is unavailable"
+        should = "fail: local/<name> asks for the open model, which cannot be reached"
+        monkeypatch.chdir(REPO_ROOT)
+
+        result, checks = self._doctor("local/SampleModel")
+
+        assert (result.exit_code, checks["XMLA connection"]["status"]) == (1, "fail"), f"{given}: {should}\n{result.output}"
+
+    def test_run_writes_the_suites_and_says_why_they_did_not_run(self, tmp_path):
+        given = "contract run where XMLA is unavailable"
+        should = "write the suites, say why they did not run, and exit 1 (nothing ran)"
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "run", str(FIXTURES / "marvel.odcs.yaml"), str(model), "--env", "DEV"])
+
+        assert (result.exit_code, (model / "DAXQueries").is_dir(), f"Warning: {self.REASON}." in result.output) == (
+            1,
+            True,
+            True,
         ), f"{given}: {should}\n{result.output}"

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """PBIP folder helpers: locate the ``*.SemanticModel`` folder and read TMDL table/column names."""
 
 from __future__ import annotations

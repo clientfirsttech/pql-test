@@ -9,7 +9,7 @@ version = "0.2.0"
 description = "CLI for discovering and running DAX tests in Power BI PBIP semantic models via XMLA"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "BUSL-1.1"
+license = "AGPL-3.0-only"
 license-files = ["LICENSE.txt", "NOTICE"]
 keywords = ["power-bi", "fabric", "dax", "xmla", "testing", "pql", "semantic-model", "pbip"]
 authors = [
@@ -24,6 +24,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -35,7 +36,9 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
-    "pyadomd>=0.0.5",
+    # XMLA (ADOMD.NET) is Windows-only. Without it, the file-only `pql-test contract`
+    # commands still work, so pipelines can run them on Linux.
+    "pyadomd>=0.0.5; sys_platform == 'win32'",
     "msal>=1.24.0",
     "azure-identity>=1.19.0",
     "keyring>=25.0.0",

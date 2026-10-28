@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Reading DAX user-defined functions (and their PQL.Assert version) from TMDL."""
 
 from __future__ import annotations

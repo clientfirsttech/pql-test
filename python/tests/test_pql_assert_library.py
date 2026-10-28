@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-only
 """Offline tests for the query-scoped PQL.Assert 0.8.0 helper used by the live contract tests."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: AGPL-3.0-only
 """Schema-rule mappers: object present, properties present, closed schema, required, distinct."""
 
 from __future__ import annotations
@@ -71,8 +71,8 @@ class TestObjectRules:
 
 class TestScheduledRules:
     def test_rules_scheduled_for_later_releases_are_reported_as_skipped(self):
-        given = "types, logicalTypeOptions, relationships, and SLA properties (all after v0.1)"
-        should = "each appear as a skipped rule naming its release, never dropped"
+        given = "types, logicalTypeOptions, relationships, and SLA properties (not mapped by the 0.7 catalog)"
+        should = "each appear as a skipped rule saying when, never dropped"
         data = contract_dict(
             schema=[
                 schema_object(
@@ -97,10 +97,10 @@ class TestScheduledRules:
         actual = {
             rid: (rules[rid].status, release in rules[rid].reason)
             for rid, release in [
-                ("Orders.amount.type", "v0.2"),
-                ("Orders.amount.logicalTypeOptions", "v0.2"),
-                ("Orders.code.logicalTypeOptions", "v0.3"),
-                ("Orders.relationships[0]", "v0.2"),
+                ("Orders.amount.type", "planned"),
+                ("Orders.amount.logicalTypeOptions", "planned"),
+                ("Orders.code.logicalTypeOptions", "a later release"),
+                ("Orders.relationships[0]", "planned"),
                 ("slaProperties[0]", "R8"),
             ]
         }
@@ -175,12 +175,12 @@ class TestOdcs32Rules:
         contract = load_contract(contract_dict("v3.2.0", schema=[schema_object("T", list(props))]))
         return {o.rule_id: o for o in map_contract(contract, NameResolver(contract))}
 
-    def test_enum_is_reported_as_skipped_until_v0_2(self):
+    def test_enum_is_reported_as_skipped_and_planned(self):
         given = "a 3.2 property with an enum of allowed values"
-        should = "be skipped with a reason naming v0.2 and Col.ValuesShouldBeInSet"
+        should = "be skipped as planned, naming Col.ValuesShouldBeInSet"
         rule = self._rules(prop("status", enum=[{"value": "open"}, {"value": "closed"}]))["T.status.enum"]
 
-        assert (rule.status, "v0.2" in rule.reason, "ValuesShouldBeInSet" in rule.reason) == (
+        assert (rule.status, "planned" in rule.reason, "ValuesShouldBeInSet" in rule.reason) == (
             Status.SKIPPED,
             True,
             True,
