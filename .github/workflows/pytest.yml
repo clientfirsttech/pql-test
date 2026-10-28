@@ -22,9 +22,15 @@
 #   PQL_ENVIRONMENT    – Cloud environment (Public, USGov, USGovHigh, DOD,
 #                        Germany, China).  Default: Public.
 #
-# Tests marked @pytest.mark.live (TestRlsModel, test_live_service.py)
-# automatically skip when those credentials aren't configured, so the
-# workflow stays green on forks without secrets.
+# Tests marked @pytest.mark.live (TestRlsModel, test_live_service.py,
+# test_contract_live.py) automatically skip when those credentials aren't
+# configured, so the workflow stays green on forks without secrets.
+#
+# test_contract_live.py runs `pql-test contract run` against SampleModel on
+# both PQL.Assert catalogs. Its 0.8 cases define the vendored 0.8.0 functions
+# in the query when the deployed model has an older library. Its
+# auto-detection cases fail when a deployed example model's PQL.Assert
+# differs from the version committed under examples/: publish the model.
 
 name: pytest
 

@@ -391,7 +391,7 @@ class TestRendering:
 
 class TestEveryFixture:
     @pytest.mark.parametrize("version", ["0.7", "0.8"])
-    @pytest.mark.parametrize("name", ["marvel", "marvel-must-fail", "every-row"])
+    @pytest.mark.parametrize("name", ["marvel", "marvel-must-fail", "marvel-0-8", "every-row"])
     def test_every_mapped_rule_renders_against_its_catalog(self, name, version):
         given = f"the {name} fixture planned for PQL.Assert {version}"
         should = "render every assertion and report each function from that catalog"
