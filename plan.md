@@ -14,10 +14,10 @@
 ## Open Items
 
 - **Maintainer steps for the pql-odcs 0.8 live CI and doctor/skill epics (2026-10-27).** All code is committed on `dev-odcs` and passes offline: pql-odcs on Python 3.9 and 3.12, and pql-test's full suite. In order:
-  1. Renew the client secret of the test service principal (app `b15e489a-…`); it expired (AADSTS7000222). Update `python/tests/.env` and the `PQL_CLIENT_SECRET` repository secret. Until then every live test and Stage 3 CI job fails to authenticate.
-  2. Open the upgraded `examples/SampleModel.pbip` (now PQL.Assert 0.8.0) in Power BI Desktop and run `pql-test run-tests local/SampleModel`. Its suites should still pass. 0.8.0 changes the bodies of some functions they call (NULL policy); a review found no NULL actuals, but this has not been run.
-  3. Publish SampleModel to the CI workspace. Then `pql-test contract doctor examples/SampleModel.SemanticModel` should report the deployed PQL.Assert as 0.8.0 with no drift warning. Until then, `test_auto_detection_matches_the_committed_library[SampleModel]` fails by design.
-  4. Run `cd python && pytest tests/test_contract_live.py -v` (14 tests). If an `EXPECTED_0_8` or library-smoke value differs, compare it with the gap plan's live checks before changing the expectation.
+  1. Done 2026-10-28: secret renewed in `python/.env`. Still to do: update the `PQL_CLIENT_SECRET` repository secret, and `python/tests/.env` if anything still reads it (it holds the old secret).
+  2. Done 2026-10-28: the deployed SampleModel's suites ran on PQL.Assert 0.8.0 with 47 passed and 15 failed, all 15 pre-existing: 9 best-practice findings, a duplicate `EyeColorDim[Eye Color]`, the planted `+ 10` in `[Number of Characters]` (2), and 3 referential-integrity checks that compare `COUNTROWS` of an empty table (BLANK) with 0. `ShouldEqual` was already type-strict in the 0.4.0 library the model had before.
+  3. Done 2026-10-28: SampleModel published. `pql-test contract doctor` passes every check: deployed PQL.Assert 0.8.0, no drift.
+  4. Done 2026-10-28: `tests/test_contract_live.py` 14 passed over the service connection. The auto-detection test now refuses the Desktop fallback, which had let it pass against the open .pbip while the secret was expired.
   5. Open a PR from `dev-odcs` to `main`; no CI run exists yet for this branch.
 
 - **pql-odcs PQL.Assert 0.8 live CI** — planned 2026-10-27. Reuses Stage 3a (pytest.yml) as is. Phase A runs the 0.8 suites with query-scoped 0.8.0 functions, so the workspace does not change. Phase B upgrades SampleModel in place to 0.8.0 (decided 2026-10-27); it must be republished for the auto-detection check to pass. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md).

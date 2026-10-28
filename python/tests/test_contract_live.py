@@ -108,6 +108,20 @@ def _connect(model_dir: Path, dataset_var: str = "PQL_DATASET_ID"):
         return None
 
 
+def _connect_deployed(model: str, dataset_var: str):
+    """A service XMLA connection to the deployed *model*, never the Desktop fallback; fails the test otherwise."""
+    from pql_test.cli import _make_conn_opts
+    from pql_test.runner.resolver import _resolve_service_xmla_connection
+
+    opts = _make_conn_opts(
+        *(os.environ.get(k) for k in ("PQL_TENANT_ID", "PQL_WORKSPACE_ID", dataset_var, "PQL_CLIENT_ID", "PQL_CLIENT_SECRET"))
+    )
+    try:
+        return _resolve_service_xmla_connection(opts)
+    except Exception as exc:  # noqa: BLE001 - an expired secret, a missing dataset, ...: say which
+        pytest.fail(f"No XMLA connection to the deployed {model}: {type(exc).__name__}: {exc}")
+
+
 def _connection_available() -> bool:
     from pql_test.runner import HAS_PYADOMD
 
@@ -220,9 +234,8 @@ def test_auto_detection_matches_the_committed_library(model, dataset_var):
         pytest.skip(f"Set {', '.join(SERVICE_VARS)} and {dataset_var} to check the deployed {model}.")
     from pql_test.runner import _execute_dax_query
 
-    conn = _connect(EXAMPLES / f"{model}.SemanticModel", dataset_var)
-    if conn is None:
-        pytest.fail(f"No XMLA connection to the deployed {model}.")
+    # Service only: a Desktop fallback would check the open .pbip, not the deployed model.
+    conn = _connect_deployed(model, dataset_var)
     # A broken connection also reads as "0.7", so prove the connection queries first.
     _execute_dax_query(conn, "EVALUATE { 1 }")
 
