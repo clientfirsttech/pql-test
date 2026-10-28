@@ -13,6 +13,10 @@
 
 ## Open Items
 
+- **pql-odcs PQL.Assert 0.8 live CI** — planned 2026-10-27. Reuses Stage 3a (pytest.yml) as is. Phase A runs the 0.8 suites with query-scoped 0.8.0 functions, so the workspace does not change. Phase B publishes a 0.8.0 model so auto-detection can be checked live. Decision: upgrade SampleModel in place, or add a ContractModel. See [tasks/pql-odcs-live-0-8-ci-epic.md](tasks/pql-odcs-live-0-8-ci-epic.md).
+
+- **pql-odcs doctor and skill** — planned 2026-10-27. Adds an offline `contract doctor` that detects the PQL.Assert version from TMDL, plus live checks when run as `pql-test contract doctor`, and an installable pql-odcs skill. Decisions: the command name, and whether the skill text is written fresh or relicensed. See [tasks/pql-odcs-doctor-and-skill-epic.md](tasks/pql-odcs-doctor-and-skill-epic.md).
+
 - **Local-machine service smoke validation** — `python/tests/.env` is not configured on the maintainer's machine. CI's [run-tests-remote.yml](.github/workflows/run-tests-remote.yml) exercises the service path on every push, so the gap is informational only.
 
 - **PyPI initial release — manual steps remain** — code/config side is ready ([python/pyproject.toml](python/pyproject.toml), [.github/workflows/release.yml](.github/workflows/release.yml), MIT [LICENSE.txt](LICENSE.txt) synced to `python/`, release checklist in [CONTRIBUTING.md](CONTRIBUTING.md)).  Maintainer still has to: (1) `cd python && python -m build && twine check --strict dist/*` locally to confirm a clean build, (2) create accounts on https://test.pypi.org and https://pypi.org if they don't exist, (3) register trusted publishers on both for `pql-test` with workflow name `release.yml` and environments `testpypi` / `pypi`, (4) create matching GitHub Environments in repo settings, (5) `git tag v0.1.0 && git push --tags` to fire the release workflow.  See the "Releasing a new version" section in [CONTRIBUTING.md](CONTRIBUTING.md).
