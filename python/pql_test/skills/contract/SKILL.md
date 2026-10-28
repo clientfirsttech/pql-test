@@ -14,7 +14,7 @@ Interface Contract {
   coverage CONTRACT [--format text|json]   // every rule: mapped | approximated | skipped (+ reason)
   lint CONTRACT [MODEL_PATH]               // ODCS schema validation + every name resolves
   trace CONTRACT RESULTS_JSON              // joins `pql-test run-tests --output` JSON to contract rule ids
-  run CONTRACT MODEL_PATH --env ENV        // generate, then run the generated suites, then trace
+  run CONTRACT MODEL_PATH --env ENV        // generate in memory, run, then trace; writes no files (--write also saves them)
   doctor [MODEL_PATH]                      // environment, the model's PQL.Assert library, the deployed or open model
 
   exit_code: 0 | 1 | 2
@@ -27,7 +27,9 @@ Constraints {
   MODEL_PATH is the same in every contract command: a PBIP folder (the root with the .pbip file, or the
     *.SemanticModel folder), a .pbip file, or local/<name>, which means the one <name>.SemanticModel in this repository.
     With local/<name>, `run` and `doctor` connect only to that model open in Power BI Desktop, even when PQL_* service
-    credentials are set; --model-dir picks the folder when the repository holds several copies.
+    credentials are set; --model-dir picks the folder when the repository holds several copies (doctor, run --write).
+  `run` never changes the PBIP project or the model: suites are built in memory and run as read-only queries.
+    Writing into DAXQueries/ (and so into git and Fabric Git integration) is a separate act: generate, or run --write
     <workspace>.Workspace/<model>.SemanticModel is NOT accepted yet
   Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema or DataQuality;
     the prefix comes from the contract's dataProduct, then its name (override with --suite-prefix)
@@ -39,7 +41,7 @@ Constraints {
     with PQL.Assert.LibraryVersion() and falls back to 0.7); 0.8 needs a model with PQL.Assert 0.8.0 or later
   approximated = generated, but DAX semantics differ (named in the reason): primaryKey/unique/duplicateValues are skewed by blanks;
     required on string columns also counts empty strings as nulls
-  Both workflows are supported: regenerate in CI (`contract run`, generated files git-ignored), or commit the generated
+  Both workflows are supported: regenerate in CI (`contract run`, which writes no files), or commit the generated
     suites and fail CI on drift (`generate` then `git diff --exit-code`); see docs/contracts.md
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule
   Model names come only from the contract: customProperties pbiTable (schema object) / pbiColumn (property), else the ODCS logical name;
@@ -85,11 +87,11 @@ Options shared by `generate`, `coverage`, and `run`:
 - `--pql-assert 0.7|0.8` — PQL.Assert version to generate for (`run` also accepts `auto`, its default).
 - `--fail-on-skipped` — exit 1 when any rule is skipped (generate/coverage; strict CI).
 - `--dry-run` — print the DAX instead of writing files (generate).
-- `--force` — overwrite suite files that pql-test did not generate (generate/run).
+- `--force` — overwrite suite files that pql-test did not generate (generate, run --write).
 
 `doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed or open model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json`, `--model-dir`, and the same connection options as `run`.
 
-`run` also accepts `--verbose`, `--output FILE`, `--log-format azuredevops|github`, and `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
+`run` also accepts `--write` (also save the suites into DAXQueries/), `--verbose`, `--output FILE`, `--log-format azuredevops|github`, and, with `--write`, `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 
 Usage:
 ```
@@ -105,7 +107,7 @@ pql-test contract lint orders.odcs.yaml ./MyModel
 # Write the suites into the PBIP model's DAXQueries/ folder
 pql-test contract generate orders.odcs.yaml ./MyModel --env DEV
 
-# Generate, run, and trace in one step (model open in Power BI Desktop)
+# Generate in memory, run, and trace in one step; writes no files
 pql-test contract run orders.odcs.yaml ./MyModel --env DEV
 
 # The same against the model open in Power BI Desktop, even when PQL_* service credentials are set

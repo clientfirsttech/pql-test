@@ -1336,7 +1336,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 | `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
-| `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites, runs them, and traces every failure back to its contract rule id |
+| `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them, and traces every failure back to its contract rule id. It writes no files and never changes the model; `--write` also saves the suites into `DAXQueries/` |
 | `pql-test contract trace CONTRACT RESULTS_JSON` | Joins an earlier `run-tests --output` file to the contract's rule ids |
 
 MODEL_PATH means the same in every contract command: a PBIP folder, its `.pbip` file, or `local/<name>`, the `<name>.SemanticModel` folder in this repository. With `local/<name>`, `run` and `doctor` connect only to that model open in Power BI Desktop, even when `PQL_*` service credentials are set.

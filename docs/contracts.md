@@ -11,11 +11,11 @@ pql-test contract doctor ./SalesModel                                   # which 
 pql-test contract coverage orders.odcs.yaml                             # which rules can be enforced?
 pql-test contract lint orders.odcs.yaml ./SalesModel                    # contract valid, names resolve?
 pql-test contract generate orders.odcs.yaml ./SalesModel --env DEV      # write *.Tests.dax suites
-pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate, run, trace
+pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate in memory, run, trace
 pql-test contract trace orders.odcs.yaml results.json                   # failures by contract rule id
 ```
 
-`pql-test contract run` runs the generated suites from their files. `pql-test run-tests` runs the suites registered in the deployed model, so it sees generated suites only after the model is published.
+`pql-test contract run` never changes the PBIP project or the model: it builds the suites in memory and runs them as read-only queries. Writing suites into `DAXQueries/` (and so into git and Fabric Git integration) is always a separate act: `generate`, or `run --write`. `pql-test run-tests` runs the suites registered in the deployed model, so it sees generated suites only after the model is published.
 
 ## Commands
 
@@ -24,7 +24,7 @@ pql-test contract trace orders.odcs.yaml results.json                   # failur
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
 | `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
 | `lint CONTRACT [MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve and (with a MODEL_PATH) that every table and column exists in the model's TMDL |
-| `run CONTRACT MODEL_PATH --env ENV` | Generates the suites, runs them over XMLA, and traces the results to rule ids (`--output`, `--log-format azuredevops\|github`, and the `run-tests` connection options) |
+| `run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them over XMLA, and traces the results to rule ids, without writing any file (`--output`, `--log-format azuredevops\|github`, and the `run-tests` connection options). `--write` also saves the suites into `DAXQueries/`, like `generate` |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
 | `doctor [MODEL_PATH] [--format text\|json]` | Checks Python, the dependencies, and the bundled schemas and catalogs. With a PBIP model, reads its PQL.Assert library from `definition/functions.tmdl`, recommends the `--pql-assert` value whose every function the model defines, and checks the deployed or open model's library |
 
@@ -36,7 +36,7 @@ pql-test contract trace orders.odcs.yaml results.json                   # failur
 - `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pql-assert-08).
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `run`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
-- `--force` overwrites suite files that pql-test did not generate (`generate`, `run`).
+- `--force` overwrites suite files that pql-test did not generate (`generate`, and `run --write`).
 
 **Exit codes**:
 - 0 means success.
@@ -61,14 +61,13 @@ Both workflows are supported. Pick one per model repository.
 |---|---|---|
 | Source of truth | The contract alone | The contract, plus the generated files |
 | Drift | Impossible: suites are rebuilt on every run | Possible, so CI must check for it (below) |
-| Visible in Power BI Desktop's DAX query view | Only after a local `generate` | Yes |
+| Visible in Power BI Desktop's DAX query view | No (only after a local `generate`) | Yes |
 | Published with the model (Fabric git integration) | No | Yes, as files in `DAXQueries/` |
 | Counted by `pql-test code-coverage` | No | No: files in `DAXQueries/` are not model functions. A persistent deploy is planned. |
 | Review | Review the contract | Review the contract and the DAX diff |
 
 **Regenerate in CI.**
-1. Don't commit the generated files. Ignore them by prefix, for example in `.gitignore`: `**/DAXQueries/Marvel.*.Tests.dax`.
-2. In CI, run one step, which generates, runs and traces:
+In CI, run one step, which generates the suites in memory, runs them, and traces the results. It writes no files, so nothing needs ignoring:
    ```bash
    pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json --log-format github
    ```

@@ -253,14 +253,14 @@ def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, 
     if detect_pql_assert(conn) != "0.8":
         # Older PQL.Assert in the model: define the 0.8.0 functions it lacks in each suite's query.
         library, model_names = load_library(), model_function_names(conn, _execute_dax_query)
-        parse = contract_run._parse_dax_test_file
+        suite_test = contract_run.suite_test
 
-        def parse_with_library(path: str):
-            text = Path(path).read_text(encoding="utf-8")
-            Path(path).write_text(with_definitions(text, missing_definitions(text, model_names, library)), encoding="utf-8")
-            return parse(path)
+        def suite_test_with_library(suite_file):
+            test = suite_test(suite_file)
+            test.source = with_definitions(test.source, missing_definitions(test.source, model_names, library))
+            return test
 
-        monkeypatch.setattr(contract_run, "_parse_dax_test_file", parse_with_library)
+        monkeypatch.setattr(contract_run, "suite_test", suite_test_with_library)
 
     result, statuses = _run("marvel-0-8.odcs.yaml", sample_model_copy, tmp_path / "v08.json", "0.8")
 

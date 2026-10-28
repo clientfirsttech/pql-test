@@ -7,8 +7,9 @@ ids) and `doctor` (file checks plus the deployed or open model's library).
 The file-only commands live in ``pql_test.odcs.cli``; ``register_contract_commands``
 adds these two to that group.
 
-Generated suites run from their own ``DEFINE FUNCTION ... EVALUATE`` text with
-``run_tests()``. ``run_tests_from_model`` would only run suites already
+`run` never changes the PBIP project: it renders the suites in memory and runs them
+from their own ``DEFINE FUNCTION ... EVALUATE`` text with ``run_tests()``. Writing them
+into ``DAXQueries/`` is a separate act (``generate``, or ``run --write``). ``run_tests_from_model`` would only run suites already
 registered in the live model, which skips suites that were just generated.
 """
 
@@ -30,7 +31,8 @@ from pql_test.runner import (
     run_tests,
 )
 from pql_test.runner.cli_format import STATUS_COLORS, banner
-from pql_test.runner.model_path import _parse_dax_test_file, parse_model_identifier
+from pql_test.runner.model_path import parse_model_identifier
+from pql_test.runner.models import PqlTest
 
 # trace status -> cli_format status color key
 _TRACE_COLORS = {"failed": "FAIL", "error": "FAIL", "not_executed": "SKIP", "skipped": "SKIP"}
@@ -152,13 +154,13 @@ def xmla_unavailable() -> str | None:
     return "ADOMD.NET is not available (pyadomd or its assemblies are missing); run `pql-test check-prereqs`"
 
 
-def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path):
+def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_model_dir: Path | None):
     """``(absolute model path, connection or None)``, resolved like `run-tests` (dataset name from the folder).
 
     None without looking for a model when XMLA is unavailable here (see ``xmla_unavailable``).
     """
     opts = hooks.make_conn_opts(*credentials)
-    if not opts.dataset_id and not opts.dataset_name:
+    if semantic_model_dir is not None and not opts.dataset_id and not opts.dataset_name:
         opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
     # local/<name> stays as is: the resolver connects to that open Desktop model and nothing else.
     is_local = parse_model_identifier(model_path).kind == "local"
@@ -184,6 +186,16 @@ def resolve_model_target(model_path: str, model_dir: str | None) -> tuple[str, s
     # One spelling (local/<name>, never local\<name>), so the resolver connects to that open model only.
     target = f"local/{name}"
     return model_dir or target, target
+
+
+def suite_test(suite_file) -> PqlTest:
+    """A runnable test for one rendered suite: its own ``DEFINE FUNCTION ... EVALUATE`` text, no file needed."""
+    return PqlTest(
+        name=Path(suite_file.file_name).stem,
+        file_path="",
+        source=suite_file.content,
+        description=f"DAX function: {suite_file.function_name}",
+    )
 
 
 def _model_dir_option(command: Callable) -> Callable:
@@ -222,7 +234,13 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         show_default=True,
         help="PQL.Assert version to generate for. auto asks the model (PQL.Assert.LibraryVersion).",
     )
-    @click.option("--force", is_flag=True, help="Overwrite suite files that pql-test did not generate.")
+    @click.option(
+        "--write",
+        is_flag=True,
+        help="Also save the suites into the model's DAXQueries/ folder (like `generate`). Off by default: run "
+        "leaves the PBIP project untouched.",
+    )
+    @click.option("--force", is_flag=True, help="With --write: overwrite suite files that pql-test did not generate.")
     @click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail for every result.")
     @click.option("--output", default=None, metavar="FILE", help="Write full JSON results to FILE.")
     @click.option(
@@ -241,6 +259,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         suite_prefix: str | None,
         closed_schema: bool,
         pql_assert: str,
+        write: bool,
         force: bool,
         verbose: bool,
         output: str | None,
@@ -251,20 +270,22 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         client_id: str | None,
         client_secret: str | None,
     ) -> None:
-        """Generate suites from CONTRACT into a PBIP MODEL_PATH, run them, and trace results to rule ids.
+        """Generate suites from CONTRACT, run them against the model, and trace results to rule ids.
 
+        The suites are built in memory: run never changes the PBIP project or the model. Pass
+        --write to also save them into DAXQueries/ (or use `pql-test contract generate`).
         MODEL_PATH is a PBIP path, or local/<model_name> to run against that model open in
-        Power BI Desktop (its suites go into --model-dir, or the <model_name>.SemanticModel
-        under the current folder). Warning-severity rules run in <ENV>WARN suites: they are
-        reported but do not fail the run.
+        Power BI Desktop. Warning-severity rules run in <ENV>WARN suites: they are reported but
+        do not fail the run.
 
         \b
         Examples:
           pql-test contract run orders.odcs.yaml ./MyModel --env DEV
           pql-test contract run orders.odcs.yaml local/MyModel --env DEV
           pql-test contract run orders.odcs.yaml ./MyModel --env DEV --output results.json --log-format github
+          pql-test contract run orders.odcs.yaml ./MyModel --env DEV --write
         """
-        from pql_test.odcs.api import GenerateError, generate, plan_contract
+        from pql_test.odcs.api import GenerateError, generate, plan_contract, render
         from pql_test.odcs.emit.dax import EmitError
         from pql_test.odcs.loader import ContractError, load_contract
         from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
@@ -275,11 +296,16 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         except ContractError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
+        if not write and (force or model_dir):
+            raise click.UsageError(f"{'--force' if force else '--model-dir'} goes with --write: run writes no files otherwise.")
         folder, target = resolve_model_target(model_path, model_dir)
-        try:
-            semantic_model_dir = require_semantic_model_dir(folder)
-        except ModelPathError as exc:
-            raise click.UsageError(str(exc)) from None
+        # A PBIP folder is checked (and names the dataset); local/<name> needs one only to --write into.
+        semantic_model_dir = None
+        if write or not target.startswith("local/"):
+            try:
+                semantic_model_dir = require_semantic_model_dir(folder)
+            except ModelPathError as exc:
+                raise click.UsageError(str(exc)) from None
 
         # The connection comes first: `--pql-assert auto` asks the model which PQL.Assert it has.
         credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
@@ -291,7 +317,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
             pre_warnings.append("No XMLA connection detected. Tests will be reported as skipped.")
             unavailable = xmla_unavailable()
             click.echo(
-                f"Warning: {unavailable}. The suites are generated but not run."
+                f"Warning: {unavailable}. The suites are not run."
                 if unavailable
                 else _no_local_connection(target)
                 or "Warning: No XMLA connection detected. Open the model in Power BI Desktop, or supply "
@@ -305,17 +331,18 @@ def make_run_command(hooks: RunHooks) -> click.Command:
 
         plan = plan_contract(contract, closed_schema=closed_schema, pql_assert=pql_assert)
         try:
-            generated = generate(plan, folder, env=env, suite_prefix=suite_prefix, force=force)
+            if write:
+                generated = generate(plan, folder, env=env, suite_prefix=suite_prefix, force=force)
+                files = generated.files
+                click.echo(f"Wrote {len(generated.written)} suite(s) to {generated.target_dir}")
+            else:
+                files = render(plan, env=env, suite_prefix=suite_prefix)
+                click.echo(f"Generated {len(files)} suite(s) in memory; no files were written (--write saves them).")
         except (EmitError, ModelPathError, GenerateError) as exc:
             raise click.UsageError(str(exc)) from None
-        click.echo(f"Generated {len(generated.written)} suite(s) in {generated.target_dir}")
 
-        tests = [_parse_dax_test_file(str(p)) for p in generated.written]
-        results = run_tests(
-            tests,
-            conn,
-            skip_message="No XMLA connection available; generated suites were written but not run.",
-        )
+        tests = [suite_test(f) for f in files]
+        results = run_tests(tests, conn, skip_message="No XMLA connection available; the suites were not run.")
         suite = summarise(abs_path, tests, results)
         if log_format == "azuredevops":
             hooks.print_azuredevops(suite, pre_warnings=pre_warnings)
@@ -335,7 +362,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         else:
             print_trace(report)
 
-        blocking = {f.function_name for f in generated.files if f.blocking}
+        blocking = {f.function_name for f in files if f.blocking}
         sys.exit(exit_code(results, blocking))
 
     return run

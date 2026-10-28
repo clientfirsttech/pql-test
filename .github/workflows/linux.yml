@@ -60,16 +60,18 @@ jobs:
             echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
           fi
 
-      - name: contract run without XMLA fails cleanly
+      - name: contract run without XMLA fails cleanly and changes nothing
         run: |
-          cp -r examples/SampleModel.SemanticModel /tmp/SampleModel.SemanticModel
           set +e
-          pql-test contract run python/tests/odcs/fixtures/marvel.odcs.yaml /tmp/SampleModel.SemanticModel --env DEV > /tmp/run.txt 2>&1
+          pql-test contract run python/tests/odcs/fixtures/marvel.odcs.yaml examples/SampleModel.SemanticModel --env DEV > /tmp/run.txt 2>&1
           code=$?
           set -e
           cat /tmp/run.txt
           test "$code" -eq 1 || { echo "::error::expected exit 1 (nothing ran), got $code"; exit 1; }
           if grep -q "Traceback" /tmp/run.txt; then echo "::error::contract run printed a traceback"; exit 1; fi
+          # run must leave the PBIP project untouched (DAXQueries/ is synced by Git integration).
+          changed=$(git status --porcelain --untracked-files=all -- examples)
+          test -z "$changed" || { echo "::error::contract run changed the project: $changed"; exit 1; }
 
       - name: XMLA commands stop with one Windows-only message
         run: |

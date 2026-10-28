@@ -93,7 +93,7 @@ class TestContractRunCommand:
     def test_generates_runs_and_traces_without_a_connection(self, tmp_path, monkeypatch):
         given = "contract run against a PBIP copy with no XMLA connection available"
         should = (
-            "write the suites, report every mapped rule as not executed, write --output, exit 1, "
+            "leave the model folder untouched, report every mapped rule as not executed, write --output, exit 1, "
             "and not claim the catalog was detected from the model"
         )
         model = tmp_path / "Sample.SemanticModel"
@@ -108,18 +108,15 @@ class TestContractRunCommand:
             cli, ["contract", "run", str(tmp_path / "marvel.odcs.yaml"), str(model), "--env", "DEV", "--output", str(out)]
         )
 
-        written = sorted(p.name for p in (model / "DAXQueries").iterdir())
         saved = json.loads(out.read_text(encoding="utf-8"))
         assert (
             result.exit_code,
-            written,
+            sorted(p.name for p in model.iterdir()),
             "NOT EXECUTED" in result.output,
             saved["skipped"] > 0,
             saved["contract"]["summary"]["not_executed"] > 0,
             "0.7 catalog selected (no XMLA connection to ask the model" in result.output,
-        ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True, True, True), (
-            f"{given}: {should}\n{result.output}"
-        )
+        ) == (1, ["definition"], True, True, True, True), f"{given}: {should}\n{result.output}"
 
     @pytest.mark.parametrize(
         "args, reported, expected",
@@ -143,7 +140,8 @@ class TestContractRunCommand:
             encoding="utf-8",
         )
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: SimpleNamespace(server="s", catalog="c"))
-        monkeypatch.setattr("pql_test.contract_run.run_tests", lambda *_a, **_k: [])
+        ran = []
+        monkeypatch.setattr("pql_test.contract_run.run_tests", lambda tests, *_a, **_k: ran.extend(tests) or [])
 
         def library_version(*_a):
             if reported is None:
@@ -155,7 +153,7 @@ class TestContractRunCommand:
 
         result = CliRunner().invoke(cli, ["contract", "run", str(contract), str(model), "--env", "DEV", *args])
 
-        text = "".join(p.read_text(encoding="utf-8") for p in (model / "DAXQueries").iterdir())
+        text = "".join(t.source for t in ran)
         assert expected in text, f"{given}: {should}\n{result.output}"
 
     def test_invalid_contract_exits_1(self, tmp_path):
@@ -361,17 +359,42 @@ class TestLocalModelPath:
 
         return CliRunner().invoke(cli, ["contract", *[str(a) for a in args]])
 
-    def test_run_connects_to_the_open_model_and_writes_into_model_dir(self, tmp_path, monkeypatch):
-        given = "contract run CONTRACT local/Sample --model-dir <folder>"
-        should = "ask the resolver for local/Sample as given and write the suites into --model-dir"
-        model = self._model(tmp_path)
+    def test_run_needs_no_folder_for_the_open_model(self, tmp_path, monkeypatch):
+        given = "contract run CONTRACT local/Sample from a folder with no Sample.SemanticModel"
+        should = "ask the resolver for local/Sample as given, with no folder lookup and nothing written"
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
         targets = []
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda target, _o: targets.append(target))
 
-        self._invoke("run", FIXTURES / "marvel.odcs.yaml", "local/Sample", "--model-dir", model, "--env", "DEV")
+        result = self._invoke("run", FIXTURES / "marvel.odcs.yaml", "local/Sample", "--env", "DEV")
 
-        assert (targets, (model / "DAXQueries" / "Marvel.Schema.DEV.Tests.dax").exists()) == (["local/Sample"], True), (
-            f"{given}: {should}"
+        assert (targets, "no files were written" in result.output, list(tmp_path.iterdir())) == (
+            ["local/Sample"],
+            True,
+            [tmp_path / ".git"],
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_write_saves_into_model_dir(self, tmp_path, monkeypatch):
+        given = "contract run CONTRACT local/Sample --write --model-dir <folder>"
+        should = "save the suites into that folder's DAXQueries/"
+        model = self._model(tmp_path)
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+
+        self._invoke("run", FIXTURES / "marvel.odcs.yaml", "local/Sample", "--write", "--model-dir", model, "--env", "DEV")
+
+        assert (model / "DAXQueries" / "Marvel.Schema.DEV.Tests.dax").exists(), f"{given}: {should}"
+
+    @pytest.mark.parametrize("option", [["--force"], ["--model-dir", "x"]])
+    def test_write_only_options_need_write(self, tmp_path, option):
+        given = f"contract run with {option[0]} and no --write"
+        should = "exit 2: run writes no files without --write"
+        model = self._model(tmp_path)
+
+        result = self._invoke("run", FIXTURES / "marvel.odcs.yaml", model, "--env", "DEV", *option)
+
+        assert (result.exit_code, f"{option[0]} goes with --write" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
         )
 
     def test_folder_is_found_from_the_repository_root(self, tmp_path, monkeypatch):
@@ -485,18 +508,18 @@ class TestWithoutXmla:
 
         assert (result.exit_code, checks["XMLA connection"]["status"]) == (1, "fail"), f"{given}: {should}\n{result.output}"
 
-    def test_run_writes_the_suites_and_says_why_they_did_not_run(self, tmp_path):
+    def test_run_says_why_the_suites_did_not_run(self, tmp_path):
         given = "contract run where XMLA is unavailable"
-        should = "write the suites, say why they did not run, and exit 1 (nothing ran)"
+        should = "say why the suites did not run, write nothing, and exit 1 (nothing ran)"
         model = tmp_path / "Sample.SemanticModel"
         (model / "definition").mkdir(parents=True)
         from pql_test.cli import cli
 
         result = CliRunner().invoke(cli, ["contract", "run", str(FIXTURES / "marvel.odcs.yaml"), str(model), "--env", "DEV"])
 
-        assert (result.exit_code, (model / "DAXQueries").is_dir(), f"Warning: {self.REASON}." in result.output) == (
+        assert (result.exit_code, (model / "DAXQueries").exists(), f"Warning: {self.REASON}." in result.output) == (
             1,
-            True,
+            False,
             True,
         ), f"{given}: {should}\n{result.output}"
 
