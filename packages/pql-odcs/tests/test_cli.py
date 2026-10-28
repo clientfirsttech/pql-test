@@ -231,3 +231,25 @@ def test_lint_model_names_are_case_insensitive(tmp_path):
     result = _run("lint", _write_contract(tmp_path), "--model", model)
 
     assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
+
+
+class TestStandalone:
+    def test_run_points_to_pql_test(self):
+        given = "pql-odcs run (a pql-test command)"
+        should = "exit 2 with the pql-test contract run command instead of 'No such command'"
+        from pql_odcs.cli import standalone
+
+        result = CliRunner().invoke(standalone(), ["run", "c.odcs.yaml", "--model", "local/Sample"])
+
+        assert (result.exit_code, "pql-test contract run CONTRACT MODEL_PATH --env ENV" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_other_unknown_commands_keep_clicks_error(self):
+        given = "an unknown pql-odcs command other than run"
+        should = "keep click's 'No such command' usage error"
+        from pql_odcs.cli import standalone
+
+        result = CliRunner().invoke(standalone(), ["nope"])
+
+        assert (result.exit_code, "No such command 'nope'" in result.output) == (2, True), f"{given}: {should}"

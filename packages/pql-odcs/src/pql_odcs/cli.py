@@ -297,12 +297,28 @@ def skill_cmd(harness, uninstall, show, root, dry_run, force):
         raise click.exceptions.Exit(1)
 
 
+RUN_HINT = (
+    "`run` is a pql-test command: running suites needs a connection to the model, and pql-odcs never connects. "
+    "Use `pql-test contract run CONTRACT MODEL_PATH --env ENV` (pip install pql-test[contracts], Windows only), "
+    "or `pql-odcs generate` to write the same suites without running them."
+)
+
+
+class _StandaloneGroup(click.Group):
+    """`pql-odcs` points `run` at pql-test instead of answering "No such command"."""
+
+    def resolve_command(self, ctx, args):
+        if args and args[0] == "run" and "run" not in self.commands:
+            raise click.UsageError(RUN_HINT, ctx)
+        return super().resolve_command(ctx, args)
+
+
 def standalone() -> click.Group:
     """The `pql-odcs` command: the contract commands plus `skill`.
 
     pql-test mounts only `contract` (it has its own `pql-test skill`), so `skill` lives here.
     """
-    return click.Group(
+    return _StandaloneGroup(
         name="pql-odcs",
         commands={**contract.commands, "skill": skill_cmd},
         callback=contract.callback,

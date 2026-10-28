@@ -10,3 +10,4 @@ independently of pql-test and released from `pql-odcs-vX.Y.Z` tags.
 - `doctor [MODEL_PATH]` checks the environment and reads a PBIP model's PQL.Assert library from its TMDL, then recommends a `--pql-assert` value. `generate --pql-assert auto` uses the same reading.
 - `skill` prints the pql-odcs skill for AI coding agents, or installs it into a project for Claude, Copilot, Cursor, or Windsurf.
 - A MODEL_PATH of `local/<name>` (pql-test's name for a model open in Power BI Desktop) gets its own message: pass the PBIP folder, or use `pql-test contract run`.
+- `pql-odcs run` says that `run` is `pql-test contract run`, instead of "No such command".
