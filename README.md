@@ -213,7 +213,7 @@ pql-test check-prereqs
 
 ### Updating the version
 
-[`python/pyproject.toml`](python/pyproject.toml) is the **single source of truth** for the version.
+[`python/pyproject.toml`](https://github.com/clientfirsttech/pql-test/blob/main/python/pyproject.toml) is the **single source of truth** for the version.
 The CLI reads it at runtime via `importlib.metadata`, so there is no other file to update.
 
 Bump `version` in `pyproject.toml` before each new build:
@@ -591,7 +591,7 @@ Credentials are stored securely using the platform keyring:
 
 ❌ **Avoid**: `Workspace.ReadWrite.All`, tenant admin roles, or workspace Admin access unless specifically required.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
+See [CONTRIBUTING.md](https://github.com/clientfirsttech/pql-test/blob/main/CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
 
 ### RLS/OLS Security Model
 
@@ -661,7 +661,7 @@ EVALUATE
 - Share RLS test credentials (each developer should use their own identity)
 - Assume `EffectiveUserName` validates email addresses (it doesn't)
 
-**Threat Model**: See [docs/security-threat-model.md](docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
+**Threat Model**: See [docs/security-threat-model.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
 
 ### Secret Rotation
 
@@ -1054,7 +1054,7 @@ ssss
 
 ### code-coverage
 
-Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps. See [docs/code-coverage-explained.md](docs/code-coverage-explained.md) for a one-page walkthrough with diagrams.
+Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps. See [docs/code-coverage-explained.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/code-coverage-explained.md) for a one-page walkthrough with diagrams.
 
 ```bash
 pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output <file>]
@@ -1080,7 +1080,7 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 
 **What "covered" means — and what it doesn't**
 
-This is **dependency coverage**, not **assertion coverage**. An object counts as covered when a discovered test UDF has direct, verifiable evidence linking it to that object — never inferred from transitive dependencies, and never presented as covered just because *some* test happens to touch it indirectly through a PQL.Assert helper. But direct evidence only proves a test *references* the object, not that the test's assertion meaningfully validates its behavior: a test that checks a table has more than zero rows and a test that validates every business rule on that table both count as "covered" the same way. Treat a low score as "nothing here has been tested at all" and a high score as "these objects are at least referenced by a test" — not as a correctness guarantee. See [tasks/direct-udf-code-coverage-metadata-contract.md](tasks/direct-udf-code-coverage-metadata-contract.md) for the full verified evidence contract per category, including:
+This is **dependency coverage**, not **assertion coverage**. An object counts as covered when a discovered test UDF has direct, verifiable evidence linking it to that object — never inferred from transitive dependencies, and never presented as covered just because *some* test happens to touch it indirectly through a PQL.Assert helper. But direct evidence only proves a test *references* the object, not that the test's assertion meaningfully validates its behavior: a test that checks a table has more than zero rows and a test that validates every business rule on that table both count as "covered" the same way. Treat a low score as "nothing here has been tested at all" and a high score as "these objects are at least referenced by a test" — not as a correctness guarantee. See [tasks/direct-udf-code-coverage-metadata-contract.md](https://github.com/clientfirsttech/pql-test/blob/main/tasks/direct-udf-code-coverage-metadata-contract.md) for the full verified evidence contract per category, including:
 
 - **Tables, calculated columns, measures** — covered via a direct `INFO.CALCDEPENDENCY()` edge from a discovered test UDF. The strongest evidence category: the DAX engine itself reports the reference.
 - **Relationships** — covered only when a test UDF's own DAX expression text contains a `PQL.Assert.Relationship.ShouldExist(...)` call matching a real relationship. `INFO.CALCDEPENDENCY()` can't see this at all, because the helper takes the relationship as string arguments, not a compiled reference — so this is parsed out of the expression text instead.
@@ -1117,7 +1117,7 @@ By category:
 
 The overall line and each category's percentage are colored with the same
 PASS/FAIL/SKIP (green/red/yellow) vocabulary `run-tests` uses (see
-[CLI Output Conventions](CONTRIBUTING.md#cli-output-conventions)):
+[CLI Output Conventions](https://github.com/clientfirsttech/pql-test/blob/main/CONTRIBUTING.md#cli-output-conventions)):
 
 | Mode | Green | Yellow | Red |
 |---|---|---|---|
