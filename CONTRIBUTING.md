@@ -105,9 +105,11 @@ fails when a command drifts.
 
 - **`-v/--verbose` and `-q/--quiet`** (`verbosity_options`) on every command that prints a
   report. Quiet prints only the summary line, which the command marks with
-  `record_summary()`. Warnings and errors still go to stderr, and the exit code never
-  changes. A result printed on stdout (JSON, a contract, DAX) is never suppressed. Passing
-  both flags is a usage error.
+  `record_summary()`; the rest of the report (including a warnings section on stdout) is
+  hidden, messages written to stderr still appear, and the exit code never changes. A
+  result printed on stdout (JSON, CI annotations from `--log-format`, a contract, DAX) is
+  never suppressed. Passing both flags is a usage error. `--verbose` takes the command's own
+  help text through `verbosity_options(verbose_help=...)`.
 - **`--format text|json`** (`format_option`) is the one way to ask for machine-readable
   output. With `--format json`, stdout carries only the JSON, printed with `emit_result()`;
   every other line goes to stderr automatically. `retrieve-tests` and `retrieve-test` default
@@ -121,7 +123,9 @@ fails when a command drifts.
   - `--test NAME` selects one test suite.
 - **Renaming an option:** keep the old spelling working with `deprecated_alias()`, placed
   above the option it aliases. The alias is hidden from `--help`, warns once on stderr, and
-  behaves exactly as before. Today's aliases:
+  behaves exactly as before. When both spellings are given with different values, it is a
+  usage error; an explicit value equal to the default cannot be told apart from no value, so
+  the alias wins then. Today's aliases:
   - `--human` for `--format text`;
   - `-u`/`--user` for `--client-id`;
   - `-p`/`--password` for `--client-secret`;

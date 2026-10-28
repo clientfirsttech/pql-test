@@ -49,7 +49,7 @@ Environment-specific test discovery (--env):
 
 Power BI cloud environment (Public, USGov, China, …):
   Not a per-command flag.  It comes from the credential stored by
-  `pql-test auth login --environment <cloud>`, or from the PQL_ENVIRONMENT
+  `pql-test auth login --cloud <cloud>`, or from the PQL_ENVIRONMENT
   env var when explicit service-principal credentials are supplied
   (e.g. CI pipelines).  Default: Public.
 
@@ -550,7 +550,7 @@ def conn_options(func):
 
 # Test-environment selector (--env).  The Power BI *cloud* environment is
 # not a per-command flag: it comes from the stored `pql-test auth login
-# --environment` credential (or the PQL_ENVIRONMENT env var), so --env here
+# --cloud` credential (or the PQL_ENVIRONMENT env var), so --env here
 # unambiguously means the test-suite environment.
 _env_option = click.option(
     "--env",
@@ -961,7 +961,10 @@ def cmd_retrieve_test(
     help="Run only the named test suite.",
 )
 @format_option(help="Output format: the test report (text) or the JSON results on stdout.")
-@verbosity_options()
+@verbosity_options(
+    result_on_stdout=lambda kw: bool(kw.get("log_format")),
+    verbose_help="Show per-assertion detail (message and duration) for every result.",
+)
 @output_option("Write the full JSON results to FILE, as well as the report.")
 @click.option(
     "--log-format",
@@ -1159,8 +1162,7 @@ def cmd_run_tests(
     if output:
         out_path = Path(output)
         out_path.write_text(json.dumps(_suite_to_dict(suite), indent=2), encoding="utf-8")
-        # stdout carries the JSON itself with --format json, so the note goes to stderr then.
-        click.echo(f"\nJSON results written to: {output}", err=output_format == "json")
+        click.echo(f"\nJSON results written to: {output}")
 
     # Exit non-zero on hard test failures OR when tests were discovered but
     # none actually ran (every result was skipped because no XMLA connection
@@ -1299,13 +1301,10 @@ def _validate_finite_min_coverage(
 
 @cli.command("code-coverage")
 @click.argument("model_path", metavar="MODEL_PATH")
-@click.option(
-    "--format", "output_format",
-    type=click.Choice(["text", "json"], case_sensitive=False),
-    default="text",
-    help="Output format: human-readable text (default) or a stable JSON report.",
+@format_option(help="Output format: human-readable text (default) or a stable JSON report.")
+@verbosity_options(
+    verbose_help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
 )
-@verbosity_options()
 @output_option("Write the JSON report to FILE, as well as the report.")
 @click.option(
     "--min-coverage", "min_coverage",
@@ -1391,7 +1390,7 @@ def cmd_code_coverage(
         text = json.dumps(payload, indent=2)
         if output:
             Path(output).write_text(text, encoding="utf-8")
-            click.echo(f"Coverage report written to: {output}")
+            emit_result(f"Coverage report written to: {output}")  # on stdout, as before --format json moved notes
         else:
             emit_result(text)
     else:
@@ -1408,11 +1407,12 @@ def cmd_code_coverage(
             )
             sys.exit(1)
         # Mirror pytest-cov's "Required test coverage of N% reached" so CI logs
-        # show the gate was evaluated. Goes to stderr when JSON is on stdout.
-        click.echo(
-            f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%",
-            err=output_format == "json" and not output,
-        )
+        # show the gate was evaluated. On stderr while the JSON report is on stdout.
+        reached = f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%"
+        if output_format == "json" and output:
+            emit_result(reached)  # stdout has no JSON then (it went to the file), so the note stays there
+        else:
+            click.echo(reached)
 
 
 # ---------------------------------------------------------------------------
@@ -1480,16 +1480,16 @@ def cmd_auth_login(
       pql-test auth login
 
       # Service principal with secret
-      pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+      pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 
       # Service principal with certificate
-      pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+      pql-test auth login --client-id <client-id> --certificate cert.pem --tenant-id <tenant-id>
 
       # Managed identity (system-assigned)
       pql-test auth login --identity
 
       # Managed identity (user-assigned)
-      pql-test auth login --identity -u <client-id>
+      pql-test auth login --identity --client-id <client-id>
     """
     from pql_test.auth import AuthenticationManager, AuthMethod, CredentialConfig
 
@@ -1511,7 +1511,7 @@ def cmd_auth_login(
         # Federated credential
         if not all([user_or_client, tenant_id]):
             click.echo(
-                "Error: Federated credential requires --user (client ID) and --tenant",
+                "Error: Federated credential requires --client-id and --tenant-id",
                 err=True,
             )
             sys.exit(1)
@@ -1530,7 +1530,7 @@ def cmd_auth_login(
         # Certificate-based auth
         if not all([user_or_client, tenant_id]):
             click.echo(
-                "Error: Certificate auth requires --user (client ID) and --tenant",
+                "Error: Certificate auth requires --client-id and --tenant-id",
                 err=True,
             )
             sys.exit(1)
@@ -1550,7 +1550,7 @@ def cmd_auth_login(
         # Service principal with secret
         if not tenant_id:
             click.echo(
-                "Error: Service principal auth requires --tenant",
+                "Error: Service principal auth requires --tenant-id",
                 err=True,
             )
             sys.exit(1)

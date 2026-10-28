@@ -66,7 +66,7 @@ Options:
 - `-v, --verbose` — List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets. Without it, only the overall percentage and per-category counts are printed.
 - `--format text|json` — Output format. `text` (default) is human-readable; `json` emits the stable report shape.
 - `-o, --output FILE` — Write the JSON report to FILE. With `--format text`, the text report is printed as well.
-- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
+- `-q, --quiet` — Print only the summary line (messages on stderr still appear; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--min-coverage PERCENT` — Exit `1` when overall eligible coverage is below PERCENT (0-100), after the report is written; prints `Required coverage of N% reached` when met. Also colors the report pass/fail against PERCENT instead of the default 50/80 watermarks. A malformed or out-of-range value fails with a Click usage error (exit 2) before any XMLA query.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).

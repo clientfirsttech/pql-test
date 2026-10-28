@@ -150,9 +150,9 @@ def generate_cmd(
 @click.argument("model_path", metavar="MODEL_PATH")
 @click.option("--table", "tables", multiple=True, metavar="NAME", help="Describe only this table (repeatable).")
 @click.option("--id", "contract_id", help="Contract id (default: the model name, lowercased with dashes).")
-@output_option("Write the contract to FILE instead of stdout.")
+@output_option("Write the contract to FILE instead of stdout.", type=click.Path(dir_okay=False))
 @click.option("--force", is_flag=True, help="With --output: overwrite an existing file.")
-@verbosity_options(result_on_stdout=lambda kw: not kw.get("output"))
+@verbosity_options(result_on_stdout=lambda kw: True)  # the contract (or the note on stderr) is the result
 def init_cmd(model_path, tables, contract_id, output, force):
     """Start an ODCS contract from MODEL_PATH: its tables, columns, and types, read from the TMDL.
 
@@ -188,7 +188,6 @@ def init_cmd(model_path, tables, contract_id, output, force):
         raise click.UsageError(f"{path} exists; pass --force to overwrite it.") from None
     except OSError as exc:
         raise click.UsageError(f"Cannot write {path}: {exc.strerror or exc}.") from None
-    record_summary(f"wrote   {path}")
     click.echo(f"wrote   {path}", err=True)
 
 

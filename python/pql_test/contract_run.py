@@ -249,7 +249,10 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     )
     @click.option("--force", is_flag=True, help="With --write: overwrite suite files that pql-test did not generate.")
     @format_option(help="Output format: the test and rule report (text), or the JSON results on stdout.")
-    @verbosity_options()
+    @verbosity_options(
+        result_on_stdout=lambda kw: bool(kw.get("log_format")),
+        verbose_help="Show per-assertion detail for every result.",
+    )
     @output_option("Write the full JSON results (with the per-rule trace) to FILE, as well as the report.")
     @click.option(
         "--log-format",
@@ -370,8 +373,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
 
         if output:
             Path(output).write_text(payload, encoding="utf-8")
-            # stdout carries the JSON itself with --format json, so the note goes to stderr then.
-            click.echo(f"\nJSON results written to: {output}", err=output_format == "json")
+            click.echo(f"\nJSON results written to: {output}")
         if log_format:
             print_trace_annotations(report, log_format.lower())
         elif output_format != "json":

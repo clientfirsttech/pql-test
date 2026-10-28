@@ -15,7 +15,7 @@ Options:
 - `--test NAME` — Show only the named test suite.
 - `--format json|text` — `json` (default) prints a JSON array; `text` prints a readable list. (The old `--human` flag still works as a deprecated alias.)
 - `-v, --verbose` — With `--format text`: also show file paths and the resolved XMLA connection.
-- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
+- `-q, --quiet` — Print only the summary line (messages on stderr still appear; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).
 - `--dataset-id ID` — Dataset / semantic model GUID (or set `PQL_DATASET_ID` env var).
@@ -23,7 +23,7 @@ Options:
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
 - `--env ENV` — List only test suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`), matching the `<Suite>.<ENV>.Tests` naming convention (or set `PQL_TEST_ENV` env var).
 
-The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --environment`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
+The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --cloud`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
 
 Usage:
 ```

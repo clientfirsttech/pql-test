@@ -4,9 +4,9 @@
 Conventions (see CONTRIBUTING.md, "CLI Argument Conventions"):
 
 - ``-v/--verbose`` and ``-q/--quiet`` on every command that prints a report. Quiet prints
-  only the report's summary line on stdout; warnings and errors still go to stderr, and the
-  exit code never changes. A result printed on stdout (JSON, a contract, DAX) is never
-  suppressed.
+  only the report's summary line on stdout; messages written to stderr still appear, and the
+  exit code never changes. A result printed on stdout (JSON, CI annotations, a contract, DAX)
+  is never suppressed.
 - ``--format text|json`` is the one way to ask for machine-readable output.
 - ``--output FILE`` / ``-o FILE`` writes the command's result to FILE.
 - Old spellings stay as hidden aliases (``deprecated_alias``): left out of ``--help``, they
@@ -40,7 +40,9 @@ def record_summary(line: str) -> None:
     _summary.append(click.unstyle(line).strip())
 
 
-def verbosity_options(result_on_stdout: Callable[[dict], bool] | None = None) -> Callable:
+def verbosity_options(
+    result_on_stdout: Callable[[dict], bool] | None = None, verbose_help: str = "Show more detail."
+) -> Callable:
     """Add ``-v/--verbose`` and ``-q/--quiet`` to a command.
 
     *result_on_stdout(kwargs)* says when stdout carries the command's result (JSON, a file's
@@ -79,7 +81,7 @@ def verbosity_options(result_on_stdout: Callable[[dict], bool] | None = None) ->
                     click.echo(line)
 
         wrapper = click.option("--quiet", "-q", is_flag=True, help="Print only the summary line.")(wrapper)
-        return click.option("--verbose", "-v", is_flag=True, help="Show more detail.")(wrapper)
+        return click.option("--verbose", "-v", is_flag=True, help=verbose_help)(wrapper)
 
     return decorator
 
@@ -89,23 +91,24 @@ def format_option(default: str = "text", help: str | None = None) -> Callable:
     return click.option(
         "--format",
         "output_format",
-        type=click.Choice(["text", "json"]),
+        type=click.Choice(["text", "json"], case_sensitive=False),
         default=default,
         show_default=True,
         help=help or "Output format: a report (text) or machine-readable JSON.",
     )
 
 
-def output_option(help: str) -> Callable:
+def output_option(help: str, type: Any = None) -> Callable:
     """``--output FILE`` / ``-o FILE``, passed to the command as ``output``."""
-    return click.option("--output", "-o", "output", default=None, metavar="FILE", help=help)
+    return click.option("--output", "-o", "output", default=None, metavar="FILE", type=type, help=help)
 
 
 def deprecated_alias(*names: str, to: str, use: str, value: Any = _MISSING, **option_kwargs: Any) -> Callable:
     """A hidden old spelling of the option whose parameter is *to* (shown as *use* in the warning).
 
     The alias is left out of ``--help``. When given, it warns on stderr and fills *to*, unless
-    *to* was also given with a different value, which is a usage error. With *value*, the alias
+    *to* was also given with a different, non-default value, which is a usage error (an explicit
+    value equal to the default cannot be told apart from no value, so the alias wins then). With *value*, the alias
     is a flag that sets *to* to that value (e.g. ``--human`` for ``--format text``).
 
     Place it above the option it aliases, so that option is already declared when it is applied.

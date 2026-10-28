@@ -54,7 +54,7 @@ The command auto-detects a locally-open Power BI Desktop instance via the Analys
 Options:
 - `--test NAME` — Run only the named test suite.
 - `-v, --verbose` — Show per-assertion detail (message and duration) for every result.
-- `-q, --quiet` — Print only the summary line (warnings and errors still go to stderr; the exit code is unchanged). Cannot be combined with `--verbose`.
+- `-q, --quiet` — Print only the summary line (messages on stderr still appear; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--format text|json` — `text` (default) prints the test report; `json` prints the JSON results on stdout instead. Cannot be combined with `--log-format`.
 - `-o, --output FILE` — Write full JSON results to FILE in addition to the report.
 - `--log-format github` — Emit GitHub Actions native log annotations (`::group::` / `::error::` / `::notice::`).
@@ -66,7 +66,7 @@ Options:
 - `--client-secret SECRET` — Service principal client secret (or set `PQL_CLIENT_SECRET` env var).
 - `--env ENV` — Run only test suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`), matching the `<Suite>.<ENV>.Tests` naming convention (or set `PQL_TEST_ENV` env var).
 
-The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --environment`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
+The Power BI cloud environment (`Public`, `USGov`, `China`, …) is not a flag: it comes from the credential stored by `pql-test auth login --cloud`, or from the `PQL_ENVIRONMENT` env var when explicit service-principal credentials are supplied. Default: `Public`.
 
 Exit codes: `0` = all tests passed, `1` = one or more tests failed.
 

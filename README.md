@@ -726,7 +726,7 @@ pql-test retrieve-tests <modelPath> [--env <environment>] [--format json|text] [
 | `--env <environment>` | ❌ | Only list suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--format <fmt>` | ❌ | `json` (default) or `text` (a readable list; `--human` still works as a deprecated alias) |
 | `--verbose`, `-v` | ❌ | With `--format text`: also print file paths and connection info |
-| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 
 **Example:**
 
@@ -807,7 +807,7 @@ pql-test retrieve-test <modelPath> <name> [--verbose]
 | `<name>` or `--test <name>` | ✅ | Test suite name (file stem without `.dax`); give one of them |
 | `--format <fmt>` | ❌ | `json` (default) or `text` (`--human` still works as a deprecated alias) |
 | `--verbose`, `-v` | ❌ | Also print the full DAX source |
-| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 
 **Example:**
 
@@ -850,7 +850,7 @@ pql-test run-tests <modelPath> [--test <name>] [--env <environment>] [--verbose]
 | `--test <name>` | ❌ | Run only the named test suite |
 | `--env <environment>` | ❌ | Run only suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
-| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 | `--format <fmt>` | ❌ | `text` (default, the report) or `json` (the JSON results on stdout); not with `--log-format` |
 | `--output <file>`, `-o` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
 | `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
@@ -939,7 +939,7 @@ environment segment (e.g. `Calcs.Tests`) never match an `--env` filter.
 
 > **Note:** the Power BI *cloud* (`Public`, `USGov`, `China`, …) is not a
 > per-command flag. It comes from the credential stored by
-> `pql-test auth login --environment <cloud>`, or from the `PQL_ENVIRONMENT`
+> `pql-test auth login --cloud <cloud>`, or from the `PQL_ENVIRONMENT`
 > env var when explicit service-principal credentials are supplied.
 
 **Save JSON results to a file while still printing to the console:**
@@ -1070,7 +1070,7 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 | `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
 | `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
 | `--output <file>`, `-o` | ❌ | Write the JSON report to `<file>`; with `--format text` the text report is printed as well |
-| `--quiet`, `-q` | ❌ | Print only the summary line (warnings and errors still go to stderr); not with `--verbose` |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 | `--min-coverage <percent>` | ❌ | Exit `1` when overall eligible coverage is below `<percent>` (0-100); prints `Required coverage of N% reached` when met (like pytest-cov's `--cov-fail-under`). Also switches the report colors to pass/fail against the threshold. A malformed or out-of-range value fails before any XMLA query |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (or set `PQL_WORKSPACE_ID`) |

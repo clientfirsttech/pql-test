@@ -25,6 +25,8 @@ REPORT_COMMANDS = {
     "contract init", "contract lint", "contract coverage", "contract generate", "contract trace",
     "contract run", "contract doctor",
 }  # fmt: skip
+# Commands that print no report: everything else must be in REPORT_COMMANDS.
+NOT_REPORT = {"auth login", "auth logout", "skill"}
 # Report commands whose result is files rather than a report have no --format.
 NO_FORMAT = {"contract init", "contract generate"}
 # Old spellings that must stay hidden (they still work, with a warning).
@@ -48,11 +50,30 @@ def _options(command: click.Command) -> dict[str, click.Option]:
 COMMANDS = _commands()
 
 
-def test_every_report_command_is_listed():
+def test_every_command_is_classified():
     given = "the CLI's commands"
-    should = "include every command the conventions name, so a renamed command fails here"
+    should = "each be a report command or listed in NOT_REPORT, so a new command is checked too"
 
-    assert REPORT_COMMANDS <= set(COMMANDS), f"{given}: {should}: {sorted(REPORT_COMMANDS - set(COMMANDS))}"
+    assert set(COMMANDS) - NOT_REPORT == REPORT_COMMANDS, f"{given}: {should}"
+
+
+def test_docs_and_help_teach_only_the_new_spellings():
+    given = "the README, every skill, and every command's help text"
+    should = "never show a deprecated spelling, except where it is named as deprecated"
+    import re
+
+    root = Path(__file__).resolve().parents[2]
+    texts = {str(p.relative_to(root)): p.read_text(encoding="utf-8") for p in [root / "README.md", *root.glob("skills/*/SKILL.md")]}
+    texts.update({f"help: {name}": command.help or "" for name, command in COMMANDS.items()})
+    spellings = re.compile(r"(?<![\w-])(--human|--user|--password|--tenant|--environment|-u|-p)(?![\w-])")
+    found = [
+        f"{where}: {line.strip()}"
+        for where, text in texts.items()
+        for line in text.splitlines()
+        if spellings.search(line) and "deprecated" not in line and "PQL_" not in line
+    ]
+
+    assert found == [], f"{given}: {should}: {found}"
 
 
 @pytest.mark.parametrize("name", sorted(REPORT_COMMANDS))
@@ -212,3 +233,101 @@ def test_json_stdout_is_only_json(args, monkeypatch):
 
     json.loads(result.stdout)  # raises on anything but JSON
     assert result.exit_code in (0, 1), f"{given}: {should}\n{result.output}"
+
+
+class TestReviewFindings:
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ["-u", "X", "-p", "Y", "--tenant", "T", "--environment", "USGov"],
+            ["--client-id", "X", "--client-secret", "Y", "--tenant-id", "T", "--cloud", "USGov"],
+        ],
+    )
+    def test_auth_login_old_and_new_spellings_log_in_the_same_way(self, args, monkeypatch):
+        given = f"auth login {' '.join(args)}"
+        should = "save a service-principal secret login for client X, tenant T, cloud USGov"
+        from unittest.mock import MagicMock
+
+        manager = MagicMock()
+        monkeypatch.setattr("pql_test.auth.AuthenticationManager", lambda: manager)
+
+        result = CliRunner().invoke(cli, ["auth", "login", *args])
+
+        config = manager.save_credential.call_args.args[0]
+        assert (
+            result.exit_code,
+            config.method.value,
+            config.client_id,
+            config.client_secret,
+            config.tenant_id,
+            config.environment,
+        ) == (0, "service_principal_secret", "X", "Y", "T", "USGov"), f"{given}: {should}\n{result.output}"
+
+    def test_quiet_keeps_ci_annotations(self, tmp_path, monkeypatch):
+        given = "contract run --log-format github -q with no connection"
+        should = "still print every ::group:: / ::notice:: annotation: they are the result for CI"
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        fixtures = Path(__file__).parent / "odcs" / "fixtures"
+
+        args = ["contract", "run", str(fixtures / "marvel.odcs.yaml"), str(model), "--env", "DEV", "--log-format", "github"]
+        loud = CliRunner().invoke(cli, args)
+        quiet = CliRunner().invoke(cli, [*args, "-q"])
+
+        assert (quiet.stdout == loud.stdout, "::group::" in quiet.stdout) == (True, True), f"{given}: {should}"
+
+    def test_code_coverage_json_output_keeps_its_notes_on_stdout(self, monkeypatch, tmp_path):
+        given = "code-coverage --format json -o FILE --min-coverage 10 (the pre-convention behaviour)"
+        should = "write the JSON to FILE and keep both notes on stdout"
+        from unittest.mock import MagicMock
+
+        from tests.test_code_coverage_cli import _report
+
+        monkeypatch.setattr("pql_test.cli.collect_coverage", MagicMock(return_value=_report()))
+        out = tmp_path / "c.json"
+
+        result = CliRunner().invoke(
+            cli, ["code-coverage", "local/SampleModel", "--format", "json", "-o", str(out), "--min-coverage", "10"]
+        )
+
+        assert (
+            result.exit_code,
+            f"Coverage report written to: {out}" in result.stdout,
+            "Required coverage of 10.0% reached" in result.stdout,
+            out.exists(),
+        ) == (0, True, True, True), f"{given}: {should}\n{result.output}"
+
+    def test_code_coverage_json_stdout_is_only_json(self, monkeypatch):
+        given = "code-coverage --format json --min-coverage 10"
+        should = "print only the JSON report on stdout; the coverage note goes to stderr"
+        import json
+        from unittest.mock import MagicMock
+
+        from tests.test_code_coverage_cli import _report
+
+        monkeypatch.setattr("pql_test.cli.collect_coverage", MagicMock(return_value=_report()))
+
+        result = CliRunner().invoke(cli, ["code-coverage", "local/SampleModel", "--format", "json", "--min-coverage", "10"])
+
+        assert (json.loads(result.stdout)["summary"]["covered"], "Required coverage" in result.stderr) == (1, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_retrieve_test_not_found_is_json_null(self, monkeypatch):
+        given = "retrieve-test SampleModel NoSuchSuite (JSON by default)"
+        should = "print exactly null on stdout and exit 1"
+        monkeypatch.setenv("PQL_TEST_HERMETIC", "1")
+
+        result = CliRunner().invoke(cli, ["retrieve-test", str(SAMPLE), "NoSuchSuite"])
+
+        assert (result.exit_code, result.stdout.strip()) == (1, "null"), f"{given}: {should}\n{result.output}"
+
+    def test_format_is_case_insensitive_everywhere(self):
+        given = "check-prereqs --format JSON"
+        should = "be accepted like code-coverage --format JSON"
+        import json
+
+        result = CliRunner().invoke(cli, ["check-prereqs", "--format", "JSON"])
+
+        assert "checks" in json.loads(result.stdout), f"{given}: {should}\n{result.output}"
