@@ -1357,6 +1357,8 @@ The generated files follow the rules below:
 
 You can regenerate the suites in CI on every run, or commit them to the PBIP repo and fail CI when they drift from the contract. [docs/contracts.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md) compares the two workflows, and documents the full rule mapping and name resolution (`pbiTable` / `pbiColumn` custom properties on the contract).
 
+Each property's `logicalType` is checked against the column's model data type (for example `integer` → `Integer`, TMDL `int64`); the ODCS-to-model type table and the `pbiDataType` override are in [Column types](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#column-types).
+
 ---
 
 ## Connection Options
