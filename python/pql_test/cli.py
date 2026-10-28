@@ -114,8 +114,7 @@ from pql_test.runner.cli_format import (
 )
 from pql_test.runner.coverage_collector import CoverageReport
 from pql_test.runner.coverage_report import CoverageSummary, coverage_percent, coverage_status
-from pql_test.contract_run import RunHooks, attach_contract_run
-from pql_test.plugins import load_plugins
+from pql_test.contract_run import RunHooks, register_contract_commands
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -172,23 +171,6 @@ def _check_prereqs() -> list[dict]:
             ),
         }
     )
-    # Optional: never fails the check. Read from package metadata so pql-odcs is not imported.
-    try:
-        odcs_version = _pkg_version("pql-odcs")
-    except PackageNotFoundError:
-        odcs_version = None
-    results.append(
-        {
-            "name": "pql-odcs (optional, `pql-test contract` commands)",
-            "ok": True,
-            "icon": None if odcs_version else "\u2796",  # optional and absent: neither pass nor fail
-            "detail": (
-                f"pql-odcs {odcs_version} available — run `pql-test contract doctor` to check a model"
-                if odcs_version
-                else "Not installed — pip install pql-test[contracts]  (optional, for ODCS data contracts)"
-            ),
-        }
-    )
     return results
 
 
@@ -235,7 +217,7 @@ def _suite_to_dict(suite: TestSuite) -> dict:
 def _print_prereqs(results: list[dict]) -> None:
     click.echo("\nPrerequisites check:")
     for r in results:
-        icon = r.get("icon") or ("\u2705" if r["ok"] else "\u274c")
+        icon = "\u2705" if r["ok"] else "\u274c"
         click.echo(f"  {icon} {r['name']} \u2014 {r['detail']}")
     all_ok = all(r["ok"] for r in results)
     click.echo(
@@ -2102,11 +2084,10 @@ def cmd_skill(name: str | None, format: str, list: bool, version: bool,
 
 
 # ---------------------------------------------------------------------------
-# Plugins (pql_test.commands entry points, e.g. `contract` from pql-odcs)
+# `pql-test contract` (ODCS data contracts)
 # ---------------------------------------------------------------------------
 
-load_plugins(cli)
-attach_contract_run(
+register_contract_commands(
     cli,
     RunHooks(
         conn_options=conn_options,

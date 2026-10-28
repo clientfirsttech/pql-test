@@ -10,7 +10,7 @@ description = "CLI for discovering and running DAX tests in Power BI PBIP semant
 readme = "README.md"
 requires-python = ">=3.9"
 license = "BUSL-1.1"
-license-files = ["LICENSE.txt"]
+license-files = ["LICENSE.txt", "NOTICE"]
 keywords = ["power-bi", "fabric", "dax", "xmla", "testing", "pql", "semantic-model", "pbip"]
 authors = [
     { name = "Client First Technologies" },
@@ -45,6 +45,9 @@ dependencies = [
     # Transitive via msal/azure-core -> requests; floor excludes the compromised
     # emSign ECC Root CA - G3 bundle (PYSEC-2026-4320).
     "certifi>=2026.10.19",
+    # `pql-test contract ...`: ODCS contract loading and schema validation.
+    "PyYAML>=6.0",
+    "jsonschema>=4.18",
 ]
 
 [project.urls]
@@ -62,17 +65,8 @@ dev = [
     "pytest-cov>=4.1.0",
     "build>=1.0.0",
     "twine>=4.0.0",
+    "hypothesis>=6.0",
 ]
-# `pip install pql-test[contracts]` adds the `pql-test contract ...` commands.
-# pql-odcs is MIT-licensed and versioned separately (packages/pql-odcs/).
-contracts = [
-    "pql-odcs>=0.1,<0.2",
-]
-
-# In the repo's uv workspace, resolve pql-odcs from source instead of PyPI.
-# pip and setuptools ignore this table.
-[tool.uv.sources]
-pql-odcs = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -81,6 +75,8 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 pql_test = ["skills/**/*.md"]
+"pql_test.odcs" = ["schemas/*.json", "schemas/*.txt"]
+"pql_test.odcs.catalog" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

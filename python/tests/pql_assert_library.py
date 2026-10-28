@@ -3,7 +3,7 @@
 Query-scoped PQL.Assert 0.8.0 for live tests against a model that has an older library.
 
 The released 0.8.0 package is vendored (MIT) under
-packages/pql-odcs/tests/fixtures/pql-assert-0.8.0/. A suite that calls 0.8-only
+python/tests/odcs/fixtures/pql-assert-0.8.0/. A suite that calls 0.8-only
 functions can run on a model with an older PQL.Assert when those functions are defined in the query's own
 DEFINE block, the same way docs/pql-assert-gap-plan.md's live checks were run. Only
 functions the model lacks are defined: whether a query may redefine a model function is
@@ -15,10 +15,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from pql_odcs.udf import UdfFunction, parse_functions
+from pql_test.odcs.udf import UdfFunction, parse_functions
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-LIBRARY_DIR = REPO_ROOT / "packages" / "pql-odcs" / "tests" / "fixtures" / "pql-assert-0.8.0" / "lib"
+LIBRARY_DIR = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures" / "pql-assert-0.8.0" / "lib"
 _CALL_RE = re.compile(r"\b(PQL\.Assert\.[\w.]+)\s*\(")
 
 

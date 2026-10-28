@@ -75,6 +75,6 @@ renamedenv
 **/id_rsa
 **/id_ed25519
 
-# hypothesis example database (pql-odcs property tests)
+# hypothesis example database (contract property tests)
 .hypothesis/
 .coverage

@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 """
-`pql-test contract run`: generate PQL.Assert suites from an ODCS contract, run
-them, and trace the results back to contract rule ids -- in one step.
+The connected `pql-test contract` commands: `run` (generate PQL.Assert suites
+from an ODCS contract, run them, and trace the results back to contract rule
+ids) and `doctor` (file checks plus the deployed or open model's library).
 
-The `contract` group itself comes from pql-odcs (MIT) through the
-``pql_test.commands`` entry point. This module (BUSL-1.1) adds `run`, which
-needs pql-test's XMLA runner. Dependencies point one way: this module imports
-pql_odcs; pql_odcs never imports pql_test.
+The file-only commands live in ``pql_test.odcs.cli``; ``register_contract_commands``
+adds these two to that group.
 
 Generated suites run from their own ``DEFINE FUNCTION ... EVALUATE`` text with
 ``run_tests()``. ``run_tests_from_model`` would only run suites already
@@ -16,7 +15,6 @@ registered in the live model, which skips suites that were just generated.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -153,50 +151,26 @@ def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_mode
     return abs_path, resolve_xmla_connection(abs_path, opts)
 
 
-# Folders never searched for a local/<name> model's PBIP folder.
-_SKIP_DIRS = {"node_modules", "__pycache__", "site-packages"}
-
-
-def find_local_model_dir(name: str, root: Path) -> Path:
-    """The one ``<name>.SemanticModel`` folder under *root*; a usage error when there is none or several."""
-    wanted = f"{name}.SemanticModel".lower()
-    found = []
-    for dirpath, dirnames, _ in os.walk(root):
-        found += [Path(dirpath) / d for d in dirnames if d.lower() == wanted]
-        # Skip hidden folders (.git, .venv), dependency trees, and the inside of any semantic model.
-        dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and d not in _SKIP_DIRS and not d.endswith(".SemanticModel")
-        ]
-    if len(found) == 1:
-        return found[0]
-    if found:
-        listed = ", ".join(str(p) for p in sorted(found))
-        raise click.UsageError(f"Several {name}.SemanticModel folders under {root}: {listed}. Pick one with --model-dir.")
-    raise click.UsageError(
-        f"No {name}.SemanticModel folder under {root}. Run from the folder that holds the PBIP, "
-        "or pass it with --model-dir."
-    )
-
-
 def resolve_model_target(model_path: str, model_dir: str | None) -> tuple[str, str]:
     """``(PBIP folder, connection target)`` for MODEL_PATH.
 
     A PBIP path is both. ``local/<name>`` connects only to that model open in Power BI Desktop and
-    takes its folder from --model-dir, else from the one ``<name>.SemanticModel`` under the current folder.
+    takes its folder from --model-dir, else from the one ``<name>.SemanticModel`` in the repository.
     """
-    ident = parse_model_identifier(model_path)
-    if ident.kind != "local":
+    from pql_test.odcs.pbip import local_model_name
+
+    if local_model_name(model_path) is None:
         if model_dir:
             raise click.UsageError("--model-dir goes with a local/<model_name> MODEL_PATH; pass the folder as MODEL_PATH instead.")
         return model_path, model_path
-    return model_dir or str(find_local_model_dir(ident.model_name, Path.cwd())), model_path
+    return model_dir or model_path, model_path
 
 
 def _model_dir_option(command: Callable) -> Callable:
     return click.option(
         "--model-dir",
         metavar="DIR",
-        help="PBIP folder of a local/<model_name> MODEL_PATH (default: the <model_name>.SemanticModel under the current folder).",
+        help="PBIP folder of a local/<model_name> MODEL_PATH (default: the <model_name>.SemanticModel in this repository).",
     )(command)
 
 
@@ -228,7 +202,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
         show_default=True,
         help="PQL.Assert version to generate for. auto asks the model (PQL.Assert.LibraryVersion).",
     )
-    @click.option("--force", is_flag=True, help="Overwrite suite files that pql-odcs did not generate.")
+    @click.option("--force", is_flag=True, help="Overwrite suite files that pql-test did not generate.")
     @click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail for every result.")
     @click.option("--output", default=None, metavar="FILE", help="Write full JSON results to FILE.")
     @click.option(
@@ -270,11 +244,11 @@ def make_run_command(hooks: RunHooks) -> click.Command:
           pql-test contract run orders.odcs.yaml local/MyModel --env DEV
           pql-test contract run orders.odcs.yaml ./MyModel --env DEV --output results.json --log-format github
         """
-        from pql_odcs.api import GenerateError, generate, plan_contract
-        from pql_odcs.emit.dax import EmitError
-        from pql_odcs.loader import ContractError, load_contract
-        from pql_odcs.pbip import ModelPathError, require_semantic_model_dir
-        from pql_odcs.results import trace
+        from pql_test.odcs.api import GenerateError, generate, plan_contract
+        from pql_test.odcs.emit.dax import EmitError
+        from pql_test.odcs.loader import ContractError, load_contract
+        from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+        from pql_test.odcs.results import trace
 
         try:
             contract = load_contract(contract_path)
@@ -354,7 +328,7 @@ def live_doctor_checks(conn, recommended: str | None, local_miss: str | None = N
     *local_miss* is the diagnostic for a local/<name> MODEL_PATH: asking for one open model and
     not finding it fails, where finding no connection at all only warns.
     """
-    from pql_odcs.doctor import FAIL, OK, WARN, Check
+    from pql_test.odcs.doctor import FAIL, OK, WARN, Check
 
     if conn is None and local_miss:
         return [Check("XMLA connection", FAIL, local_miss)]
@@ -423,7 +397,7 @@ def print_doctor(report, conn=None, model_path: str | None = None) -> None:
 
 
 def make_doctor_command(hooks: RunHooks) -> click.Command:
-    """`contract doctor`: pql-odcs's offline checks plus live checks against the deployed model."""
+    """`contract doctor`: the file checks plus live checks against the deployed or open model."""
 
     @click.command("doctor")
     @click.argument("model_path", metavar="[MODEL_PATH]", required=False)
@@ -443,12 +417,12 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
         """Check the environment and, given a PBIP MODEL_PATH, its PQL.Assert library and deployed model.
 
         MODEL_PATH may also be local/<model_name>: the model open in Power BI Desktop, with its
-        folder from --model-dir or the <model_name>.SemanticModel under the current folder.
+        folder from --model-dir or the <model_name>.SemanticModel in this repository.
         Recommends the --pql-assert value the model folder supports, and warns when the
         deployed model supports a different one. Exits 1 when a check fails.
         """
-        from pql_odcs.doctor import run_doctor
-        from pql_odcs.pbip import require_semantic_model_dir
+        from pql_test.odcs.doctor import run_doctor
+        from pql_test.odcs.pbip import require_semantic_model_dir
 
         folder, target = resolve_model_target(model_path, model_dir) if model_path else (None, None)
         report, conn = run_doctor(folder), None
@@ -466,27 +440,10 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
     return doctor
 
 
-def extend_contract_group(base: click.Group, *commands: click.Command) -> click.Group:
-    """A copy of pql-odcs's `contract` group with *commands* added or replaced (the original stays untouched)."""
-    group = click.Group(
-        name=base.name,
-        commands=dict(base.commands),
-        callback=base.callback,
-        params=list(base.params),
-        help=base.help,
-        context_settings=base.context_settings,
-        no_args_is_help=base.no_args_is_help,
-    )
-    for command in commands:
-        group.add_command(command)
-    return group
+def register_contract_commands(cli: click.Group, hooks: RunHooks) -> None:
+    """Add `pql-test contract` to *cli*: the file-only commands plus `run` and `doctor`."""
+    from pql_test.odcs.cli import contract
 
-
-def attach_contract_run(cli: click.Group, hooks: RunHooks) -> bool:
-    """Replace the plugin `contract` group with one that has `run` and a live `doctor`, when pql-odcs provides it."""
-    base = cli.commands.get("contract")
-    if not isinstance(base, click.Group) or not (base.callback and base.callback.__module__.startswith("pql_odcs")):
-        return False
-    run, doctor = make_run_command(hooks), make_doctor_command(hooks)
-    cli.add_command(extend_contract_group(base, run, doctor), "contract")
-    return True
+    contract.add_command(make_run_command(hooks))
+    contract.add_command(make_doctor_command(hooks))
+    cli.add_command(contract)

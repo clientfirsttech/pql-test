@@ -1,0 +1,75 @@
+# Merge pql-odcs into pql-test under AGPL-3.0 Epic
+
+**Status**: 📋 PLANNED
+**Goal**: One package, one license, one CLI. The ODCS contract commands become part of pql-test (`pql-test contract …`), and the whole repository moves from BUSL-1.1 (pql-test) plus MIT (pql-odcs) to AGPL-3.0.
+
+## Overview
+
+Two tools with the same commands under two spellings (`pql-odcs lint` and `pql-test contract lint`), plus a `run` that only one of them has, confused even the maintainer. The split existed only to keep the ODCS mapping MIT, so that MIT tools such as datacontract-cli could use it as a library. That audience can still integrate CLI-to-CLI (`pql-test contract run … --output`), which works under any license.
+
+**Decided 2026-10-28 (maintainer):**
+- Relicense everything to AGPL-3.0. The maintainer has the authority over all contributions, including Giorgi Wolfe's.
+- Merge pql-odcs into pql-test. pql-odcs 0.1.0 was never published, so nothing is stranded.
+- Windows-only is acceptable, but the file-only contract commands should run on Linux for pipelines.
+
+**Choices made while planning (easy to reverse):**
+- SPDX identifier `AGPL-3.0-only`, not `-or-later`, so a future FSF license version cannot apply without the copyright holder's decision.
+- Contributions keep the DCO sign-off. A CLA is only needed if commercial (dual) licenses will be sold; that is left for the maintainer.
+- Third-party files keep their own licenses: the Bitol ODCS JSON schemas (Apache-2.0, with NOTICE) and the vendored PQL.Assert 0.8.0 test fixture (MIT).
+- pql-test stays at the unreleased 0.2.0, which becomes the first AGPL release. Published v0.1.x releases remain BUSL-1.1.
+- The pql-odcs-only skill and `pql-odcs skill` command are removed. `skills/contract/SKILL.md` is the one contract skill.
+
+---
+
+## Vision and license
+
+Rewrite the license story before any code moves.
+
+**Requirements**:
+- Given `vision.md`, should describe one AGPL-3.0 package whose contract commands are part of pql-test, and replace the one-way license boundary constraint with: runtime dependencies must be AGPL-3.0 compatible, and the file-only contract commands must not need ADOMD.NET
+- Given `LICENSE.txt` and `python/LICENSE.txt`, should hold the unmodified AGPL-3.0 text, with copyright held by Client First Technologies
+- Given every `.py` file in the repository, should start with `# SPDX-License-Identifier: AGPL-3.0-only`
+- Given `LICENSES.md`, should list AGPL-3.0 for the repository and the two third-party exceptions, and say that published v0.1.x releases stay BUSL-1.1
+- Given `pyproject.toml`, `plugin.json`, README, CONTRIBUTING, CODEOWNERS, and `aidd-custom/AGENTS.md`, should name AGPL-3.0 and drop every BUSL and MIT-boundary rule
+
+---
+
+## Move the code
+
+Fold `packages/pql-odcs/` into the pql-test package.
+
+**Requirements**:
+- Given `pql_odcs`, should live at `python/pql_test/odcs/` and be imported as `pql_test.odcs`; its tests, goldens, and fixtures should live under `python/tests/odcs/`
+- Given the move, every golden file should stay byte-identical, and every pql-odcs test should still pass
+- Given `python/pyproject.toml`, should add PyYAML and jsonschema as dependencies, drop the `contracts` extra, and ship the ODCS schemas and PQL.Assert catalogs as package data
+- Given the repository root, should have no `packages/pql-odcs/`, no uv workspace member for it, and no pql-odcs release tag or workflow
+
+---
+
+## One CLI
+
+**Requirements**:
+- Given `pql-test contract`, should offer `lint`, `coverage`, `generate`, `run`, `trace`, and `doctor`, registered directly (not through the `pql_test.commands` entry point and `extend_contract_group`)
+- Given `pql-test contract doctor`, should run the file checks and, with a model and a connection, the live checks, as one command; environment checks should no longer report pql-odcs or "is pql-test installed"
+- Given `lint`, should take the model as an optional positional argument (`lint CONTRACT [MODEL_PATH]`), like the other commands
+- Given `local/<name>` to any contract command, should find `<name>.SemanticModel` under the repository root (the git root, else the current folder); `run` and `doctor` should also connect to that open Desktop model only, and `--model-dir` should stay for the case of several copies
+- Given `pql-test check-prereqs`, should drop the optional pql-odcs row
+- Given no `pql-odcs` console script, should leave no `pql-odcs …` hints behind
+
+---
+
+## Linux for the file-only commands
+
+**Requirements**:
+- Given `pip install pql-test` on Linux, should install without pyadomd and pythonnet (platform marker), and `pql-test contract lint|coverage|generate|trace|doctor` should work there
+- Given a Windows-only command on Linux (`run-tests`, `contract run`, …), should fail with a clear message instead of a traceback
+- Given CI, should run the contract tests on ubuntu-latest, replacing the pql-odcs workflow's matrix
+
+---
+
+## Docs and skills
+
+**Requirements**:
+- Given the pql-odcs README, should become `docs/contracts.md`, written for `pql-test contract …`, and linked from README
+- Given `skills/contract/SKILL.md` and its packaged copy, should describe the merged commands and stay byte-identical
+- Given `docs/`, plan.md, promptfoo tests, and the release workflow, should no longer tell anyone to install or run pql-odcs

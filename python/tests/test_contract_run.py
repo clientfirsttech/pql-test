@@ -7,16 +7,14 @@ import json
 import shutil
 from pathlib import Path
 
-import click
 import pytest
 from click.testing import CliRunner
-from pql_test.contract_run import detect_pql_assert, exit_code, extend_contract_group
+
+from pql_test.contract_run import detect_pql_assert, exit_code
 from pql_test.runner import TestResult
 
-pytest.importorskip("pql_odcs")
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-FIXTURES = REPO_ROOT / "packages" / "pql-odcs" / "tests" / "fixtures"
+FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
 
 
 def _result(suite: str, passed: bool = True, skipped: bool = False) -> TestResult:
@@ -73,19 +71,15 @@ class TestDetectPqlAssert:
         assert detect_pql_assert(None) == "0.7", f"{given}: {should}"
 
 
-class TestExtendContractGroup:
-    def test_adds_run_without_mutating_the_plugin_group(self):
-        given = "pql-odcs's contract group"
-        should = "get a copy with `run` added and `doctor` replaced, leaving the original (used by `pql-odcs`) unchanged"
-        from pql_odcs.cli import contract
+class TestContractGroup:
+    def test_offers_every_contract_command(self):
+        given = "pql-test contract"
+        should = "offer the file-only commands plus run and doctor in one group"
+        from pql_test.cli import cli
 
-        extended = extend_contract_group(contract, click.Command("run"), click.Command("doctor"))
-
-        assert (
-            "run" in extended.commands,
-            "run" in contract.commands,
-            extended.commands["doctor"] is not contract.commands["doctor"],
-        ) == (True, False, True), f"{given}: {should}"
+        assert set(cli.commands["contract"].commands) == {"lint", "coverage", "generate", "trace", "run", "doctor"}, (
+            f"{given}: {should}"
+        )
 
 
 class TestContractRunCommand:
@@ -171,8 +165,8 @@ class TestContractRunCommand:
 
 class TestTraceAnnotations:
     def _report(self):
-        from pql_odcs.api import plan_contract
-        from pql_odcs.results import read_results, trace
+        from pql_test.odcs.api import plan_contract
+        from pql_test.odcs.results import read_results, trace
 
         plan = plan_contract(FIXTURES / "marvel-must-fail.odcs.yaml")
         return trace(plan, read_results(FIXTURES / "results-marvel-must-fail.json"))
@@ -373,32 +367,44 @@ class TestLocalModelPath:
             f"{given}: {should}"
         )
 
-    def test_folder_is_found_under_the_current_directory(self, tmp_path, monkeypatch):
-        given = "local/Sample with Sample.SemanticModel under the current folder, and a copy inside .venv"
-        should = "use the one outside hidden folders"
+    def test_folder_is_found_from_the_repository_root(self, tmp_path, monkeypatch):
+        given = "local/Sample run from a subfolder of a repository with examples/Sample.SemanticModel and a .venv copy"
+        should = "find the folder from the repository root, skipping hidden folders"
+        (tmp_path / ".git").mkdir()
         model = self._model(tmp_path / "examples")
         self._model(tmp_path / ".venv" / "lib")
-        monkeypatch.chdir(tmp_path)
-        from pql_test.contract_run import resolve_model_target
+        (tmp_path / "docs").mkdir()
+        monkeypatch.chdir(tmp_path / "docs")
+        from pql_test.odcs.pbip import require_semantic_model_dir
 
-        assert resolve_model_target("local/Sample", None) == (str(model), "local/Sample"), f"{given}: {should}"
+        assert require_semantic_model_dir("local/Sample") == model, f"{given}: {should}"
 
-    def test_no_or_several_folders_are_usage_errors(self, tmp_path):
+    def test_no_or_several_folders_are_model_path_errors(self, tmp_path):
         given = "local/Sample with no Sample.SemanticModel, then with two"
-        should = "raise a usage error that points to --model-dir each time"
-        from pql_test.contract_run import find_local_model_dir
+        should = "raise a model path error that says to pass the folder each time"
+        from pql_test.odcs.pbip import ModelPathError, find_local_model_dir
 
         messages = []
         for copies in (0, 2):
             for i in range(copies):
                 self._model(tmp_path / f"copy{i}")
-            with pytest.raises(click.UsageError) as exc:
+            with pytest.raises(ModelPathError) as exc:
                 find_local_model_dir("Sample", tmp_path)
-            messages.append(exc.value.message)
+            messages.append(str(exc.value))
 
-        assert [("--model-dir" in m, "Several" in m) for m in messages] == [(True, False), (True, True)], (
+        assert [("pass the folder" in m.lower(), "Several" in m) for m in messages] == [(True, False), (True, True)], (
             f"{given}: {should}\n{messages}"
         )
+
+    def test_file_only_commands_accept_local(self, tmp_path, monkeypatch):
+        given = "contract lint CONTRACT local/SampleModel from the repository's examples/ folder"
+        should = "check the names against examples/SampleModel.SemanticModel without connecting"
+        monkeypatch.chdir(REPO_ROOT / "examples")
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: pytest.fail("connected"))
+
+        result = self._invoke("lint", FIXTURES / "marvel.odcs.yaml", "local/SampleModel")
+
+        assert (result.exit_code, "names resolve" in result.output) == (0, True), f"{given}: {should}\n{result.output}"
 
     def test_model_dir_with_a_folder_model_path_is_a_usage_error(self, tmp_path):
         given = "--model-dir with a PBIP folder as MODEL_PATH"

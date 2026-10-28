@@ -2,7 +2,7 @@
 """
 Live integration: `pql-test contract run` against examples/SampleModel.
 
-Generates suites from the pql-odcs fixture contracts into a temporary copy of
+Generates suites from the tests/odcs fixture contracts into a temporary copy of
 SampleModel, runs them over XMLA, and checks the traced rule statuses:
 
   - marvel.odcs.yaml (good data, PQL.Assert 0.7 catalog): every mapped rule passes
@@ -14,9 +14,9 @@ model lacks are defined in each suite's query (see pql_assert_library.py). Separ
 check that `--pql-assert auto` detects the library the repository commits for each
 example model, which fails when the published model is behind the committed one.
 
-Needs pql-odcs (pip install pql-test[contracts]) and either a Power BI Desktop
-instance with SampleModel open, or the PQL_TENANT_ID / PQL_WORKSPACE_ID /
-PQL_DATASET_ID (+ client) service credentials used by test_live_service.py.
+Needs either a Power BI Desktop instance with SampleModel open, or the
+PQL_TENANT_ID / PQL_WORKSPACE_ID / PQL_DATASET_ID (+ client) service credentials
+used by test_live_service.py.
 Skipped otherwise.
 """
 
@@ -44,7 +44,7 @@ except ImportError:
 pytestmark = pytest.mark.live
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-FIXTURES = REPO_ROOT / "packages" / "pql-odcs" / "tests" / "fixtures"
+FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
 EXAMPLES = REPO_ROOT / "examples"
 SERVICE_VARS = ("PQL_TENANT_ID", "PQL_WORKSPACE_ID")
 
@@ -140,7 +140,6 @@ def _connection_available() -> bool:
 @pytest.fixture
 def sample_model_copy(tmp_path: Path) -> Path:
     """A throwaway copy of the SampleModel PBIP so generated suites never touch examples/."""
-    pytest.importorskip("pql_odcs")
     if not _connection_available():
         pytest.skip("No XMLA connection: open SampleModel in Power BI Desktop or set PQL_* service credentials.")
     shutil.copytree(EXAMPLES / "SampleModel.SemanticModel", tmp_path / "SampleModel.SemanticModel")
@@ -149,8 +148,8 @@ def sample_model_copy(tmp_path: Path) -> Path:
 
 
 def _run(contract: str, model: Path, out: Path, pql_assert: str):
-    from pql_odcs.api import plan_contract
-    from pql_odcs.results import trace
+    from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.results import trace
     from pql_test.cli import cli
 
     args = ["contract", "run", str(FIXTURES / contract), str(model), "--env", "DEV", "--output", str(out)]
@@ -162,7 +161,7 @@ def _run(contract: str, model: Path, out: Path, pql_assert: str):
 
 def _committed_catalog(model: str) -> str:
     """The `--pql-assert` catalog matching the PQL.Assert version committed in examples/<model>."""
-    from pql_odcs.udf import library_versions, model_functions, version_key
+    from pql_test.odcs.udf import library_versions, model_functions, version_key
 
     versions = library_versions(model_functions(EXAMPLES / f"{model}.SemanticModel"))
     assert len(versions) == 1, f"examples/{model} mixes PQL.Assert versions: {versions}"
@@ -225,7 +224,6 @@ def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, 
 @pytest.mark.parametrize("model, dataset_var", [("SampleModel", "PQL_DATASET_ID"), ("RLS_Model", "PQL_DATASET_ID_RLS")])
 def test_auto_detection_matches_the_committed_library(model, dataset_var):
     given = f"the deployed {model}"
-    pytest.importorskip("pql_odcs")
     from pql_test.contract_run import detect_pql_assert
 
     expected = _committed_catalog(model)

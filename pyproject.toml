@@ -1,21 +1,16 @@
 # Repository root: a uv workspace only, not a package.
 #
-#   uv sync          -> one .venv with pql-test and pql-odcs installed editable,
-#                       pql-test resolving pql-odcs from packages/pql-odcs/
+#   uv sync          -> one .venv with pql-test installed editable
 #
-# Each member keeps its own pyproject.toml, version, license, and release tag.
-# The existing pip workflow (`cd python && pip install -e .`) does not need uv.
-# See LICENSES.md for which license covers which path.
+# The pip workflow (`cd python && pip install -e .`) does not need uv.
 
 [tool.uv.workspace]
-members = ["python", "packages/pql-odcs"]
+members = ["python"]
 
 [tool.uv.sources]
 pql-test = { workspace = true }
-pql-odcs = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "pql-test[contracts,dev]",
-    "pql-odcs[dev]",
+    "pql-test[dev]",
 ]

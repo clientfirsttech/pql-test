@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "generator": "pql-test GOLDEN",
+  "catalog": {
+    "library": "PQL.Assert",
+    "minVersion": "0.7.1"
+  },
+  "contract": {
+    "id": "marvel-must-fail",
+    "name": "Marvel Must Fail",
+    "apiVersion": "3.1.0",
+    "source": "marvel-must-fail.odcs.yaml"
+  },
+  "summary": {
+    "total": 12,
+    "mapped": 8,
+    "approximated": 1,
+    "skipped": 3
+  },
+  "rules": [
+    {
+      "ruleId": "marvel_fact.exists",
+      "status": "mapped",
+      "description": "marvel_fact exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.columns",
+      "status": "mapped",
+      "description": "marvel_fact has columns Name",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.Name.type",
+      "status": "skipped",
+      "description": "marvel_fact.Name is string",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+    },
+    {
+      "ruleId": "marvel_fact_exactly_one_row",
+      "status": "mapped",
+      "description": "marvel_fact rowCount mustBe 1",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveRowCount"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.exists",
+      "status": "mapped",
+      "description": "DateDim exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.columns",
+      "status": "mapped",
+      "description": "DateDim has columns Year",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.Year.unique",
+      "status": "approximated",
+      "description": "DateDim.Year is unique",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
+    },
+    {
+      "ruleId": "DateDim.Year.type",
+      "status": "skipped",
+      "description": "DateDim.Year is integer",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+    },
+    {
+      "ruleId": "date_dim_fewer_than_one_row",
+      "status": "mapped",
+      "description": "DateDim rowCount mustBeLessThan 1",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeLessThan"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "ghost.exists",
+      "status": "mapped",
+      "description": "ghost exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "ghost.columns",
+      "status": "mapped",
+      "description": "ghost has columns Missing",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "ghost.Missing.type",
+      "status": "skipped",
+      "description": "ghost.Missing is string",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "column data type checks arrive in v0.2 (Tbl.ColumnDataTypeShouldBe via an ODCS-to-model type table)"
+    }
+  ]
+}
