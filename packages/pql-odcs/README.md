@@ -131,14 +131,14 @@ PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap pl
 | `required: true`, `nullValues mustBe 0` | `Col.NullCountShouldBeAtMost(…, 0)` (true nulls only; an empty string is not a null) | mapped |
 | `nullValues` with a ceiling (`mustBeLessOrEqualTo`, `mustBeLessThan`) | `Col.NullCountShouldBeAtMost`, or `Col.NullRateShouldBeAtMostV2` with `unit: percent` | mapped |
 | `primaryKey` (one column) | `Col.ShouldBePrimaryKey` | mapped |
-| `unique`, property `duplicateValues mustBe 0` | `Col.NonBlankValuesShouldBeDistinct` | mapped |
+| `unique`, property `duplicateValues mustBe 0` | `Col.NonNullValuesShouldBeDistinct` (nulls are ignored; an empty string is a value) | mapped |
 | Composite `primaryKey`, schema-level `duplicateValues mustBe 0` over 2+ properties | `Tbl.RowsShouldBeDistinct` over `SELECTCOLUMNS` of the key columns | mapped |
 | Property `duplicateValues` with a ceiling | `Col.DuplicateCountShouldBeAtMost` | mapped |
 | `rowCount mustNotBeBetween` | `ShouldNotBeBetween` on `COUNTROWS` | mapped |
-| `^literal`, `literal$`, or a bare-literal pattern (`invalidValues` with `mustBe 0`, or `logicalTypeOptions` pattern) | `Col.ValuesShouldStartWith` / `EndsWith` / `Contains` | contains: mapped; starts and ends: **approximated** (DAX text comparison ignores case) |
+| `^literal`, `literal$`, or a bare-literal pattern (`invalidValues` with `mustBe 0`, or `logicalTypeOptions` pattern) | `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString` with `matchCase` `"Y"` (case-sensitive, like the regex; null rows are skipped) | mapped |
 | `slaProperties` `latency` in days or hours, with a `table.column` element | `Col.MaxDateShouldBeWithinDays` | **approximated** (the age of the newest value, in UTC days; depends on when the test runs) |
 
-Any other regex, ceiling, or SLA stays **skipped** with its reason. `missingValues`, `invalidValues` with a value list, column types, ranges, and relationships are unchanged and still arrive in v0.2.
+Like most PQL.Assert 0.8 column checks, these fail with `NO VALUES` on a column with no non-null value. Any other regex, ceiling, or SLA stays **skipped** with its reason. `missingValues`, `invalidValues` with a value list, column types, ranges, and relationships are unchanged and still arrive in v0.2.
 
 These rules are reported as **skipped**, with the release that will map them:
 

@@ -18,7 +18,7 @@ from pql_odcs.mapping.context import (
     mapped,
     skipped,
 )
-from pql_odcs.mapping.patterns import CASE_INSENSITIVE, simple_pattern
+from pql_odcs.mapping.patterns import MATCH_CASE, simple_pattern
 from pql_odcs.mapping.schema import NO_COLUMN
 
 OPERATORS = (
@@ -93,10 +93,8 @@ def pattern_outcome(
     op, text = found
     if not ctx.supports(op):
         return skipped(rule_id, "pattern checks need a PQL.Assert catalog with column pattern functions", description)
-    assertion = Assertion(rule_id, DATA_QUALITY_SUITE, op, target, {"text": text}, description, severity)
-    if op == "col.contains":
-        return mapped(rule_id, assertion)
-    return approximated(rule_id, CASE_INSENSITIVE, assertion)
+    args = {"text": text, "matchCase": MATCH_CASE}
+    return mapped(rule_id, Assertion(rule_id, DATA_QUALITY_SUITE, op, target, args, description, severity))
 
 
 def map_library(
@@ -221,9 +219,9 @@ def _duplicate_values(rule, ctx, rule_id, obj, prop, cmp, description, severity)
     if isinstance(target, RuleOutcome):
         return target
     if _is_zero_ceiling(cmp):
-        if ctx.supports("col.non_blank_distinct"):
+        if ctx.supports("col.non_null_distinct"):
             assertion = Assertion(
-                rule_id, DATA_QUALITY_SUITE, "col.non_blank_distinct", target, {}, description, severity
+                rule_id, DATA_QUALITY_SUITE, "col.non_null_distinct", target, {}, description, severity
             )
             return mapped(rule_id, assertion)
         assertion = Assertion(rule_id, DATA_QUALITY_SUITE, "col.distinct", target, {}, description, severity)

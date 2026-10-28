@@ -5,7 +5,7 @@ DEFINE
 	FUNCTION EveryRow.DataQuality.DEV.Tests = () =>
 		UNION (
 			PQL.Assert.Col.ShouldBePrimaryKey("ODCS every-row orders.order_id.primaryKey: orders.order_id is a primary key (distinct)", 'Orders'[order_id]),
-			PQL.Assert.Col.NonBlankValuesShouldBeDistinct("ODCS every-row orders.order_id.unique: orders.order_id is unique", 'Orders'[order_id]),
+			PQL.Assert.Col.NonNullValuesShouldBeDistinct("ODCS every-row orders.order_id.unique: orders.order_id is unique", 'Orders'[order_id]),
 			PQL.Assert.Col.NullCountShouldBeAtMost("ODCS every-row orders.customer_id.required: orders.customer_id is required (no nulls)", 'Orders', 'Orders'[customer_id], 0),
 			PQL.Assert.Col.NullCountShouldBeAtMost("ODCS every-row orders.customer_id.quality[2]: orders.customer_id nullValues mustBeLessOrEqualTo 10", 'Orders', 'Orders'[customer_id], 10),
 			PQL.Assert.Col.DuplicateCountShouldBeAtMost("ODCS every-row orders.status.quality[4]: orders.status duplicateValues mustBeLessThan 10", 'Orders'[Order Status], 9),

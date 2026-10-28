@@ -68,7 +68,7 @@
       "description": "orders.order_id is unique",
       "assertions": 1,
       "functions": [
-        "PQL.Assert.Col.NonBlankValuesShouldBeDistinct"
+        "PQL.Assert.Col.NonNullValuesShouldBeDistinct"
       ],
       "severity": "error",
       "reason": null
@@ -88,7 +88,7 @@
       "description": "orders.order_id duplicateValues mustBe 0",
       "assertions": 1,
       "functions": [
-        "PQL.Assert.Col.NonBlankValuesShouldBeDistinct"
+        "PQL.Assert.Col.NonNullValuesShouldBeDistinct"
       ],
       "severity": "error",
       "reason": null

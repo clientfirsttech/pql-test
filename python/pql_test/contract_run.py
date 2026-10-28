@@ -216,7 +216,8 @@ def make_run_command(hooks: RunHooks) -> click.Command:
             )
         if pql_assert == "auto":
             pql_assert = detect_pql_assert(conn)
-            click.echo(f"PQL.Assert {pql_assert} catalog selected (detected from the model; override with --pql-assert).")
+            source = "detected from the model" if conn else "no XMLA connection to ask the model"
+            click.echo(f"PQL.Assert {pql_assert} catalog selected ({source}; override with --pql-assert).")
 
         plan = plan_contract(contract, closed_schema=closed_schema, pql_assert=pql_assert)
         try:

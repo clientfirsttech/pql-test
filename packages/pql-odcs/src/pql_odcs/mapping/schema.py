@@ -77,8 +77,8 @@ def property_rules(
     if prop.get("unique") is True:
         rule_id = f"{scope}.unique"
         description = f"{scope} is unique"
-        if ctx.supports("col.non_blank_distinct"):
-            assertion = Assertion(rule_id, DATA_QUALITY_SUITE, "col.non_blank_distinct", target, {}, description)
+        if ctx.supports("col.non_null_distinct"):
+            assertion = Assertion(rule_id, DATA_QUALITY_SUITE, "col.non_null_distinct", target, {}, description)
             out.append(mapped(rule_id, assertion))
         else:
             out.append(approximated(rule_id, BLANKS_COUNT_AS_VALUE, _distinct(rule_id, target, description)))

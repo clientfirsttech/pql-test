@@ -4,9 +4,8 @@
 from __future__ import annotations
 
 _META = frozenset("\\.^$*+?{}[]|()")
-CASE_INSENSITIVE = (
-    "DAX text comparison is case-insensitive, so a value that differs from the pattern only by case still passes"
-)
+# PQL.Assert's matchCase value for a case-sensitive comparison, as a regex is.
+MATCH_CASE = "Y"
 
 
 def simple_pattern(pattern: object) -> tuple[str, str] | str:

@@ -87,7 +87,10 @@ class TestExtendContractGroup:
 class TestContractRunCommand:
     def test_generates_runs_and_traces_without_a_connection(self, tmp_path, monkeypatch):
         given = "contract run against a PBIP copy with no XMLA connection available"
-        should = "write the suites, report every mapped rule as not executed, write --output, and exit 1"
+        should = (
+            "write the suites, report every mapped rule as not executed, write --output, exit 1, "
+            "and not claim the catalog was detected from the model"
+        )
         model = tmp_path / "Sample.SemanticModel"
         (model / "definition").mkdir(parents=True)
         shutil.copy(FIXTURES / "marvel.odcs.yaml", tmp_path / "marvel.odcs.yaml")
@@ -108,7 +111,8 @@ class TestContractRunCommand:
             "NOT EXECUTED" in result.output,
             saved["skipped"] > 0,
             saved["contract"]["summary"]["not_executed"] > 0,
-        ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True, True), (
+            "0.7 catalog selected (no XMLA connection to ask the model" in result.output,
+        ) == (1, ["Marvel.DataQuality.DEV.Tests.dax", "Marvel.Schema.DEV.Tests.dax"], True, True, True, True), (
             f"{given}: {should}\n{result.output}"
         )
 

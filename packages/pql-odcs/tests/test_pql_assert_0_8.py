@@ -104,13 +104,13 @@ class TestNullsAndKeys:
 
     def test_unique_ignores_blanks(self):
         given = "unique: true under 0.8"
-        should = "map to the blank-safe distinct check"
+        should = "map to the NULL-safe distinct check"
 
         outcome = _outcomes(_table(prop("a", unique=True)))["T.a.unique"]
 
         assert (outcome.status, outcome.assertions[0].op) == (
             Status.MAPPED,
-            "col.non_blank_distinct",
+            "col.non_null_distinct",
         ), f"{given}: {should}"
 
     def test_composite_primary_key_is_one_shared_row_distinct_check(self):
@@ -207,13 +207,13 @@ class TestThresholds:
 
     def test_zero_duplicates_are_blank_safe_and_exact(self):
         given = "duplicateValues mustBe 0 under 0.8"
-        should = "map (not approximate) to the non-blank distinct check"
+        should = "map (not approximate) to the non-null distinct check"
 
         outcome = _column_rule({"metric": "duplicateValues", "mustBe": 0})
 
         assert (outcome.status, outcome.assertions[0].op) == (
             Status.MAPPED,
-            "col.non_blank_distinct",
+            "col.non_null_distinct",
         ), f"{given}: {should}"
 
     def test_schema_level_duplicates_over_three_columns(self):
@@ -252,23 +252,21 @@ class TestThresholds:
 
 class TestPatterns:
     @pytest.mark.parametrize(
-        "pattern, op, status",
-        [
-            ("^ABC", "col.starts_with", Status.APPROXIMATED),
-            ("ABC$", "col.ends_with", Status.APPROXIMATED),
-            ("ABC", "col.contains", Status.MAPPED),
-        ],
+        "pattern, op",
+        [("^ABC", "col.starts_with"), ("ABC$", "col.ends_with"), ("ABC", "col.contains")],
     )
-    def test_simple_patterns_map_to_column_checks(self, pattern, op, status):
+    def test_simple_patterns_map_to_case_sensitive_column_checks(self, pattern, op):
         given = f"an invalidValues pattern {pattern!r}"
-        should = f"map to {op} as {status.value}"
+        should = f"map exactly to {op}, case-sensitive like the regex"
         rule = {"metric": "invalidValues", "mustBe": 0, "arguments": {"pattern": pattern}}
 
         outcome = _column_rule(rule)
 
-        assert (outcome.status, _call(outcome)[0], _call(outcome)[2]) == (status, op, {"text": "ABC"}), (
-            f"{given}: {should}"
-        )
+        assert (outcome.status, _call(outcome)[0], _call(outcome)[2]) == (
+            Status.MAPPED,
+            op,
+            {"text": "ABC", "matchCase": "Y"},
+        ), f"{given}: {should}"
 
     @pytest.mark.parametrize("pattern", ["^A.C", "^ABC$", "a|b", "[a-z]+", "^", "\\d+"])
     def test_other_patterns_stay_skipped_with_a_reason(self, pattern):
@@ -301,7 +299,7 @@ class TestPatterns:
         out = _outcomes(_table(prop("a", logicalTypeOptions={"pattern": "^AB", "minLength": 2})))
 
         assert (out["T.a.pattern"].status, "pattern" in out["T.a.logicalTypeOptions"].reason) == (
-            Status.APPROXIMATED,
+            Status.MAPPED,
             False,
         ), f"{given}: {should}"
 
@@ -383,8 +381,8 @@ class TestRendering:
         for fn in (
             "Col.NullCountShouldBeAtMost",
             "Col.ShouldBePrimaryKey",
-            "Col.NonBlankValuesShouldBeDistinct",
-            "Col.ValuesShouldContain",
+            "Col.NonNullValuesShouldBeDistinct",
+            "Col.ShouldContainString",
             "ShouldNotBeBetween",
             "Col.MaxDateShouldBeWithinDays",
         ):

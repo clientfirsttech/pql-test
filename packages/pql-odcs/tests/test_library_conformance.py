@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT
+"""Every catalog op must call a function that the released PQL.Assert library defines.
+
+The fixture under ``fixtures/pql-assert-0.8.0/`` is the released PQL.Assert 0.8.0 package
+(see its README). 0.8.0 keeps every 0.7.x name and signature, so both catalogs are
+checked against it.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from pql_odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog
+from pql_odcs.udf import library_versions, parse_functions
+
+LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.8.0"
+
+
+def _library():
+    functions = []
+    for tmdl in sorted((LIBRARY / "lib").glob("*.tmdl")):
+        functions.extend(parse_functions(tmdl.read_text(encoding="utf-8-sig")))
+    return {fn.name: fn for fn in functions}
+
+
+def test_fixture_is_the_whole_0_8_0_release():
+    given = "the vendored PQL.Assert 0.8.0 fixture"
+    should = "hold only 0.8.0 PQL.Assert functions, including LibraryVersion() returning 0.8.0"
+
+    library = _library()
+
+    assert (
+        library_versions(library.values()),
+        library["PQL.Assert.LibraryVersion"].expression,
+    ) == ({"0.8.0": len(library)}, '() => "0.8.0"'), f"{given}: {should}"
+
+
+@pytest.mark.parametrize("version", sorted(PQL_ASSERT_CATALOGS))
+def test_every_catalog_op_calls_a_released_function(version):
+    given = f"the PQL.Assert {version} catalog"
+    should = "name only functions in the released library, with an argument count each one accepts"
+    library = _library()
+    catalog = load_catalog(PQL_ASSERT_CATALOGS[version])
+
+    problems = []
+    for key, spec in sorted(catalog.ops.items()):
+        fn = library.get(spec.fn)
+        if fn is None:
+            problems.append(f"{key}: {spec.fn} is not in PQL.Assert 0.8.0")
+            continue
+        required = sum(1 for p in fn.parameters if not p.optional)
+        if not required <= len(spec.args) <= len(fn.parameters):
+            signature = ", ".join(p.name for p in fn.parameters)
+            problems.append(f"{key}: {spec.fn}({signature}) cannot take {len(spec.args)} arguments")
+
+    assert problems == [], f"{given}: {should}\n" + "\n".join(problems)

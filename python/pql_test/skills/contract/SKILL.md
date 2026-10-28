@@ -67,10 +67,10 @@ Everything else is reported as **skipped**, with the release that will map it:
 With `--pql-assert 0.8` (needs PQL.Assert 0.8.0 or later in the model), more rules map exactly:
 - `required: true` and `nullValues` use `Col.NullCountShouldBeAtMost`, which counts true nulls only; empty strings are not nulls;
 - `nullValues` with an absolute ceiling, or `unit: percent` (`Col.NullRateShouldBeAtMostV2`);
-- `primaryKey` uses `Col.ShouldBePrimaryKey`; `unique` and `duplicateValues mustBe 0` use `Col.NonBlankValuesShouldBeDistinct`;
+- `primaryKey` uses `Col.ShouldBePrimaryKey`; `unique` and `duplicateValues mustBe 0` use `Col.NonNullValuesShouldBeDistinct` (nulls ignored);
 - composite `primaryKey` and schema-level `duplicateValues` over two or more properties use `Tbl.RowsShouldBeDistinct`;
 - `duplicateValues` with a ceiling uses `Col.DuplicateCountShouldBeAtMost`, and `rowCount mustNotBeBetween` uses `ShouldNotBeBetween`;
-- simple patterns (`^literal`, `literal$`, a bare literal) use `Col.ValuesShouldStartWith` / `EndsWith` / `Contains` (starts/ends are approximated: DAX text comparison ignores case);
+- simple patterns (`^literal`, `literal$`, a bare literal) use `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString`, case-sensitive like the regex;
 - a `latency` SLA with a `table.column` element uses `Col.MaxDateShouldBeWithinDays` (approximated: it is the age of the newest value, and depends on when the test runs).
 
 Options shared by `generate`, `coverage`, and `run`:
