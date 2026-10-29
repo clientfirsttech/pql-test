@@ -32,7 +32,7 @@ Constraints {
   `run` never changes the PBIP project or the model: suites are built in memory and run as read-only queries.
     Writing into DAXQueries/ (and so into git and Fabric Git integration) is a separate act: generate, or run --write
     <workspace>.Workspace/<model>.SemanticModel is NOT accepted yet
-  Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema or DataQuality;
+  Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema, DataQuality, or RefreshAge (frequency SLAs);
     the prefix comes from the contract's dataProduct, then its name (override with --suite-prefix)
   severity: warning (or info) rules go to separate <ENV>WARN suites: reported, but they never fail `run`
   Test names are "ODCS <contractId> <ruleId>: <description>"; ruleId is the ODCS `id`, else a path like orders.customer_id.quality[0]
@@ -41,7 +41,16 @@ Constraints {
   --pql-assert 0.7|0.8 picks the PQL.Assert version generated for (default 0.7; `run` defaults to auto: it asks the model
     with PQL.Assert.LibraryVersion() and falls back to 0.7); 0.8 needs a model with PQL.Assert 0.8.0 or later
   approximated = generated, but DAX semantics differ (named in the reason): primaryKey/unique/duplicateValues are skewed by blanks;
-    required on string columns also counts empty strings as nulls
+    required on string columns also counts empty strings as nulls (0.7); text value lists ignore case; latency and frequency
+    depend on when the test runs
+  latency and frequency are different SLAs. latency (element table.column, a load timestamp) checks data age: the newest value
+    in the model. frequency (element table) checks refresh recency: INFO.PARTITIONS()[RefreshedTime], in the RefreshAge suite.
+    A successful refresh of stale source data passes frequency and fails latency, so recommend both, and a load timestamp,
+    never a business date, for latency; latency on a table with no column is skipped (refresh time is not source latency)
+  type: custom rules with engine: pql-test carry DAX: implementation {expression, <one comparator>} or {function, args}.
+    pql-test supplies testName; the function form needs --pql-assert 0.8. The DAX must be one expression (no EVALUATE or
+    DEFINE, balanced brackets and quotes, no comma outside brackets); lint reports a rule that breaks this. Coverage JSON
+    marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools would run it as SQL)
   Both workflows are supported: regenerate in CI (`contract run`, which writes no files), or commit the generated
     suites and fail CI on drift (`generate` then `git diff --exit-code`); see docs/contracts.md
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule
@@ -99,6 +108,35 @@ Work in this loop, and fix each step before the next:
 4. `pql-test contract coverage c.odcs.yaml --pql-assert 0.8` — what is enforced, approximated, or skipped
 5. `pql-test contract run c.odcs.yaml MODEL --env DEV` — run it against the model (writes no files)
 
+Scenario tests (a measure's value in a filter context) and freshness go in the same contract:
+
+```yaml
+schema:
+  - name: Sales
+    quality:
+      - id: no-sales-is-zero                   # a scenario: 0, not blank, when nothing matches
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: CALCULATE([Total Sales], 'Date'[Year] = -1)
+          mustBe: 0
+      - id: amount-mean                        # any PQL.Assert check, by name (--pql-assert 0.8)
+        type: custom
+        engine: pql-test
+        implementation:
+          function: PQL.Assert.Col.MeanShouldBeInRange
+          args: ["'Sales'[Amount]", 0, 500]
+slaProperties:
+  - property: latency                          # data age: the newest load is at most 3 hours old
+    value: 3
+    unit: h
+    element: Sales.LoadedAtUtc
+  - property: frequency                        # refresh recency: the model refreshed in the last 26 hours
+    value: 26
+    unit: h
+    element: Sales
+```
+
 ## What the default `--pql-assert 0.7` maps
 
 | ODCS rule | Generated check |
@@ -110,9 +148,10 @@ Work in this loop, and fix each step before the next:
 | `required: true`, `nullValues mustBe 0` | `Col.NullRateShouldBeAtMost(…, 0)` (approximated on string columns) |
 | `primaryKey`, `unique`, `duplicateValues mustBe 0` | `Col.ShouldBeDistinct` (one shared check per column; approximated, because blanks skew it) |
 | `rowCount` (all comparators except `mustNotBeBetween`) | `Tbl.ShouldHaveRows` / `ShouldHaveRowCount` / `ShouldHaveMoreRowsThan` / comparisons on `COUNTROWS` |
+| `type: custom`, `engine: pql-test`, `implementation.expression` | `ShouldEqual` (text: `ShouldEqualExactly`) / `ShouldNotEqual` / `ShouldBeGreaterThan` / ... / `ShouldBeBetween` on the expression |
 
 Everything else is reported as **skipped**, with the release that will map it:
-- `type: sql`, `custom`, and `text` rules;
+- `type: sql` and `text` rules, `type: custom` for any engine but `pql-test`, and the `pql-test` direct-call form;
 - composite keys, nested properties, and ODCS 3.2 `map` / `vector` properties;
 - `logicalTypeOptions`, relationships, ODCS 3.2 `enum`, and a `physicalType` with no `logicalType`;
 - `missingValues` and `invalidValues`;
@@ -126,7 +165,11 @@ With `--pql-assert 0.8` (needs PQL.Assert 0.8.0 or later in the model), more rul
 - composite `primaryKey` and schema-level `duplicateValues` over two or more properties use `Tbl.RowsShouldBeDistinct`;
 - `duplicateValues` with a ceiling uses `Col.DuplicateCountShouldBeAtMost`, and `rowCount mustNotBeBetween` uses `ShouldNotBeBetween`;
 - simple patterns (`^literal`, `literal$`, a bare literal) use `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString`, case-sensitive like the regex;
-- a `latency` SLA with a `table.column` element uses `Col.MaxDateShouldBeWithinDays` (approximated: it is the age of the newest value, and depends on when the test runs).
+- `logicalTypeOptions` bounds use `Col.ShouldBeInRange` / `MinShouldBeAtLeast` / `MaxShouldBeAtMost` / `ShouldBePositive` (an integer's exclusive bound converts exactly), and `minLength` / `maxLength` use `Col.TextLengthShouldBeInRange`;
+- ODCS 3.2 `enum` and `invalidValues` with `validValues` use `Col.ValuesShouldBeInSet`, or `Tbl.RowCountShouldBeAtMost` / `RowRateShouldBeAtMost` with a threshold; `missingValues` (default null and `""`) uses the same row checks;
+- `relationships` (foreign keys between contract properties) use `Relationship.ShouldExist`, and `lint` checks them against the model's TMDL;
+- a `latency` SLA with `table.column` element(s) uses `Col.MaxDateShouldBeWithinDays` / `…Hours` (data age), and a `frequency` SLA with a table element checks the hours since the last refresh (refresh recency); both are approximated;
+- `engine: pql-test` rules can also call any PQL.Assert assertion directly (`implementation: {function, args}`).
 
 Options shared by `generate`, `coverage`, and `run`:
 - `--env ENV` — environment token for suite names, e.g. `DEV` (generate/run; required).
