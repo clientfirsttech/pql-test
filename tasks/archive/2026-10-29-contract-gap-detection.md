@@ -1,6 +1,6 @@
 # Contract Gap Detection Epic
 
-**Status**: 📋 PLANNED
+**Status**: ✅ COMPLETED (2026-10-29)
 **Goal**: A gap in `pql-test contract`'s ODCS-to-PQL.Assert coverage — a new ODCS rule kind, a new PQL.Assert release, or docs that drifted from the code — fails a test or an AIDD review step before it reaches a user, instead of surfacing only as a silent "unrecognised" skip.
 
 ## Overview
@@ -50,7 +50,7 @@ Give a user runnable contracts instead of pointing them at test fixtures.
 
 **Requirements**:
 - Given a new `examples/contracts/` with three contracts (a starter from `init`, one exercising scenario tests and the direct-call form, one exercising `latency` and `frequency`), should lint clean and run with every mapped rule passing against `examples/SampleModel`, checked by a live test the same way `marvel.odcs.yaml` is
-- Given `docs/contracts.md`'s "Quick start" and "Writing a contract" sections, should link to `examples/contracts/` instead of only showing inline snippets
+- Given `docs/contracts.md`'s "Quick start" and "Start a contract from the model" sections, and `skills/contract/SKILL.md`'s "Writing a contract" section, should link to `examples/contracts/` instead of only showing inline snippets
 - Given the video plan (`contract-videos.local.md`), should note that these become the demo material for videos 2, 7, and 8 in place of the test fixtures, once this epic lands
 
 ---

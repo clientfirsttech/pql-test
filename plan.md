@@ -4,7 +4,6 @@
 
 ## Active Work
 
-- **Contract gap detection** — an ODCS rule matrix (mirroring the PQL.Assert function matrix) so a new ODCS release's metrics, quality types, or `logicalTypeOptions` keys fail a test instead of silently skipping; a docs-to-code agreement test for `docs/contracts.md`'s mapping tables; an AIDD skill that checks both Bitol and DAX Lib for new releases, wired into `/aidd-review` step 9; and runnable example contracts under `examples/contracts/`. See [tasks/contract-gap-detection-epic.md](tasks/contract-gap-detection-epic.md). Planned 2026-10-29.
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -83,6 +82,14 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-10-29 — Contract gap detection: ODCS rule matrix, docs agreement, gap-check skill, examples (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-29-contract-gap-detection.md](tasks/archive/2026-10-29-contract-gap-detection.md) and [docs/contracts.md](docs/contracts.md#how-we-keep-this-mapping-complete).
+- `test_odcs_rule_matrix.py` classifies every value in ODCS's closed vocabularies (`pql_test/odcs/catalog/odcs_rules.yaml`), mirroring the PQL.Assert function matrix; a new ODCS release's metric, quality type, `logicalType`, relationship type, or `logicalTypeOptions` key fails a test until classified and demonstrated in a fixture.
+- `test_docs_contracts_agreement.py` checks `docs/contracts.md`'s mapping tables against the catalogs, both directions, plus six skip reasons against what the mapper actually produces.
+- `aidd-custom/skills/pql-test-contract-gap-check/SKILL.md`, wired into `/aidd-review` step 9 alongside the docs check: checks for a new Bitol ODCS or PQL.Assert release and runs both matrices plus the docs-agreement test.
+- `examples/contracts/` (`starter.odcs.yaml`, `scenario-tests.odcs.yaml`, `freshness.odcs.yaml`): runnable, live-verified example contracts for learners, linked from `docs/contracts.md` and the contract skill in place of pointing at test fixtures.
 
 ### 2026-10-29 — Contract rule coverage: value rules, DAX rules, latency vs frequency (branch `dev-odcs`)
 

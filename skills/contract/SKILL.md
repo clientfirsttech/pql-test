@@ -75,6 +75,8 @@ pql-test contract init local/MyModel --table Sales --table Customer -o sales.odc
 
 `init` options: `--table NAME` (repeatable, any case), `--id ID` (default: the model name, lowercased with dashes), `--output FILE` / `-o` (default: stdout), and `--force` to overwrite the `--output` file. It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables. A column with no ODCS type (a calculated table or column, or `binary`) gets a `description` saying why instead of a `logicalType`.
 
+`examples/contracts/` has three runnable contracts against `examples/SampleModel`, each verified to pass every mapped rule: `starter.odcs.yaml` (init's own output), `scenario-tests.odcs.yaml` (engine: pql-test DAX rules, both forms), and `freshness.odcs.yaml` (latency and frequency).
+
 Then add the rules the data must meet, on the property or the schema object:
 
 ```yaml
