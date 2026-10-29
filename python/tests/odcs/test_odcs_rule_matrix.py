@@ -152,7 +152,11 @@ def test_every_mapped_value_is_demonstrated_in_a_fixture():
     for category in ("quality_metrics", "quality_types", "logical_types", "relationship_types"):
         classified = getattr(rules, category)
         for name, c in classified.items():
-            if c.use in ("mapped", "dax-only") and name not in touched[category] and (category, name) not in _NO_FIXTURE_NEEDED:
+            if (
+                c.use in ("mapped", "dax-only")
+                and name not in touched[category]
+                and (category, name) not in _NO_FIXTURE_NEEDED
+            ):
                 missing.append(f"{category}.{name}")
     for logical_type, options in rules.logical_type_options.items():
         for name, c in options.items():
@@ -181,5 +185,4 @@ def test_extraction_matches_a_known_schema_shape():
         "pattern" in found["logical_type_options"].get("string", set()),
         "exclusiveMinimum" in found["logical_type_options"].get("number", set()),
         "object" not in found["logical_type_options"],  # no model column: object's own keys are never reached
-
     ) == (True, True, True, True, True), f"{given}: {should}"

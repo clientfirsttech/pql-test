@@ -62,7 +62,9 @@ def load_odcs_rules() -> OdcsRules:
         return {name: Classification(**spec) for name, spec in data[key].items()}
 
     def nested(key: str) -> dict[str, dict[str, Classification]]:
-        return {outer: {name: Classification(**spec) for name, spec in inner.items()} for outer, inner in data[key].items()}
+        return {
+            outer: {name: Classification(**spec) for name, spec in inner.items()} for outer, inner in data[key].items()
+        }
 
     return OdcsRules(
         quality_metrics=flat("quality_metrics"),
