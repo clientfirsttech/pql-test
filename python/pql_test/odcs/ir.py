@@ -14,6 +14,9 @@ DATA_QUALITY_SUITE = "DataQuality"
 # from failing every other rule (a suite runs as one query). Not "Refresh": the DAX query
 # parser rejects that word as a segment of a function name.
 REFRESH_SUITE = "RefreshAge"
+# Rules whose DAX the contract wrote (`engine: pql-test`): their own suite, so a mistake in that
+# DAX (an unknown measure, say) cannot error the rules pql-test translated.
+CONTRACT_DAX_SUITE = "ContractDax"
 ERROR = "error"
 WARNING = "warning"
 # A contract rule's direct call of a PQL.Assert function: args["function"] and args["arguments"]

@@ -188,7 +188,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "pattern '^[a-z]+$': an exact-match pattern (^literal$) has no PQL.Assert column function"
+      "reason": "pattern '^[a-z]+$': regular expressions beyond ^literal, literal$, and a bare literal are not translated to DAX"
     },
     {
       "ruleId": "orders.status.quality[3]",

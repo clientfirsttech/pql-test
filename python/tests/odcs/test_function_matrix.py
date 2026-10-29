@@ -25,8 +25,14 @@ def _library() -> dict:
     return {fn.name: fn for fn in functions}
 
 
-def _catalog_functions() -> set[str]:
-    return {spec.fn for name in PQL_ASSERT_CATALOGS.values() for spec in load_catalog(name).ops.values()}
+def _rule_functions() -> set[str]:
+    """Functions an ODCS rule generates: every catalog op except the dax.* ops of `engine: pql-test` rules."""
+    return {
+        spec.fn
+        for name in PQL_ASSERT_CATALOGS.values()
+        for key, spec in load_catalog(name).ops.items()
+        if not key.startswith("dax.")
+    }
 
 
 def test_signatures_match_the_vendored_library():
@@ -42,10 +48,10 @@ def test_signatures_match_the_vendored_library():
 
 def test_mapped_means_a_catalog_calls_it():
     given = "functions classified as mapped"
-    should = "be exactly the functions some catalog op calls"
+    should = "be exactly the functions an ODCS rule generates (not those only engine: pql-test rules reach)"
     mapped = {name for name, s in load_signatures().functions.items() if s.use == "mapped"}
 
-    assert mapped == _catalog_functions(), f"{given}: {should}"
+    assert mapped == _rule_functions(), f"{given}: {should}"
 
 
 def test_only_non_assertions_are_out_of_scope():

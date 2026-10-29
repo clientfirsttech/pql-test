@@ -1,9 +1,12 @@
 # Live proof of the rule-coverage mappings against examples/SampleModel (PQL.Assert 0.8 catalog).
 # Each rule says whether it must pass or fail, and the SampleModel fact behind that (facts from
-# marvel-0-8.odcs.yaml and docs/pql-assert-gap-plan.md, 2026-10-25, and the model's TMDL).
-# "executes" rules have no recorded fact, so they only have to run. python/tests/
-# test_contract_live.py pins the same outcomes in EXPECTED_RULE_COVERAGE.
-apiVersion: v3.1.0
+# marvel-0-8.odcs.yaml, docs/pql-assert-gap-plan.md, and live queries on 2026-10-29: DateDim has
+# 1,039 rows, Year 1-2026 with no blanks, DateID from 0, DateKey always 8 characters;
+# AlignmentDim holds Not Available, Bad, Good, Neutral; MarvelSource.EYE has 16,376 rows, no nulls,
+# and 9,767 empty strings; MarvelFact.ID starts at 1025). python/tests/test_contract_live.py pins
+# the same outcomes in EXPECTED_RULE_COVERAGE, and the Actual text of the planted failures in
+# EXPECTED_ACTUAL.
+apiVersion: v3.2.0
 kind: DataContract
 id: rule-coverage-live
 name: Rule Coverage Live
@@ -23,10 +26,24 @@ schema:
           - id: source_year_missing_at_most_814       # fail: 815 null rows
             metric: missingValues
             mustBeLessOrEqualTo: 814
+      - name: EYE
+        logicalType: string
+        quality:
+          - id: source_eye_missing_pct_at_most_60     # pass: default list (null, ""): 9,767 of 16,376 (59.6%)
+            metric: missingValues
+            mustBeLessOrEqualTo: 60
+            unit: percent
+          - id: source_eye_empty_at_most_9766         # fail: 9,767 empty strings
+            metric: missingValues
+            mustBeLessOrEqualTo: 9766
+            arguments:
+              missingValues: [""]
   - name: DateDim
     properties:
       - name: DateID
         logicalType: integer
+        logicalTypeOptions:
+          minimum: 1                                  # fail: DateID 0 is the "Not Available" row
         quality:
           - id: date_id_missing_none                  # pass: DateID has no null rows
             metric: missingValues
@@ -34,18 +51,24 @@ schema:
       - name: Year
         logicalType: integer
         logicalTypeOptions:
-          maximum: 1000                               # fail: the newest year is 2026
+          minimum: 1                                  # pass: years run from 1 to 2026
+          maximum: 2026
         quality:
           - id: date_year_only_minus_one              # fail: no year is -1
             metric: invalidValues
             mustBe: 0
             arguments:
               validValues: [-1]
-          - id: date_year_outside_minus_one_below_2   # fail: more than one row has a year other than -1
+          - id: date_year_outside_minus_one_below_2   # fail: every row has a year other than -1
             metric: invalidValues
             mustBeLessThan: 2
             arguments:
               validValues: [-1]
+      - name: DateKey
+        logicalType: string
+        logicalTypeOptions:
+          minLength: 8                                # pass: every DateKey is 8 characters
+          maxLength: 8
       - name: Date
         logicalType: date
     relationships:
@@ -64,6 +87,18 @@ schema:
         implementation:
           expression: COUNTROWS('DateDim')
           mustBeGreaterThan: 2000
+      - id: date_dim_rows_between_dax                 # pass: 1,039 rows
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: COUNTROWS('DateDim')
+          mustBeBetween: [1000, 1100]
+      - id: date_dim_rows_not_between_dax             # fail: 1,039 rows
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: COUNTROWS('DateDim')
+          mustNotBeBetween: [1000, 1100]
       - id: date_years_at_least_two                   # pass: many years (950 duplicate values)
         type: custom
         engine: pql-test
@@ -76,23 +111,64 @@ schema:
         implementation:
           function: PQL.Assert.Col.DistinctCountShouldBeAtMost
           args: ["'DateDim'[Year]", 1]
-      - id: no_data_year_returns_zero                 # executes: the Calculations.DEV.Tests scenario
+      - id: no_data_year_returns_zero                 # fail: returns 10, not 0 (the Calculations.DEV.Tests scenario)
         type: custom
         engine: pql-test
         implementation:
           expression: CALCULATE([Number of Characters], FILTER(ALL('DateDim'), 'DateDim'[Year] = -1))
           mustBe: 0
+  - name: AlignmentDim
+    properties:
+      - name: Alignment
+        logicalType: string
+        enum:                                         # pass (approximated: text ignores case): the four values
+          - value: Not Available
+          - value: Bad
+          - value: Good
+          - value: Neutral
+        logicalTypeOptions:
+          maxLength: 4                                # fail: "Not Available" has 13 characters
+        quality:
+          - id: alignment_unlisted_pct_at_most_30     # pass: 1 of 4 rows (25%) is outside Good, Bad, Neutral
+            metric: invalidValues
+            mustBeLessOrEqualTo: 30
+            unit: percent
+            arguments:
+              validValues: [Good, Bad, Neutral]
+    quality:
+      - id: alignment_good_exact                      # pass: the value is "Good"
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: MAXX(FILTER('AlignmentDim', 'AlignmentDim'[Alignment] = "good"), 'AlignmentDim'[Alignment])
+          mustBe: Good
+      - id: alignment_good_upper                      # fail: ShouldEqualExactly is case-sensitive, the value is "Good"
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: MAXX(FILTER('AlignmentDim', 'AlignmentDim'[Alignment] = "good"), 'AlignmentDim'[Alignment])
+          mustBe: GOOD
+      - id: alignment_count_commented                 # pass: 4 rows; the expression ends in a line comment
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: COUNTROWS('AlignmentDim') // four alignments
+          mustBe: 4
   - name: marvel_fact
     customProperties:
       - property: pbiTable
         value: MarvelFact
     properties:
+      - name: ID
+        logicalType: integer
+        logicalTypeOptions:
+          exclusiveMinimum: 0                         # pass: IDs start at 1025
       - name: DateID
         logicalType: integer
         relationships:
           - to: DateDim.DateID                        # pass: relationships.tmdl, MarvelFact.DateID -> DateDim.DateID
 slaProperties:
-  - property: latency                                 # fail: newest DateDim[Date] was 238 days old on 2026-10-25
+  - property: latency                                 # fail: the newest DateDim[Date] is months old
     value: 1
     unit: h
     element: DateDim.Date

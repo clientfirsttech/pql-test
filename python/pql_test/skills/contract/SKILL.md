@@ -32,7 +32,8 @@ Constraints {
   `run` never changes the PBIP project or the model: suites are built in memory and run as read-only queries.
     Writing into DAXQueries/ (and so into git and Fabric Git integration) is a separate act: generate, or run --write
     <workspace>.Workspace/<model>.SemanticModel is NOT accepted yet
-  Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema, DataQuality, or RefreshAge (frequency SLAs);
+  Suites are named <Prefix>.<Suite>.<ENV>.Tests, where Suite is Schema, DataQuality, ContractDax (engine: pql-test rules),
+    or RefreshAge (frequency SLAs);
     the prefix comes from the contract's dataProduct, then its name (override with --suite-prefix)
   severity: warning (or info) rules go to separate <ENV>WARN suites: reported, but they never fail `run`
   Test names are "ODCS <contractId> <ruleId>: <description>"; ruleId is the ODCS `id`, else a path like orders.customer_id.quality[0]
@@ -49,8 +50,10 @@ Constraints {
     never a business date, for latency; latency on a table with no column is skipped (refresh time is not source latency)
   type: custom rules with engine: pql-test carry DAX: implementation {expression, <one comparator>} or {function, args}.
     pql-test supplies testName; the function form needs --pql-assert 0.8. The DAX must be one expression (no EVALUATE or
-    DEFINE, balanced brackets and quotes, no comma outside brackets); lint reports a rule that breaks this. Coverage JSON
-    marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools would run it as SQL)
+    DEFINE, balanced brackets and quotes, no comma outside brackets, no control characters but line feed and tab);
+    lint reports a rule that breaks this. On --pql-assert 0.7 a BLANK result passes text mustBe and number comparisons
+    (approximated). Coverage JSON marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools
+    would run it as SQL)
   Both workflows are supported: regenerate in CI (`contract run`, which writes no files), or commit the generated
     suites and fail CI on drift (`generate` then `git diff --exit-code`); see docs/contracts.md
   run --output adds a "contract" key (per-rule trace) to the run-tests JSON; run --log-format emits one annotation per failed rule

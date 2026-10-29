@@ -108,27 +108,60 @@ EXPECTED_RULE_COVERAGE = {
     "MarvelSource.Year.type": "passed",
     "source_year_missing_pct_at_most_5": "passed",
     "source_year_missing_at_most_814": "failed",
+    "MarvelSource.EYE.type": "passed",
+    "source_eye_missing_pct_at_most_60": "passed",
+    "source_eye_empty_at_most_9766": "failed",
     "DateDim.exists": "passed",
     "DateDim.columns": "passed",
     "DateDim.DateID.type": "passed",
+    "DateDim.DateID.range": "failed",
     "date_id_missing_none": "passed",
     "DateDim.Year.type": "passed",
-    "DateDim.Year.range": "failed",
+    "DateDim.Year.range": "passed",
     "date_year_only_minus_one": "failed",
     "date_year_outside_minus_one_below_2": "failed",
+    "DateDim.DateKey.type": "passed",
+    "DateDim.DateKey.length": "passed",
     "DateDim.Date.type": "passed",
     "DateDim.relationships[0]": "failed",
     "date_dim_rows_dax": "passed",
     "date_dim_rows_over_2000_dax": "failed",
+    "date_dim_rows_between_dax": "passed",
+    "date_dim_rows_not_between_dax": "failed",
     "date_years_at_least_two": "passed",
     "date_years_at_most_one": "failed",
-    "no_data_year_returns_zero": "executed",
+    "no_data_year_returns_zero": "failed",
+    "AlignmentDim.exists": "passed",
+    "AlignmentDim.columns": "passed",
+    "AlignmentDim.Alignment.type": "passed",
+    "AlignmentDim.Alignment.enum": "passed",
+    "AlignmentDim.Alignment.length": "failed",
+    "alignment_unlisted_pct_at_most_30": "passed",
+    "alignment_good_exact": "passed",
+    "alignment_good_upper": "failed",
+    "alignment_count_commented": "passed",
     "marvel_fact.exists": "passed",
     "marvel_fact.columns": "passed",
+    "marvel_fact.ID.type": "passed",
+    "marvel_fact.ID.range": "passed",
     "marvel_fact.DateID.type": "passed",
     "marvel_fact.DateID.relationships[0]": "passed",
     "slaProperties[0]": "failed",
     "slaProperties[1]": "refresh",
+}
+
+# Text each planted failure's Actual must contain: it fails for the fixture's stated reason,
+# not for a DAX error or another fact.
+EXPECTED_ACTUAL = {
+    "source_year_missing_at_most_814": "815",
+    "source_eye_empty_at_most_9766": "9767",
+    "DateDim.DateID.range": "Min=0",
+    "date_dim_rows_over_2000_dax": "1039",
+    "date_dim_rows_not_between_dax": "1039",
+    "no_data_year_returns_zero": "10",
+    "AlignmentDim.Alignment.length": "OUT OF RANGE",
+    "alignment_good_upper": "Good",
+    "slaProperties[0]": "hour(s) old",
 }
 
 
@@ -192,7 +225,8 @@ def sample_model_copy(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _run(contract: str, model: Path, out: Path, pql_assert: str):
+def _run_report(contract: str, model: Path, out: Path, pql_assert: str):
+    """``contract run`` the fixture, then trace its --output file: (CLI result, TraceReport)."""
     from pql_test.odcs.api import plan_contract
     from pql_test.odcs.results import trace
     from pql_test.cli import cli
@@ -201,6 +235,11 @@ def _run(contract: str, model: Path, out: Path, pql_assert: str):
     result = CliRunner().invoke(cli, [*args, "--pql-assert", pql_assert])
     assert out.exists(), f"contract run wrote no --output file\n{result.output}"
     report = trace(plan_contract(FIXTURES / contract, pql_assert=pql_assert), json.loads(out.read_text(encoding="utf-8")))
+    return result, report
+
+
+def _run(contract: str, model: Path, out: Path, pql_assert: str):
+    result, report = _run_report(contract, model, out, pql_assert)
     return result, {r.rule_id: r.status for r in report.rules}
 
 
@@ -315,12 +354,14 @@ def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, 
 def test_rule_coverage_contract_runs_with_the_pinned_outcomes(sample_model_copy, tmp_path, monkeypatch):
     given = "the rule-coverage SampleModel contract (value rules, relationships, DAX rules, latency, frequency)"
     should = (
-        "give each rule its pinned outcome, with no error outside the RefreshAge suite (a run identity without "
-        "INFO.* permission may error only the frequency rule)"
+        "give each rule its pinned outcome, each planted failure its pinned Actual text, and no error outside the "
+        "RefreshAge suite (a run identity without INFO.* permission may error only the frequency rule)"
     )
     _with_0_8_library(sample_model_copy, monkeypatch)
 
-    result, statuses = _run("rule-coverage-live.odcs.yaml", sample_model_copy, tmp_path / "rc.json", "0.8")
+    result, report = _run_report("rule-coverage-live.odcs.yaml", sample_model_copy, tmp_path / "rc.json", "0.8")
+    statuses = {r.rule_id: r.status for r in report.rules}
+    actuals = {r.rule_id: " | ".join(str(d.get("actual", "")) for d in r.details) for r in report.rules}
 
     def normalised(rid, status):
         expected = EXPECTED_RULE_COVERAGE.get(rid)
@@ -331,7 +372,8 @@ def test_rule_coverage_contract_runs_with_the_pinned_outcomes(sample_model_copy,
         return status
 
     actual = {rid: normalised(rid, s) for rid, s in statuses.items() if s != "skipped"}
-    assert actual == EXPECTED_RULE_COVERAGE, f"{given}: {should}\n{result.output}"
+    wrong_reason = {rid: actuals.get(rid) for rid, text in EXPECTED_ACTUAL.items() if text not in actuals.get(rid, "")}
+    assert (actual, wrong_reason) == (EXPECTED_RULE_COVERAGE, {}), f"{given}: {should}\n{result.output}"
 
 
 @pytest.mark.parametrize("model, dataset_var", [("SampleModel", "PQL_DATASET_ID"), ("RLS_Model", "PQL_DATASET_ID_RLS")])

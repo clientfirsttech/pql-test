@@ -14,13 +14,14 @@ The DAX is embedded in a generated suite's ``UNION``, so it must be one expressi
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from typing import Any
 
 from pql_test.odcs.catalog import load_signatures
 from pql_test.odcs.emit.dax import dax_literal
-from pql_test.odcs.ir import CONTRACT_DAX, DATA_QUALITY_SUITE, DIRECT_CALL, Assertion, RuleOutcome, Status, Target
+from pql_test.odcs.ir import CONTRACT_DAX, CONTRACT_DAX_SUITE, DIRECT_CALL, Assertion, RuleOutcome, Status, Target
 from pql_test.odcs.mapping.context import MapContext, skipped
 from pql_test.odcs.mapping.library import OPERATORS, severity_of
 from pql_test.odcs.mapping.validity import CASE_INSENSITIVE
@@ -39,8 +40,17 @@ _COMPARATOR_OPS = {
 }
 _FORMS = "implementation: {expression, <one comparator>} or {function, args}"
 _KEYWORD_RE = re.compile(r"\b(EVALUATE|DEFINE)\b", re.IGNORECASE)
+# Control characters and Unicode line breaks, except line feed and tab. A lone carriage return
+# would end a // comment for a reader that normalises line ends but not for this scanner.
+_CONTROL_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u2028\u2029]")
 _CLOSERS = {")": "(", "}": "{"}
 _DESCRIPTION_LIMIT = 80
+# PQL.Assert 0.7.x compared a BLANK actual as 0 (numbers) or "" (ShouldEqualExactly); 0.8.0 fails it.
+_BLANK_LENIENT_0_7 = {"dax.equal_exactly", "dax.gt", "dax.ge", "dax.lt", "dax.le", "dax.between"}
+BLANK_PASSES_ON_0_7 = (
+    "PQL.Assert 0.7 compares a BLANK result as 0 (or as an empty string), so a BLANK can pass; "
+    "--pql-assert 0.8 fails it"
+)
 
 
 def is_pql_test_rule(rule: Mapping) -> bool:
@@ -53,6 +63,9 @@ def dax_problem(text: str) -> str | None:
     Scans DAX outside string literals ("..."), quoted names ('...'), column references ([...]),
     and comments, so their contents never count.
     """
+    control = _CONTROL_RE.search(text)
+    if control:
+        return f"a control character (U+{ord(control.group()):04X}); use line feeds and tabs only"
     code, i, stack = [], 0, []
     while i < len(text):
         ch, pair = text[i], text[i : i + 2]
@@ -86,6 +99,8 @@ def dax_problem(text: str) -> str | None:
         elif ch in ")}":
             if not stack or stack.pop() != _CLOSERS[ch]:
                 return f"an unbalanced {ch}"
+        elif ch == "]":
+            return "an unbalanced ]"
         elif ch == "," and not stack:
             return "a top-level comma (the DAX must be one expression)"
         code.append(ch)
@@ -141,13 +156,15 @@ def _expression_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
     if not ctx.supports(op):
         return skipped(rule_id, f"{key} on a DAX expression needs --pql-assert 0.8 (ShouldNotBeBetween)", description)
     assertion = Assertion(
-        rule_id, DATA_QUALITY_SUITE, op, target, {**args, "expression": expression}, description, severity_of(rule)
+        rule_id, CONTRACT_DAX_SUITE, op, target, {**args, "expression": expression}, description, severity_of(rule)
     )
+    if reason is None and op in _BLANK_LENIENT_0_7 and version_key(ctx.catalog.min_version) < (0, 8):
+        reason = BLANK_PASSES_ON_0_7
     return _outcome(rule_id, assertion, reason)
 
 
 def _is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _comparison(key: str, value: Any) -> tuple[str | None, Any, str | None]:
@@ -157,14 +174,14 @@ def _comparison(key: str, value: Any) -> tuple[str | None, Any, str | None]:
             return None, f"{key} needs two numbers", None
         return _COMPARATOR_OPS[key], {"lower": min(value), "upper": max(value)}, None
     if key in ("mustBe", "mustNotBe"):
-        if not isinstance(value, (str, int, float, bool)):
-            return None, f"{key} needs a text, number, or true/false value", None
+        if not (isinstance(value, (str, bool)) or _is_number(value)):
+            return None, f"{key} needs a text, finite number, or true/false value", None
         if key == "mustBe" and isinstance(value, str):
             return "dax.equal_exactly", {"expected": value}, None  # DAX `=` ignores case
         cased = isinstance(value, str) and value.lower() != value.upper()
         return _COMPARATOR_OPS[key], {"expected": value}, CASE_INSENSITIVE if cased else None
     if not _is_number(value):
-        return None, f"{key} needs a number", None
+        return None, f"{key} needs a finite number", None
     return _COMPARATOR_OPS[key], {"threshold": value}, None
 
 
@@ -178,6 +195,8 @@ def _function_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
             f"direct PQL.Assert calls need --pql-assert 0.8 (signatures from {signatures.version})",
             description,
         )
+    if not isinstance(name, str):
+        return skipped(rule_id, "implementation.function needs a PQL.Assert function name", description)
     signature = signatures.functions.get(name)
     if signature is None or not signature.callable:
         why = "is not a PQL.Assert function" if signature is None else "is not an assertion a contract can call"
@@ -194,15 +213,16 @@ def _function_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
         )
     arguments = []
     for i, arg in enumerate(raw_args):
-        if isinstance(arg, (bool, int, float)):
+        if isinstance(arg, bool) or _is_number(arg):
             arguments.append(dax_literal(arg))
             continue
         if not isinstance(arg, str):
-            return skipped(rule_id, f"implementation.args[{i}] must be DAX text, a number, or true/false", description)
+            reason = f"implementation.args[{i}] must be DAX text, a finite number, or true/false"
+            return skipped(rule_id, reason, description)
         problem = dax_problem(arg)
         if problem:
             return skipped(rule_id, f"implementation.args[{i}] has {problem}", description)
         arguments.append(arg.strip())
     args = {"function": name, "arguments": arguments}
-    assertion = Assertion(rule_id, DATA_QUALITY_SUITE, DIRECT_CALL, target, args, description, severity_of(rule))
+    assertion = Assertion(rule_id, CONTRACT_DAX_SUITE, DIRECT_CALL, target, args, description, severity_of(rule))
     return _outcome(rule_id, assertion)

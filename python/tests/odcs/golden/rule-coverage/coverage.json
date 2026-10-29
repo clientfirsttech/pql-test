@@ -13,8 +13,8 @@
   },
   "summary": {
     "total": 42,
-    "mapped": 17,
-    "approximated": 4,
+    "mapped": 15,
+    "approximated": 6,
     "skipped": 21
   },
   "rules": [
@@ -294,26 +294,26 @@
     },
     {
       "ruleId": "orders.quality[1]",
-      "status": "mapped",
+      "status": "approximated",
       "description": "Average quantity stays between 1 and 50",
       "assertions": 1,
       "functions": [
         "PQL.Assert.ShouldBeBetween"
       ],
       "severity": "warning",
-      "reason": null,
+      "reason": "PQL.Assert 0.7 compares a BLANK result as 0 (or as an empty string), so a BLANK can pass; --pql-assert 0.8 fails it",
       "source": "contract-dax"
     },
     {
       "ruleId": "orders.quality[2]",
-      "status": "mapped",
+      "status": "approximated",
       "description": "Order status label is exactly Open",
       "assertions": 1,
       "functions": [
         "PQL.Assert.ShouldEqualExactly"
       ],
       "severity": "error",
-      "reason": null,
+      "reason": "PQL.Assert 0.7 compares a BLANK result as 0 (or as an empty string), so a BLANK can pass; --pql-assert 0.8 fails it",
       "source": "contract-dax"
     },
     {

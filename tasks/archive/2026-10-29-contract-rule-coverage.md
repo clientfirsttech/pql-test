@@ -1,6 +1,6 @@
 # Contract Rule Coverage Epic
 
-**Status**: 📋 PLANNED
+**Status**: ✅ COMPLETED (2026-10-29), except "Freshness: Adopt PQL.Assert 0.9", which waits on the PQL.Assert 0.9.0 release (tracked in plan.md's backlog)
 **Goal**: Every PQL.Assert assertion is reachable from an ODCS contract, either through an ODCS rule with the same meaning or through a `type: custom`, `engine: pql-test` DAX rule, and freshness distinguishes source latency from refresh frequency.
 
 ## Overview
@@ -28,7 +28,7 @@ Map `logicalTypeOptions` numeric bounds to the PQL.Assert 0.8 range functions.
 Map `minLength` and `maxLength` to `Col.TextLengthShouldBeInRange`.
 
 **Requirements**:
-- Given only one of `minLength` or `maxLength`, should fill the other with 0 or the largest INT64, so one call covers both
+- Given only one of `minLength` or `maxLength`, should fill the other with 0 or 2,147,483,647 (longer than any model text, and a safe DAX literal), so one call covers both
 - Given a property whose `logicalType` is not `string`, should stay skipped with a reason
 
 ---
@@ -49,7 +49,7 @@ Map v3.2 `enum` and `invalidValues` with `arguments.validValues` to `Col.ValuesS
 Map `missingValues` to the completeness functions.
 
 **Requirements**:
-- Given no `arguments.missingValues` list, should treat the default (null and `""`) as missing and emit `Col.NullOrBlankRateShouldBeAtMostV2` for percent or zero ceilings, or `Tbl.RowCountShouldBeAtMost` for count ceilings
+- Given no `arguments.missingValues` list, should treat the default (null, and `""` on text) as missing and emit `Tbl.RowCountShouldBeAtMost` for count or zero ceilings, or `Tbl.RowRateShouldBeAtMost` for percent ceilings (one filter for every list, so the default and an explicit list behave alike)
 - Given an explicit list, should count a row as missing when it is null (if the list holds `null`) or its value is in the list, through `Tbl.RowCountShouldBeAtMost` or `Tbl.RowRateShouldBeAtMost`
 - Given a floor comparator (`mustBeGreaterThan` and the like), should stay skipped, because a missing-value rule is a ceiling
 
@@ -122,6 +122,8 @@ Map `type: custom` with `engine: pql-test` and `implementation: {expression, <on
 - Given an expression that contains `EVALUATE` or `DEFINE` outside a string literal, or unbalanced brackets or quotes, should skip the rule and have `lint` report it
 - Given an expression that ends in a `//` comment, should still produce a well-formed call (the expression ends its own line)
 - Given the coverage JSON, should keep status `mapped` and add `"source": "contract-dax"`, so existing consumers keep working and reviewers can tell hand-written DAX from translated rules
+- Given a mistake in contract DAX (an unknown measure), should not fail the translated rules: these rules run in their own `<Prefix>.ContractDax.<ENV>.Tests` suite
+- Given `--pql-assert 0.7`, should report text `mustBe` and number comparisons as approximated, because PQL.Assert 0.7 compared a BLANK result as `""` or 0
 
 ---
 
@@ -143,7 +145,7 @@ Answer "is every PQL.Assert function reachable from a contract?" with a test, no
 
 **Requirements**:
 - Given every assertion in the vendored PQL.Assert library, should classify each one as reached by an ODCS mapper, reached only through `engine: pql-test`, or out of scope with a reason (`BP.*` and the discovery helpers), and fail when an upstream function is added without a classification
-- Given the existing golden fixtures, should keep them byte-identical apart from the documented latency-hours change, and cover every new mapping in a new golden fixture for 0.7 and 0.8
+- Given the existing golden fixtures, should keep the 0.7 ones byte-identical, change the 0.8 ones only where a skipped rule now maps (documented as an upgrading note), and cover every new mapping in a new golden fixture for 0.7 and 0.8
 
 ---
 

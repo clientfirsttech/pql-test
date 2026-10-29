@@ -4,7 +4,6 @@
 
 ## Active Work
 
-- **Contract rule coverage** — map the remaining ODCS rules to PQL.Assert 0.8, add `type: custom` / `engine: pql-test` DAX rules, split freshness into `latency` (data age) and `frequency` (refresh recency), and write the PQL.Assert 0.9 freshness handoff. See [tasks/contract-rule-coverage-epic.md](tasks/contract-rule-coverage-epic.md). Planned 2026-10-29; adopting 0.9 waits on the upstream release.
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -50,7 +49,7 @@
 
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
-  - the remaining mapping rows: types, relationships, ranges, text length, missing and invalid values (fallback R5 value-list rules);
+  - adopt PQL.Assert 0.9.0 once it ships: a `pql_assert_0_9` catalog that maps `frequency` to `Tbl.LastRefreshShouldBeWithinHours` (requested in [docs/pql-assert-freshness-request.md](docs/pql-assert-freshness-request.md));
   - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
   - a PQL.Assert minimum-version warning in `contract run`.
 
@@ -83,6 +82,14 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-10-29 — Contract rule coverage: value rules, DAX rules, latency vs frequency (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-29-contract-rule-coverage.md](tasks/archive/2026-10-29-contract-rule-coverage.md) and [docs/contracts.md](docs/contracts.md).
+- With `--pql-assert 0.8`: numeric bounds, text length, `enum`, `invalidValues` value lists, `missingValues`, and `relationships` map to PQL.Assert; `lint` checks relationships against the TMDL. 0.7 output is unchanged.
+- `type: custom` rules with `engine: pql-test` carry DAX (an expression and a comparator, or a direct PQL.Assert call), run in their own `ContractDax` suite. `pql_assert_functions.yaml` classifies all 126 PQL.Assert 0.8.0 functions, and a test fails on an unclassified one.
+- Freshness: `latency` is data age (a timestamp column), `frequency` is refresh recency (`INFO.PARTITIONS()`, in its own `RefreshAge` suite). [docs/pql-assert-freshness-request.md](docs/pql-assert-freshness-request.md) asks PQL.Assert 0.9.0 for a refresh function and docs that separate the two.
+- Proven live against SampleModel (`rule-coverage-live.odcs.yaml`, 45 rules with pinned outcomes and failure text). Still for the maintainer: run the frequency check as an identity without `INFO.*` permission, to see only `RefreshAge` error.
 
 ### 2026-10-28 — pql-odcs merged into pql-test; AGPL-3.0-only (branch `dev-odcs`)
 

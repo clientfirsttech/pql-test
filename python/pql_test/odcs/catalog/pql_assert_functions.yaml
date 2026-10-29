@@ -5,8 +5,9 @@
 # and the catalogs: a function PQL.Assert adds fails that test until it is listed here.
 #
 #   params    number of parameters; optional  how many of them are optional (trailing)
-#   use       mapped  a catalog op calls it, so an ODCS rule generates it
-#             dax     only a `type: custom`, `engine: pql-test` rule calls it
+#   use       mapped  an ODCS rule generates it (a catalog op other than dax.* calls it)
+#             dax     only a `type: custom`, `engine: pql-test` rule calls it (a dax.* op,
+#                     or a direct call)
 #                     (implementation: {function, args}; pql-test supplies testName)
 #             none    out of scope: model best practices (BP.*) take no testName and check
 #                     the model's design, not its data; RetrieveTests* and LibraryVersion
@@ -122,8 +123,8 @@ functions:
   PQL.Assert.ShouldBeTrue: {params: 2, optional: 0, use: dax}
   PQL.Assert.ShouldContainString: {params: 3, optional: 0, use: dax}
   PQL.Assert.ShouldEndWith: {params: 3, optional: 0, use: dax}
-  PQL.Assert.ShouldEqual: {params: 3, optional: 0, use: mapped}
-  PQL.Assert.ShouldEqualExactly: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldEqual: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldEqualExactly: {params: 3, optional: 0, use: dax}
   PQL.Assert.ShouldMatch: {params: 3, optional: 0, use: dax}
   PQL.Assert.ShouldNotBeBetween: {params: 4, optional: 0, use: mapped}
   PQL.Assert.ShouldNotBeBlank: {params: 2, optional: 0, use: dax}

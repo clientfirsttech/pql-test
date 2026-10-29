@@ -78,6 +78,32 @@ class TestExpressionForm:
 
         assert outcome.status is Status.MAPPED, f"{given}: {should}"
 
+    @pytest.mark.parametrize(
+        ("comparator", "status"),
+        [
+            ({"mustBeLessThan": 10}, Status.APPROXIMATED),
+            ({"mustBeBetween": [1, 2]}, Status.APPROXIMATED),
+            ({"mustBe": "Open"}, Status.APPROXIMATED),
+            ({"mustBe": 0}, Status.MAPPED),
+        ],
+    )
+    def test_0_7_comparisons_that_pass_on_blank_are_approximated(self, comparator, status):
+        given = f"{comparator} on an expression under the 0.7 catalog"
+        should = f"be {status.value}: 0.7 compares a BLANK result as 0 or an empty string, except in ShouldEqual"
+
+        outcome = _outcome(_rule({"expression": "BLANK()", **comparator}), version="0.7")
+
+        assert outcome.status is status, f"{given}: {should}"
+
+    @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+    def test_non_finite_values_are_skipped(self, value):
+        given = f"a comparator value of {value}"
+        should = "be skipped, because DAX has no literal for it"
+
+        outcome = _outcome(_rule({"expression": "1", "mustBeGreaterThan": value}))
+
+        assert (outcome.status, "finite" in outcome.reason) == (Status.SKIPPED, True), f"{given}: {should}"
+
     def test_not_between_needs_0_8(self):
         given = "mustNotBeBetween on an expression under the 0.7 catalog"
         should = "be skipped, naming --pql-assert 0.8"
@@ -158,6 +184,10 @@ class TestDaxProblem:
             ('"open', 'unterminated "'),
             ("[A] /* never closed", "unterminated /*"),
             ("(1}", "unbalanced }"),
+            ("1 ]", "unbalanced ]"),
+            ('1 // c\r), PQL.Assert.ShouldEqual("fake", 1, 1', "control character (U+000D)"),
+            ("1 // c\u2028+ 2", "control character (U+2028)"),
+            ("1 + \x00 2", "control character (U+0000)"),
         ],
     )
     def test_text_that_would_break_the_suite_is_rejected(self, text, problem):
@@ -199,6 +229,8 @@ class TestFunctionForm:
             ({"function": "PQL.Assert.Col.ShouldBePositive", "args": ["EVALUATE 1"]}, "args[0] has EVALUATE"),
             ({"function": "PQL.Assert.Col.ShouldBePositive", "args": [None]}, "args[0] must be DAX text"),
             ({"function": "PQL.Assert.Col.ShouldBePositive", "args": "'T'[a]"}, "args needs a list"),
+            ({"function": ["PQL.Assert.Col.ShouldBePositive"], "args": []}, "needs a PQL.Assert function name"),
+            ({"function": "PQL.Assert.Col.ShouldBeInRange", "args": ["'T'[a]", 0, float("nan")]}, "finite number"),
         ],
     )
     def test_invalid_calls_are_skipped(self, implementation, reason):
@@ -255,14 +287,26 @@ class TestReporting:
 
         assert "source" not in report["rules"][-1], f"{given}: {should}"
 
+    def test_contract_dax_runs_in_its_own_suite(self):
+        given = "a contract-DAX rule next to a translated rule"
+        should = "render in the ContractDax suite, so its mistakes cannot error the translated rules"
+        plan = _plan(_rule({"expression": "1", "mustBe": 1}), {"metric": "rowCount", "mustBeGreaterThan": 0})
+
+        suites = {f.function_name: f.content for f in render(plan, env="DEV")}
+
+        assert (
+            "ShouldEqual" in suites["MarvelCharacters.ContractDax.DEV.Tests"],
+            "ShouldEqual" in suites["MarvelCharacters.DataQuality.DEV.Tests"],
+        ) == (True, False), f"{given}: {should}"
+
     def test_warning_rules_go_to_the_warn_suite(self):
         given = "a contract-DAX rule with severity warning"
-        should = "render in the DataQuality WARN suite"
+        should = "render in the ContractDax WARN suite"
 
         files = render(_plan(_rule({"expression": "1", "mustBe": 1}, severity="warning")), env="DEV")
 
         assert [f.function_name for f in files if "ShouldEqual" in f.content] == [
-            "MarvelCharacters.DataQuality.DEVWARN.Tests"
+            "MarvelCharacters.ContractDax.DEVWARN.Tests"
         ], f"{given}: {should}"
 
     def test_lint_reports_a_broken_dax_rule(self, tmp_path):
