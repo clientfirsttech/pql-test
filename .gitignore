@@ -78,3 +78,6 @@ renamedenv
 # hypothesis example database (contract property tests)
 .hypothesis/
 .coverage
+
+# Local-only notes (e.g. secret-rotation.local.md); never committed
+*.local.md
