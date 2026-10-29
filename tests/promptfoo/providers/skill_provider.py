@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Promptfoo provider that injects live SKILL.md content and calls GitHub Models.
 
 Used by both `npx promptfoo eval` (as a `file://` provider) and by our stdlib

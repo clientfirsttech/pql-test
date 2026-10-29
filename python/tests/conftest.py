@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Shared pytest fixtures for pql-test tests."""
 
 from __future__ import annotations

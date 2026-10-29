@@ -13,12 +13,17 @@ smoke test in about 15 minutes.
 
 ```
 pql-test/
-├── python/                     ← the Python package (canonical source)
+├── pyproject.toml              ← uv workspace root only (member: python)
+├── LICENSE.txt, NOTICE         ← AGPL-3.0-only, and third-party attributions
+├── LICENSES.md                 ← the license, and the files that carry their own
+├── python/                     ← pql-test
 │   ├── pql_test/               ← CLI implementation
 │   │   ├── cli.py              ← entry point (`pql-test` command)
-│   │   ├── runner.py           ← XMLA + test discovery + execution
-│   │   └── auth/               ← persistent Fabric-CLI-style auth
-│   ├── tests/                  ← pytest suite (mocked + live integration)
+│   │   ├── runner/             ← XMLA + test discovery + execution
+│   │   ├── auth/               ← persistent Fabric-CLI-style auth
+│   │   ├── odcs/               ← ODCS contracts → PQL.Assert suites (`pql-test contract`)
+│   │   └── contract_run.py     ← `pql-test contract run` and `doctor` (the connected commands)
+│   ├── tests/                  ← pytest suite (mocked + live integration); tests/odcs/ for contracts
 │   ├── pyproject.toml          ← single source of truth for version & deps
 │   └── .env.example            ← copy to .env for service-mode credentials
 ├── examples/                   ← three example PBIP models (see "Examples")
@@ -29,8 +34,59 @@ pql-test/
 └── README.md                   ← user-facing documentation
 ```
 
-There is **no** package source outside `python/`. The CI workflow installs from
+pql-test's source lives only in `python/`. The CI workflow installs from
 `./python` (`pip install ./python`); local installs do the same with `-e`.
+
+---
+
+## License and sign-off
+
+pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
+
+- **Start every `.py` file with an SPDX header**: `# SPDX-License-Identifier: AGPL-3.0-only`
+  (after the shebang line, when there is one).
+- **Sign off every commit** with the [Developer Certificate of Origin](https://developercertificate.org/):
+  `git commit -s`. The sign-off certifies that you have the right to submit the change under AGPL-3.0-only.
+- **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, LGPL, or GPL-3.0 licensed packages.
+- **Keep the contract file commands free of XMLA.** `pql-test contract lint|coverage|generate|trace`
+  only read and write files, so they run on Linux CI. Import ADOMD.NET-dependent code lazily, inside
+  `run` and `doctor` only.
+
+---
+
+## Secrets and security checks
+
+This repository is public, so a committed secret is a leaked secret, even when a later commit removes it.
+
+- **Credentials live only in `.env` files** (`python/.env`, `python/tests/.env`), copied from `.env.example`. `.gitignore` covers `.env` files, certificates (`*.pem`, `*.p12`, `*.pfx`), and keys.
+- **Install the hooks once per clone:**
+
+  ```bash
+  pip install pre-commit      # or: uv tool install pre-commit
+  pre-commit install
+  pre-commit run --all-files  # optional: check everything now
+  ```
+
+  Before every commit, [`.pre-commit-config.yaml`](.pre-commit-config.yaml) runs:
+  - gitleaks on the staged changes;
+  - a private-key check;
+  - a large-file check;
+  - bandit on `python/pql_test` (medium severity and up).
+
+  Never bypass them with `--no-verify`. The gitleaks hook scans what you stage. To scan the
+  working tree too, run `gitleaks dir .`; it also reports your ignored `.env` files, which is
+  expected.
+- **CI repeats them** in [`security.yml`](.github/workflows/security.yml) (Stage 0 of `ci.yml`), with gitleaks on the full history, pip-audit on the runtime dependencies, and the offline dead-link check.
+- **When gitleaks finds something:**
+  - **A real secret:** don't commit it. If it was already committed, treat it as leaked: rotate it first, then remove it from the change.
+  - **Not a secret** (for example a public client ID): allowlist that exact finding in [`.gitleaksignore`](.gitleaksignore) by its fingerprint, with a comment saying why.
+- **When bandit finds something:**
+  - fix it;
+  - or, for a reviewed false positive, add `# nosec <id>` on the flagged line, with the reason in a comment above it.
+  - Never skip a test for the whole project.
+- **Downloads that run code** are pinned and verified. For example, the ADOMD.NET auto-install checks the NuGet package against a pinned SHA-512, and the CI gitleaks binary is checked against its release checksum.
+- **Workflow inputs** reach shell scripts through `env:`, never as `${{ }}` inside `run:` text.
+- **Reporting a vulnerability:** see [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -76,13 +132,51 @@ indented text and no connection diagnostic. See
 
 ---
 
+## CLI Argument Conventions
+
+The same option means the same thing on every command. The shared options live in
+[`python/pql_test/cli_options.py`](python/pql_test/cli_options.py); use them instead of
+declaring your own, and [`tests/test_cli_conventions.py`](python/tests/test_cli_conventions.py)
+fails when a command drifts.
+
+- **`-v/--verbose` and `-q/--quiet`** (`verbosity_options`) on every command that prints a
+  report. Quiet prints only the summary line, which the command marks with
+  `record_summary()`; the rest of the report (including a warnings section on stdout) is
+  hidden, messages written to stderr still appear, and the exit code never changes. A
+  result printed on stdout (JSON, CI annotations from `--log-format`, a contract, DAX) is
+  never suppressed. Passing both flags is a usage error. `--verbose` takes the command's own
+  help text through `verbosity_options(verbose_help=...)`.
+- **`--format text|json`** (`format_option`) is the one way to ask for machine-readable
+  output. With `--format json`, stdout carries only the JSON, printed with `emit_result()`;
+  every other line goes to stderr automatically. `retrieve-tests` and `retrieve-test` default
+  to `json` because tools and agents parse them; everything else defaults to `text`.
+- **`--output FILE` / `-o FILE`** (`output_option`) writes the command's result to FILE, as
+  well as the report on screen.
+- **Names:**
+  - `--env` is the test environment;
+  - `--cloud` is the Azure cloud;
+  - credentials are `--tenant-id`, `--client-id`, and `--client-secret`;
+  - `--test NAME` selects one test suite.
+- **Renaming an option:** keep the old spelling working with `deprecated_alias()`, placed
+  above the option it aliases. The alias is hidden from `--help`, warns once on stderr, and
+  behaves exactly as before. When both spellings are given with different values, it is a
+  usage error; an explicit value equal to the default cannot be told apart from no value, so
+  the alias wins then. Today's aliases:
+  - `--human` for `--format text`;
+  - `-u`/`--user` for `--client-id`;
+  - `-p`/`--password` for `--client-secret`;
+  - `--tenant` for `--tenant-id`;
+  - `--environment` for `--cloud`.
+
+---
+
 ## Prerequisites
 
 | Requirement | Why | How to install |
 |---|---|---|
-| Python 3.9+ | Runs the CLI | `winget install Python.Python.3.12` (or [python.org](https://www.python.org/downloads/)) |
+| Python 3.10+ | Runs the CLI | `winget install Python.Python.3.12` (or [python.org](https://www.python.org/downloads/)) |
 | ADOMD.NET client DLL | `pyadomd` loads this at import time | See **ADOMD.NET install** below — required even if you have Power BI Desktop |
-| Power BI Desktop | Needed for the local-mode smoke test only | Microsoft Store or [powerbi.microsoft.com](https://powerbi.microsoft.com/desktop/) |
+| Power BI Desktop | Needed for the local-mode smoke test only | Microsoft Store or [powerbi.microsoft.com](https://www.microsoft.com/power-platform/products/power-bi/desktop) |
 | Service credentials | Needed for service-mode smoke test only | Service principal with `Dataset.Read.All` + Contributor on the workspace |
 
 ### ADOMD.NET install (required)
@@ -134,7 +228,7 @@ Expected output:
 
 ```
 Prerequisites check:
-  ✅ Python >= 3.9 — Current: 3.12.x
+  ✅ Python >= 3.10 — Current: 3.12.x
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available
@@ -152,7 +246,7 @@ If `pyadomd` shows ❌, the ADOMD.NET install above did not complete.
 # Fast: everything except live integration tests
 .\.venv\Scripts\pytest -m "not live"
 
-# Slow: include live tests (needs python/tests/.env)
+# Slow: include live tests (needs python/.env)
 .\.venv\Scripts\pytest
 ```
 
@@ -356,7 +450,7 @@ pql-test auth login `
 
 ## Service smoke test (Power BI Premium / Fabric)
 
-1. Copy `python/.env.example` to `python/tests/.env` and fill in:
+1. Copy `python/.env.example` to `python/.env` (or `python/tests/.env`, which overrides it for the tests only) and fill in:
    ```
    PQL_TENANT_ID=...
    PQL_WORKSPACE_ID=...

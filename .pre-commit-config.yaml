@@ -1,0 +1,36 @@
+# Checks that run before every commit. Install once per clone:
+#
+#   pip install pre-commit      (or: uv tool install pre-commit)
+#   pre-commit install
+#
+# Run them on every file at any time with `pre-commit run --all-files`. The gitleaks hook
+# scans only staged changes (it ignores --all-files); scan the working tree with `gitleaks dir .`.
+# CI (.github/workflows/security.yml) runs the same checks, plus gitleaks on the full history.
+# See CONTRIBUTING.md, "Secrets and security checks". Never bypass them with --no-verify.
+
+repos:
+  # Secrets: scans what is being committed.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      # Workflows: GitHub rejects a file with a repeated key (e.g. two env: on one step).
+      - id: check-yaml
+        files: ^\.github/
+
+  # Python security flaws (settings in python/pyproject.toml, [tool.bandit]).
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ["-c", "python/pyproject.toml", "--severity-level", "medium"]
+        additional_dependencies: ["bandit[toml]"]
+        files: ^python/pql_test/

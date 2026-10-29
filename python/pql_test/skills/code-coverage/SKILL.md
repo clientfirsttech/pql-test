@@ -1,7 +1,7 @@
 ---
 name: code-coverage
 description: Report direct test-UDF coverage for a PBIP semantic model — which calculated columns, measures, tables, relationships, partitions, and roles have a discovered DAX test UDF directly evidencing them, plus AI-ready gap hints for the rest.
-version: 0.1.20
+version: 0.2.0
 ---
 
 Run `pql-test code-coverage MODEL_PATH` to report which model objects have direct test-UDF evidence and which don't, so an AI agent or developer can prioritize missing tests.
@@ -63,9 +63,10 @@ MODEL_PATH accepts three formats:
 - **`<workspace>.Workspace/<semantic_model>.SemanticModel`** — canonical Fabric service path (requires `--tenant-id`, `--client-id`, `--client-secret`, or a stored interactive login via `pql-test auth login`).
 
 Options:
-- `--verbose` — List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets. Without it, only the overall percentage and per-category counts are printed.
+- `-v, --verbose` — List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets. Without it, only the overall percentage and per-category counts are printed.
 - `--format text|json` — Output format. `text` (default) is human-readable; `json` emits the stable report shape.
-- `--output FILE` — Write the JSON report to FILE. Requires `--format json` — otherwise the CLI fails with a usage error before making any XMLA query.
+- `-o, --output FILE` — Write the JSON report to FILE. With `--format text`, the text report is printed as well.
+- `-q, --quiet` — Print only the summary line (messages on stderr still appear; the exit code is unchanged). Cannot be combined with `--verbose`.
 - `--min-coverage PERCENT` — Exit `1` when overall eligible coverage is below PERCENT (0-100), after the report is written; prints `Required coverage of N% reached` when met. Also colors the report pass/fail against PERCENT instead of the default 50/80 watermarks. A malformed or out-of-range value fails with a Click usage error (exit 2) before any XMLA query.
 - `--tenant-id ID` — Azure AD tenant ID (or set `PQL_TENANT_ID` env var).
 - `--workspace-id ID` — Power BI workspace GUID (or set `PQL_WORKSPACE_ID` env var).

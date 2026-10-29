@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for ``pql-test auth login`` — specifically the
 ``AuthenticationRecord`` capture-and-store path added by

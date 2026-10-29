@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 XMLA connection resolution - coordinates auth, local PBI, and service connections.
 

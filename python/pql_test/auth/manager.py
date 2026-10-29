@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Authentication manager — Main interface for authentication operations.
 """

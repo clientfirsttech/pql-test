@@ -1,7 +1,13 @@
 # Master CI pipeline for the pql-test Copilot CLI plugin.
 #
-# Stages 1–2 run sequentially; stages 3a and 3b run in parallel once
-# stage 2 completes.  Any failed stage fails the pipeline.
+# Stage 0 runs alongside stage 1. Stages 1–2 run sequentially; stages 3a, 3b,
+# and 3c run in parallel once stage 2 completes.  Any failed stage fails the
+# pipeline.
+#
+#  Stage 0 – security
+#    gitleaks on the full history (pinned, checksum-verified), bandit on
+#    python/pql_test, pip-audit on the runtime dependencies, and the offline
+#    dead-link check of the documentation. No secrets.
 #
 #  Stage 1 – validate-plugin
 #    Static structural validation: plugin.json schema, skill directory layout,
@@ -14,16 +20,21 @@
 #    keys required.  Marked continue-on-error when GitHub Models is unavailable,
 #    but the job itself must complete to unblock stage 3.
 #
-#  Stage 3a – pytest
+#  Stage 3a – pytest (Windows)
 #    Installs pql-test on a Windows runner with ADOMD.NET, then runs the
 #    full pytest suite (unit tests + live integration tests against the
 #    service-principal credentials).  Tests marked @pytest.mark.live
 #    auto-skip when secrets aren't configured.
 #
-#  Stage 3b – run-tests-remote
+#  Stage 3b – run-tests-remote (Windows)
 #    Installs pql-test on a Windows runner (required for ADOMD.NET / pyadomd),
 #    discovers every .SemanticModel under examples/, and runs the full DAX
 #    test suite against the deployed datasets in the workspace.
+#
+#  Stage 3c – linux
+#    Installs pql-test on ubuntu (no pyadomd) on Python 3.10 and 3.13. Runs the
+#    contract and platform tests, smoke-tests the file-based commands, and checks
+#    that the XMLA commands stop with one Windows-only message. No secrets.
 #
 # Required secrets for stage 3:
 #   PQL_TENANT_ID         – Azure AD tenant GUID
@@ -63,6 +74,15 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Stage 0: secrets, Python security flaws, vulnerable dependencies, dead links
+  # ---------------------------------------------------------------------------
+  security:
+    name: Stage 0 – Security
+    uses: ./.github/workflows/security.yml
+    permissions:
+      contents: read
+
+  # ---------------------------------------------------------------------------
   # Stage 1: validate plugin structure
   # ---------------------------------------------------------------------------
   validate-plugin:
@@ -94,7 +114,7 @@ jobs:
   # one failing is a blocker — both must be green.
   # ---------------------------------------------------------------------------
   pytest:
-    name: Stage 3a – pytest suite
+    name: Stage 3a – pytest suite (Windows)
     needs: promptfoo-eval
     uses: ./.github/workflows/pytest.yml
     permissions:
@@ -112,7 +132,7 @@ jobs:
   # Stage 3b: run DAX tests against the examples/ folder → deployed workspace
   # ---------------------------------------------------------------------------
   run-tests-remote:
-    name: Stage 3b – Run DAX tests (remote workspace)
+    name: Stage 3b – Run DAX tests (Windows, remote workspace)
     needs: promptfoo-eval
     uses: ./.github/workflows/run-tests-remote.yml
     with:
@@ -124,3 +144,13 @@ jobs:
       PQL_CLIENT_ID:        ${{ secrets.PQL_CLIENT_ID }}
       PQL_CLIENT_SECRET:    ${{ secrets.PQL_CLIENT_SECRET }}
       PQL_ENVIRONMENT:      ${{ secrets.PQL_ENVIRONMENT }}
+
+  # ---------------------------------------------------------------------------
+  # Stage 3c: pql-test on Linux (file-based commands; XMLA commands refuse cleanly)
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Stage 3c – Linux (file-based commands)
+    needs: promptfoo-eval
+    uses: ./.github/workflows/linux.yml
+    permissions:
+      contents: read

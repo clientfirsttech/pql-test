@@ -1,0 +1,16 @@
+# Repository root: a uv workspace only, not a package.
+#
+#   uv sync          -> one .venv with pql-test installed editable
+#
+# The pip workflow (`cd python && pip install -e .`) does not need uv.
+
+[tool.uv.workspace]
+members = ["python"]
+
+[tool.uv.sources]
+pql-test = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pql-test[dev]",
+]

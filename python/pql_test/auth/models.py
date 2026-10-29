@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Data models for authentication configuration and status.
 """
@@ -5,7 +6,7 @@ Data models for authentication configuration and status.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Optional
@@ -42,10 +43,10 @@ class CredentialConfig:
     method: AuthMethod
     tenant_id: Optional[str] = None
     client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_secret: Optional[str] = field(default=None, repr=False)  # never shown in repr()
     certificate_path: Optional[str] = None
-    certificate_password: Optional[str] = None
-    federated_token: Optional[str] = None
+    certificate_password: Optional[str] = field(default=None, repr=False)  # never shown in repr()
+    federated_token: Optional[str] = field(default=None, repr=False)  # never shown in repr()
     use_system_assigned_identity: bool = False
     environment: str = "Public"
     account_name: Optional[str] = None
@@ -53,7 +54,7 @@ class CredentialConfig:
     # interactive sign-in and replayed on subsequent runs so the persistent
     # MSAL token cache can be looked up silently instead of triggering a
     # fresh browser flow. Only populated for AuthMethod.INTERACTIVE.
-    authentication_record_json: Optional[str] = None
+    authentication_record_json: Optional[str] = field(default=None, repr=False)  # never shown in repr()
 
     def to_dict(self) -> dict:
         """

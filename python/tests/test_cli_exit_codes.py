@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for `pql-test run-tests` exit-code semantics.
 
 The CLI's exit code is what CI uses to mark a matrix job as green/red.

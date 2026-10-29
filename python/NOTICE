@@ -1,0 +1,32 @@
+pql-test
+Copyright (C) 2026 Client First Technologies
+Licensed under the GNU Affero General Public License, version 3 only
+(AGPL-3.0-only); see LICENSE.txt.
+
+-------------------------------------------------------------------------------
+Open Data Contract Standard (ODCS) JSON schemas
+-------------------------------------------------------------------------------
+pql_test/odcs/schemas/odcs-json-schema-v3.0.2.json,
+pql_test/odcs/schemas/odcs-json-schema-v3.1.0.json, and
+pql_test/odcs/schemas/odcs-json-schema-v3.2.0.json are unmodified copies of
+the JSON schemas published by the Bitol project (LF AI & Data Foundation) at
+https://github.com/bitol-io/open-data-contract-standard (tags v3.0.2, v3.1.0,
+v3.2.0).
+They are licensed under the Apache License, Version 2.0, whose full text is
+included as pql_test/odcs/schemas/LICENSE-ODCS.txt.
+
+-------------------------------------------------------------------------------
+PQL.Assert
+-------------------------------------------------------------------------------
+The generated DAX calls functions from PQL.Assert
+(https://github.com/clientfirsttech/PQL.Assert, published on DAX Lib),
+Copyright (c) 2026 Client First Technologies, licensed under the MIT License.
+pql-test records only PQL.Assert function names and argument order, as data,
+in pql_test/odcs/catalog/. It does not bundle PQL.Assert's functions.tmdl.
+The repository's tests use an unmodified copy of PQL.Assert 0.8.0 under
+python/tests/odcs/fixtures/pql-assert-0.8.0/, with its MIT LICENSE; it is not
+part of the published package.
+
+"Power BI" and "Microsoft Fabric" are trademarks of Microsoft Corporation.
+"Bitol" and "Open Data Contract Standard" belong to their respective owners.
+Their use here is descriptive only and does not imply endorsement.

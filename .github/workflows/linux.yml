@@ -1,0 +1,92 @@
+# Stage 3c of ci.yml: pql-test on Linux.
+#
+# The file-based commands (`contract lint|coverage|generate|trace`, doctor's file
+# checks, `retrieve-tests` on a PBIP folder) need no ADOMD.NET, so pipelines can run
+# them on ubuntu. The XMLA commands (`run-tests`, `code-coverage`, `contract run`)
+# must stop with one Windows-only message. The full suite runs on Windows in
+# pytest.yml (stage 3a). No secrets: nothing here connects to a model.
+
+name: linux
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux (ubuntu, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.13']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install pql-test with dev extras
+        run: pip install "./python[dev]"
+
+      - name: pyadomd is not installed on Linux
+        run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('pyadomd') is not None)"
+
+      - name: Contract and platform tests
+        working-directory: python
+        run: pytest tests/odcs tests/test_contract_run.py tests/test_platform_guard.py --no-cov -q
+
+      - name: CLI smoke tests
+        run: |
+          set -e
+          F=python/tests/odcs/fixtures
+          M=examples/SampleModel.SemanticModel
+          pql-test contract lint $F/marvel.odcs.yaml $M
+          # init starts a contract from the TMDL; the starter lints clean against the same model.
+          pql-test contract init $M --output /tmp/starter.odcs.yaml
+          pql-test contract lint /tmp/starter.odcs.yaml $M
+          pql-test contract lint $F/marvel.odcs.yaml local/SampleModel
+          pql-test contract coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
+          python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"
+          pql-test contract generate $F/marvel.odcs.yaml $M --env DEV --dry-run | grep -q "EVALUATE Marvel.Schema.DEV.Tests()"
+          # doctor reads SampleModel's PQL.Assert 0.8.0 from its TMDL; with no XMLA here the live checks only warn.
+          pql-test contract doctor $M --format json > /tmp/doctor.json
+          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.8', r"
+          # Exit code 1 is the contract: every-row has rules the 0.7 catalog skips.
+          if pql-test contract coverage $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
+            echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
+          fi
+
+      - name: contract run without XMLA fails cleanly and changes nothing
+        run: |
+          set +e
+          pql-test contract run python/tests/odcs/fixtures/marvel.odcs.yaml examples/SampleModel.SemanticModel --env DEV > /tmp/run.txt 2>&1
+          code=$?
+          set -e
+          cat /tmp/run.txt
+          test "$code" -eq 1 || { echo "::error::expected exit 1 (nothing ran), got $code"; exit 1; }
+          if grep -q "Traceback" /tmp/run.txt; then echo "::error::contract run printed a traceback"; exit 1; fi
+          # run must leave the PBIP project untouched (DAXQueries/ is synced by Git integration).
+          changed=$(git status --porcelain --untracked-files=all -- examples)
+          test -z "$changed" || { echo "::error::contract run changed the project: $changed"; exit 1; }
+
+      - name: XMLA commands stop with one Windows-only message
+        run: |
+          for cmd in run-tests code-coverage; do
+            set +e
+            pql-test $cmd examples/SampleModel.SemanticModel > /tmp/$cmd.txt 2>&1
+            code=$?
+            set -e
+            cat /tmp/$cmd.txt
+            test "$code" -eq 1 || { echo "::error::$cmd: expected exit 1, got $code"; exit 1; }
+            grep -q "runs on Windows only" /tmp/$cmd.txt || { echo "::error::$cmd: no Windows-only message"; exit 1; }
+            if grep -q "Traceback" /tmp/$cmd.txt; then echo "::error::$cmd printed a traceback"; exit 1; fi
+          done
+          # retrieve-tests reads the PBIP files instead.
+          pql-test retrieve-tests examples/SampleModel.SemanticModel | grep -q "Schema.DEV.Tests"

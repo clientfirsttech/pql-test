@@ -1,0 +1,502 @@
+{
+  "schemaVersion": 1,
+  "generator": "pql-test GOLDEN",
+  "catalog": {
+    "library": "PQL.Assert",
+    "minVersion": "0.8.0"
+  },
+  "contract": {
+    "id": "every-row",
+    "name": "Every Mapping Row",
+    "apiVersion": "3.1.0",
+    "source": "every-row.odcs.yaml"
+  },
+  "summary": {
+    "total": 46,
+    "mapped": 33,
+    "approximated": 0,
+    "skipped": 13
+  },
+  "rules": [
+    {
+      "ruleId": "orders.exists",
+      "status": "mapped",
+      "description": "orders exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.columns",
+      "status": "mapped",
+      "description": "orders has columns order_id, customer_id, Order Status, amount, code",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.closed",
+      "status": "mapped",
+      "description": "orders has no columns beyond the contract",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldNotHaveExtraColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.primaryKey",
+      "status": "mapped",
+      "description": "orders.order_id is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBePrimaryKey"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.unique",
+      "status": "mapped",
+      "description": "orders.order_id is unique",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NonNullValuesShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.type",
+      "status": "mapped",
+      "description": "orders.order_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.quality[0]",
+      "status": "mapped",
+      "description": "orders.order_id duplicateValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NonNullValuesShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.required",
+      "status": "mapped",
+      "description": "orders.customer_id is required (no nulls)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NullCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.type",
+      "status": "mapped",
+      "description": "orders.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.quality[0]",
+      "status": "mapped",
+      "description": "orders.customer_id nullValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NullCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.quality[1]",
+      "status": "skipped",
+      "description": "orders.customer_id nullValues mustBeLessThan 5",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "nullValues percent maps only for mustBeLessOrEqualTo 0-100, got mustBeLessThan 5"
+    },
+    {
+      "ruleId": "orders.customer_id.quality[2]",
+      "status": "mapped",
+      "description": "orders.customer_id nullValues mustBeLessOrEqualTo 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NullCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.status.type",
+      "status": "mapped",
+      "description": "orders.status is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.status.quality[0]",
+      "status": "skipped",
+      "description": "orders.status invalidValues mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.status.quality[1]",
+      "status": "skipped",
+      "description": "orders.status missingValues mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.status.quality[2]",
+      "status": "skipped",
+      "description": "orders.status invalidValues mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "pattern '^[a-z]+$': an exact-match pattern (^literal$) has no PQL.Assert column function"
+    },
+    {
+      "ruleId": "orders.status.quality[3]",
+      "status": "skipped",
+      "description": "orders.status invalidValues mustBeLessThan 3",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.status.quality[4]",
+      "status": "mapped",
+      "description": "orders.status duplicateValues mustBeLessThan 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.DuplicateCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.type",
+      "status": "mapped",
+      "description": "orders.amount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.amount logicalTypeOptions ['maximum', 'minimum']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "minimum, maximum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
+    },
+    {
+      "ruleId": "orders.code.type",
+      "status": "mapped",
+      "description": "orders.code is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.code.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.code logicalTypeOptions ['maxLength', 'minLength']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "minLength, maxLength checks are planned (Col.TextLengthShouldBeInRange)"
+    },
+    {
+      "ruleId": "orders.address.zip.required",
+      "status": "skipped",
+      "description": "orders.address.zip required",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "object, array, map, and vector properties have no semantic model column"
+    },
+    {
+      "ruleId": "orders.relationships[0]",
+      "status": "skipped",
+      "description": "orders relationship to customers.customer_id",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+    },
+    {
+      "ruleId": "orders.quality[0]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeGreaterThan 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveRows"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[1]",
+      "status": "mapped",
+      "description": "orders rowCount mustBe 1000",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveRowCount"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[2]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeGreaterThan 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveMoreRowsThan"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[3]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeGreaterOrEqualTo 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeGreaterOrEqual"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[4]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeLessThan 1000000",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeLessThan"
+      ],
+      "severity": "warning",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[5]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeLessOrEqualTo 1000000",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeLessOrEqual"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[6]",
+      "status": "mapped",
+      "description": "orders rowCount mustNotBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldNotEqual"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[7]",
+      "status": "mapped",
+      "description": "orders rowCount mustBeBetween [1, 1000000]",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeBetween"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[8]",
+      "status": "mapped",
+      "description": "orders rowCount mustNotBeBetween [1, 2]",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldNotBeBetween"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[9]",
+      "status": "mapped",
+      "description": "orders duplicateValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowsShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[10]",
+      "status": "mapped",
+      "description": "orders duplicateValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowsShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quality[11]",
+      "status": "skipped",
+      "description": "orders sql mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "type: sql rules are not translated to DAX (an optional, review-marked DAX stub is planned for later)"
+    },
+    {
+      "ruleId": "orders.quality[12]",
+      "status": "skipped",
+      "description": "orders custom",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "type: custom rules run in their own engine (e.g. Soda, Great Expectations); no DAX equivalent"
+    },
+    {
+      "ruleId": "orders.quality[13]",
+      "status": "skipped",
+      "description": "Orders are reconciled monthly.",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "type: text rules are human-readable only; nothing to execute"
+    },
+    {
+      "ruleId": "bridge.exists",
+      "status": "mapped",
+      "description": "bridge exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.columns",
+      "status": "mapped",
+      "description": "bridge has columns a, b",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.closed",
+      "status": "mapped",
+      "description": "bridge has no columns beyond the contract",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldNotHaveExtraColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.a.primaryKey",
+      "status": "mapped",
+      "description": "bridge primary key (a, b) is distinct",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowsShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.a.type",
+      "status": "mapped",
+      "description": "bridge.a is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.b.primaryKey",
+      "status": "mapped",
+      "description": "bridge primary key (a, b) is distinct",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowsShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "bridge.b.type",
+      "status": "mapped",
+      "description": "bridge.b is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "slaProperties[0]",
+      "status": "skipped",
+      "description": "SLA latency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "latency element '' is not a table.column in the contract schema"
+    }
+  ]
+}

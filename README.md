@@ -1,7 +1,7 @@
 # pql-test — DAX Test Runner for PBIP Models
 
 ![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
-[![License](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE.txt)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE.txt)
 
 ## Run Your Semantic Model Tests from the Command Line
 
@@ -59,6 +59,7 @@ can both read.
     - [retrieve-test](#retrieve-test)
     - [run-tests](#run-tests)
     - [code-coverage](#code-coverage)
+  - [Testing against ODCS data contracts](#testing-against-odcs-data-contracts)
   - [Connection Options](#connection-options)
     - [Local Power BI Desktop (auto-detected)](#local-power-bi-desktop-auto-detected)
     - [Remote Power BI Premium / Fabric Workspace](#remote-power-bi-premium--fabric-workspace)
@@ -83,14 +84,16 @@ can both read.
 
 ## Prerequisites
 
-The only thing you install manually is **Python 3.9+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
+The only thing you install manually is **Python 3.10+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
 
 | Requirement | How it's installed |
 |---|---|
-| Python 3.9+ | **Manual** — install from python.org and ensure it's on PATH |
+| Python 3.10+ | **Manual** — install from python.org and ensure it's on PATH |
 | pythonnet, msal, azure-identity, keyring, click, python-dotenv, psutil | **Automatic via pip** — pulled in as Python dependencies when you `pip install pql-test` |
 | ADOMD.NET assemblies (the .NET XMLA client) | **Automatic on first use** — when no ADOMD.NET install is detected, pql-test downloads the official `Microsoft.AnalysisServices.AdomdClient` NuGet package (~5 MB) from `nuget.org` to `%USERPROFILE%\.pql-test\adomd\` and uses it for every subsequent run. No admin rights, no manual MSI. Set `PQL_TEST_NO_AUTO_INSTALL_ADOMD=1` if you'd rather provide ADOMD yourself. |
 | Power BI Desktop *(optional)* | Only needed for `local/<model_name>` mode against a locally-open model. Skip if you only target the service. |
+
+**Windows or Linux.** Commands that query a model over XMLA (`run-tests`, `code-coverage`, `contract run`, and `doctor`'s live checks) need ADOMD.NET, which runs on Windows only; elsewhere they stop with one message saying so. The file-based commands also run on Linux, for example in a CI pipeline: `retrieve-tests` and `retrieve-test` with a PBIP folder, and `contract lint|coverage|generate|trace`.
 
 Run the built-in check to verify your environment (this is also when the one-time ADOMD download will fire, if needed):
 
@@ -104,7 +107,7 @@ pql-test check-prereqs
 
 ### From PyPI (recommended)
 
-Requires Python 3.9+ on Windows (the XMLA driver is ADOMD.NET, a
+Requires Python 3.10+ on Windows (the XMLA driver is ADOMD.NET, a
 Windows/.NET component):
 
 ```powershell
@@ -210,7 +213,7 @@ pql-test check-prereqs
 
 ### Updating the version
 
-[`python/pyproject.toml`](python/pyproject.toml) is the **single source of truth** for the version.
+[`python/pyproject.toml`](https://github.com/clientfirsttech/pql-test/blob/main/python/pyproject.toml) is the **single source of truth** for the version.
 The CLI reads it at runtime via `importlib.metadata`, so there is no other file to update.
 
 Bump `version` in `pyproject.toml` before each new build:
@@ -504,7 +507,7 @@ environment's suites (see
 pql-test auth login
 
 # Or with service principal
-pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 
 # Now run tests without credential flags
 pql-test run-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
@@ -534,17 +537,17 @@ This opens a browser window for you to sign in with your Azure AD credentials. A
 #### Service Principal with Secret
 
 ```powershell
-pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 ```
 
 #### Service Principal with Certificate
 
 ```powershell
 # PEM certificate
-pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --certificate cert.pem --tenant-id <tenant-id>
 
 # P12/PFX with password
-pql-test auth login -u <client-id> --certificate cert.p12 -p <cert-password> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --certificate cert.p12 --client-secret <cert-password> --tenant-id <tenant-id>
 ```
 
 #### Managed Identity (Azure VM/Container)
@@ -554,7 +557,7 @@ pql-test auth login -u <client-id> --certificate cert.p12 -p <cert-password> --t
 pql-test auth login --identity
 
 # User-assigned
-pql-test auth login --identity -u <client-id>
+pql-test auth login --identity --client-id <client-id>
 ```
 
 ### Credential Priority
@@ -588,7 +591,7 @@ Credentials are stored securely using the platform keyring:
 
 ❌ **Avoid**: `Workspace.ReadWrite.All`, tenant admin roles, or workspace Admin access unless specifically required.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
+See [CONTRIBUTING.md](https://github.com/clientfirsttech/pql-test/blob/main/CONTRIBUTING.md#service-principal-setup-least-privilege) for complete setup guide with security best practices.
 
 ### RLS/OLS Security Model
 
@@ -658,7 +661,7 @@ EVALUATE
 - Share RLS test credentials (each developer should use their own identity)
 - Assume `EffectiveUserName` validates email addresses (it doesn't)
 
-**Threat Model**: See [docs/security-threat-model.md](docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
+**Threat Model**: See [docs/security-threat-model.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/security-threat-model.md) for complete security analysis, including STRIDE assessment of RLS/OLS impersonation controls.
 
 ### Secret Rotation
 
@@ -668,7 +671,7 @@ EVALUATE
 # When secret approaches expiry:
 # 1. Create new secret in Azure Portal
 # 2. Update stored credential
-pql-test auth login -u <client-id> -p <new-secret> --tenant <tenant-id>
+pql-test auth login --client-id <client-id> --client-secret <new-secret> --tenant-id <tenant-id>
 
 # 3. Verify new secret works
 pql-test auth status
@@ -697,7 +700,7 @@ pql-test check-prereqs
 
 ```
 Prerequisites check:
-  ✅ Python >= 3.9 — Current: 3.12.6
+  ✅ Python >= 3.10 — Current: 3.12.6
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available
@@ -712,7 +715,7 @@ All prerequisites met.
 List all DAX test suites discovered in a PBIP model.
 
 ```bash
-pql-test retrieve-tests <modelPath> [--env <environment>] [--verbose]
+pql-test retrieve-tests <modelPath> [--env <environment>] [--format json|text] [--verbose | --quiet]
 ```
 
 **Arguments:**
@@ -721,7 +724,9 @@ pql-test retrieve-tests <modelPath> [--env <environment>] [--verbose]
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
 | `--env <environment>` | ❌ | Only list suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
-| `--verbose`, `-v` | ❌ | Also print file paths and connection info |
+| `--format <fmt>` | ❌ | `json` (default) or `text` (a readable list; `--human` still works as a deprecated alias) |
+| `--verbose`, `-v` | ❌ | With `--format text`: also print file paths and connection info |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 
 **Example:**
 
@@ -799,8 +804,10 @@ pql-test retrieve-test <modelPath> <name> [--verbose]
 | Argument | Required | Description |
 |---|---|---|
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `workspace.model` (see [Model Path Formats](#model-path-formats)) |
-| `<name>` | ✅ | Test suite name (file stem without `.dax`) |
+| `<name>` or `--test <name>` | ✅ | Test suite name (file stem without `.dax`); give one of them |
+| `--format <fmt>` | ❌ | `json` (default) or `text` (`--human` still works as a deprecated alias) |
 | `--verbose`, `-v` | ❌ | Also print the full DAX source |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 
 **Example:**
 
@@ -843,7 +850,9 @@ pql-test run-tests <modelPath> [--test <name>] [--env <environment>] [--verbose]
 | `--test <name>` | ❌ | Run only the named test suite |
 | `--env <environment>` | ❌ | Run only suites for this environment (e.g. `DEV`, `PROD`, `ANY`, `BKUP`; or set `PQL_TEST_ENV`) — see [Environment-specific test discovery](#environment-specific-test-discovery---env) |
 | `--verbose`, `-v` | ❌ | Show message and duration for every result (not just failures) |
-| `--output <file>` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
+| `--format <fmt>` | ❌ | `text` (default, the report) or `json` (the JSON results on stdout); not with `--log-format` |
+| `--output <file>`, `-o` | ❌ | Write full JSON results to `<file>` in addition to stdout output |
 | `--log-format <fmt>` | ❌ | Emit CI-native annotations: `azuredevops` or `github` |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (required for remote XMLA; or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (required for remote XMLA; or set `PQL_WORKSPACE_ID`) |
@@ -930,7 +939,7 @@ environment segment (e.g. `Calcs.Tests`) never match an `--env` filter.
 
 > **Note:** the Power BI *cloud* (`Public`, `USGov`, `China`, …) is not a
 > per-command flag. It comes from the credential stored by
-> `pql-test auth login --environment <cloud>`, or from the `PQL_ENVIRONMENT`
+> `pql-test auth login --cloud <cloud>`, or from the `PQL_ENVIRONMENT`
 > env var when explicit service-principal credentials are supplied.
 
 **Save JSON results to a file while still printing to the console:**
@@ -939,7 +948,13 @@ environment segment (e.g. `Calcs.Tests`) never match an `--env` filter.
 pql-test run-tests ./examples/SampleModel.SemanticModel --output results.json
 ```
 
-The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` array with per-assertion detail. Example structure:
+The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` array with one row per assertion. Each row has:
+- `test_name`: the assertion's `TestName`, or the suite name when the whole suite failed to run;
+- `suite_name`: the test function, e.g. `Calculations.DEV.Tests`;
+- `expected` and `actual`;
+- `passed`, `skipped`, `error`, and `duration_ms`.
+
+Example structure:
 
 ```json
 {
@@ -949,8 +964,9 @@ The JSON file contains `passed`, `failed`, `skipped`, `total`, and a `results` a
   "skipped": 0,
   "total": 6,
   "results": [
-    { "test_name": "Calculations: X equals Y", "passed": false, "skipped": false,
-      "message": "Expected: 5 | Actual: 7", "error": null, "duration_ms": 12.3 }
+    { "test_name": "Calculations: X equals Y", "expected": "5", "actual": "7",
+      "passed": false, "suite_name": "Calculations.DEV.Tests", "skipped": false,
+      "error": null, "duration_ms": 12.3 }
   ]
 }
 ```
@@ -1038,7 +1054,7 @@ ssss
 
 ### code-coverage
 
-Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps. See [docs/code-coverage-explained.md](docs/code-coverage-explained.md) for a one-page walkthrough with diagrams.
+Report which calculated columns, measures, tables, relationships, partitions, and roles have **direct test-UDF evidence** — a discovered DAX test that provably touches them — and which don't, with AI-ready hints for the gaps. See [docs/code-coverage-explained.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/code-coverage-explained.md) for a one-page walkthrough with diagrams.
 
 ```bash
 pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output <file>]
@@ -1053,7 +1069,8 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 | `<modelPath>` | ✅ | Model identifier — filesystem path, `local/<name>`, or `<workspace>.Workspace/<semantic_model>.SemanticModel` (see [Model Path Formats](#model-path-formats)) |
 | `--verbose`, `-v` | ❌ | List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets |
 | `--format <fmt>` | ❌ | `text` (default, human-readable) or `json` (stable report shape) |
-| `--output <file>` | ❌ | Write the JSON report to `<file>`. Requires `--format json` — otherwise fails as a usage error before any XMLA query |
+| `--output <file>`, `-o` | ❌ | Write the JSON report to `<file>`; with `--format text` the text report is printed as well |
+| `--quiet`, `-q` | ❌ | Print only the summary line (messages on stderr still appear); not with `--verbose` |
 | `--min-coverage <percent>` | ❌ | Exit `1` when overall eligible coverage is below `<percent>` (0-100); prints `Required coverage of N% reached` when met (like pytest-cov's `--cov-fail-under`). Also switches the report colors to pass/fail against the threshold. A malformed or out-of-range value fails before any XMLA query |
 | `--tenant-id <id>` | ❌ | Azure AD tenant ID (or set `PQL_TENANT_ID`) |
 | `--workspace-id <id>` | ❌ | Power BI workspace GUID (or set `PQL_WORKSPACE_ID`) |
@@ -1063,7 +1080,7 @@ pql-test code-coverage <modelPath> [--verbose] [--format {text,json}] [--output 
 
 **What "covered" means — and what it doesn't**
 
-This is **dependency coverage**, not **assertion coverage**. An object counts as covered when a discovered test UDF has direct, verifiable evidence linking it to that object — never inferred from transitive dependencies, and never presented as covered just because *some* test happens to touch it indirectly through a PQL.Assert helper. But direct evidence only proves a test *references* the object, not that the test's assertion meaningfully validates its behavior: a test that checks a table has more than zero rows and a test that validates every business rule on that table both count as "covered" the same way. Treat a low score as "nothing here has been tested at all" and a high score as "these objects are at least referenced by a test" — not as a correctness guarantee. See [tasks/direct-udf-code-coverage-metadata-contract.md](tasks/direct-udf-code-coverage-metadata-contract.md) for the full verified evidence contract per category, including:
+This is **dependency coverage**, not **assertion coverage**. An object counts as covered when a discovered test UDF has direct, verifiable evidence linking it to that object — never inferred from transitive dependencies, and never presented as covered just because *some* test happens to touch it indirectly through a PQL.Assert helper. But direct evidence only proves a test *references* the object, not that the test's assertion meaningfully validates its behavior: a test that checks a table has more than zero rows and a test that validates every business rule on that table both count as "covered" the same way. Treat a low score as "nothing here has been tested at all" and a high score as "these objects are at least referenced by a test" — not as a correctness guarantee. See [tasks/direct-udf-code-coverage-metadata-contract.md](https://github.com/clientfirsttech/pql-test/blob/main/tasks/direct-udf-code-coverage-metadata-contract.md) for the full verified evidence contract per category, including:
 
 - **Tables, calculated columns, measures** — covered via a direct `INFO.CALCDEPENDENCY()` edge from a discovered test UDF. The strongest evidence category: the DAX engine itself reports the reference.
 - **Relationships** — covered only when a test UDF's own DAX expression text contains a `PQL.Assert.Relationship.ShouldExist(...)` call matching a real relationship. `INFO.CALCDEPENDENCY()` can't see this at all, because the helper takes the relationship as string arguments, not a compiled reference — so this is parsed out of the expression text instead.
@@ -1100,7 +1117,7 @@ By category:
 
 The overall line and each category's percentage are colored with the same
 PASS/FAIL/SKIP (green/red/yellow) vocabulary `run-tests` uses (see
-[CLI Output Conventions](CONTRIBUTING.md#cli-output-conventions)):
+[CLI Output Conventions](https://github.com/clientfirsttech/pql-test/blob/main/CONTRIBUTING.md#cli-output-conventions)):
 
 | Mode | Green | Yellow | Red |
 |---|---|---|---|
@@ -1316,6 +1333,43 @@ All skills are packaged in the wheel (`pql_test/skills/`) and installed from the
 
 ---
 
+## Testing against ODCS data contracts
+
+If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, or v3.2 data contract, `pql-test contract` turns the contract's quality rules into PQL.Assert test suites, runs them, and traces every result back to its contract rule. It comes with pql-test.
+
+| Command | What it does |
+|---|---|
+| `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
+| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
+| `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
+| `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
+| `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
+| `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them, and traces every failure back to its contract rule id. It writes no files and never changes the model; `--write` also saves the suites into `DAXQueries/` |
+| `pql-test contract trace CONTRACT RESULTS_JSON` | Joins an earlier `run-tests --output` file to the contract's rule ids |
+
+MODEL_PATH means the same in every contract command: a PBIP folder, its `.pbip` file, or `local/<name>`, the `<name>.SemanticModel` folder in this repository. With `local/<name>`, `run` and `doctor` connect only to that model open in Power BI Desktop, even when `PQL_*` service credentials are set.
+
+```bash
+pql-test contract init local/SalesModel --output orders.odcs.yaml                    # start from the model
+pql-test contract coverage orders.odcs.yaml
+pql-test contract lint orders.odcs.yaml local/SalesModel
+pql-test contract run orders.odcs.yaml local/SalesModel --env DEV                    # the model open in Power BI Desktop
+pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # the workspace, with PQL_* credentials
+```
+
+`lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA (Windows).
+
+The generated files follow the rules below:
+- Test names are `ODCS <contractId> <ruleId>: <description>`.
+- Rules with `severity: warning` go into separate `<ENV>WARN` suites. `contract run` reports them but never fails on them.
+- Generated files start with `// Generated by pql-test`. `generate` refuses to overwrite any other file unless you pass `--force`.
+
+You can regenerate the suites in CI on every run, or commit them to the PBIP repo and fail CI when they drift from the contract. [docs/contracts.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md) compares the two workflows, and documents the full rule mapping and name resolution (`pbiTable` / `pbiColumn` custom properties on the contract).
+
+Each property's `logicalType` is checked against the column's model data type (for example `integer` → `Integer`, TMDL `int64`); the ODCS-to-model type table and the `pbiDataType` override are in [Column types](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#column-types).
+
+---
+
 ## Connection Options
 
 `pql-test` resolves an XMLA connection using the following priority order:
@@ -1353,8 +1407,8 @@ pql-test run-tests local/SampleModel
 ```
 
 > **Note:** Local auto-detection only works on Windows where Power BI
-> Desktop runs natively. On Linux/macOS CI agents, use the explicit remote
-> connection flags.
+> Desktop runs natively. Running tests over XMLA, locally or against the
+> service, needs a Windows machine or agent (ADOMD.NET is Windows-only).
 
 ### Remote Power BI Premium / Fabric Workspace
 
@@ -1382,17 +1436,16 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 |  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
 | `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
 | `--client-secret` | `PQL_CLIENT_SECRET` | Service principal client secret |
-|  | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) — no flag; also stored by `pql-test auth login --environment` |
+|  | `PQL_ENVIRONMENT` | Cloud environment (Public, USGov, etc.) — no flag; also stored by `pql-test auth login --cloud` |
 
 Place these in a `.env` file (git-ignored) at the directory where you invoke
 the CLI — typically the repo root or `python/`. The CLI loads `.env`
 automatically via `python-dotenv` by walking up from the current working
 directory. Copy `python/.env.example` to get started.
 
-> `python/tests/.env` is a separate file — it is **only** consumed by the
-> live integration suite (`python/tests/test_live_service.py`), not by the
-> CLI itself. Copy `python/tests/.env.example` to populate it when you want
-> to run the `@pytest.mark.live` tests against your tenant.
+> The live integration tests (`@pytest.mark.live`) read `python/.env` too. An
+> optional `python/tests/.env` overrides it for the tests only; the CLI never
+> reads it.
 
 > **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
 
@@ -1412,7 +1465,7 @@ with the dataset display name as the `Initial Catalog`.
 
 ### Sovereign / government clouds
 
-Log in with `pql-test auth login --environment <cloud>` (or set
+Log in with `pql-test auth login --cloud <cloud>` (or set
 `PQL_ENVIRONMENT` when supplying explicit service-principal credentials) to
 target a non-commercial cloud:
 
@@ -1801,3 +1854,9 @@ EVALUATE Calculations.DEV.Tests()
 - Confirm the signed-in account has at least **Contributor** access to the workspace.
 - Check that the `--workspace-id` is the workspace GUID (not its display name).
 - Check that `--dataset-id` is the semantic model GUID (visible in the dataset URL in the Power BI service).
+
+---
+
+## License
+
+pql-test is licensed under the [GNU Affero General Public License v3.0 only](LICENSE.txt) (AGPL-3.0-only), Copyright (C) 2026 Client First Technologies. Releases up to v0.1.x were published under the Business Source License 1.1 and keep it. See [LICENSES.md](https://github.com/clientfirsttech/pql-test/blob/main/LICENSES.md) for the third-party files that carry their own license.

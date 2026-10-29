@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Test discovery - find DAX test suites via XMLA or filesystem.
 

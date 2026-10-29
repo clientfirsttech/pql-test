@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pql-test"
-version = "0.1.20"
+version = "0.2.0"
 description = "CLI for discovering and running DAX tests in Power BI PBIP semantic models via XMLA"
 readme = "README.md"
-requires-python = ">=3.9"
-license = "BUSL-1.1"
-license-files = ["LICENSE.txt"]
+requires-python = ">=3.10"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE.txt", "NOTICE"]
 keywords = ["power-bi", "fabric", "dax", "xmla", "testing", "pql", "semantic-model", "pbip"]
 authors = [
     { name = "Client First Technologies" },
@@ -24,8 +24,8 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -35,16 +35,25 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 dependencies = [
-    "pyadomd>=0.0.5",
+    # XMLA (ADOMD.NET) is Windows-only. Without it, the file-only `pql-test contract`
+    # commands still work, so pipelines can run them on Linux.
+    "pyadomd>=0.0.5; sys_platform == 'win32'",
     "msal>=1.24.0",
     "azure-identity>=1.19.0",
     "keyring>=25.0.0",
     "click>=8.1.0",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",  # PYSEC-2026-2270
     "psutil>=5.9.0",
     # Transitive via msal/azure-core -> requests; floor excludes the compromised
     # emSign ECC Root CA - G3 bundle (PYSEC-2026-4320).
     "certifi>=2026.10.19",
+    # Transitive via msal/azure-core; floors exclude published vulnerabilities
+    # (requests PYSEC-2026-2275; urllib3 PYSEC-2026-141/142/4175/4176/4177).
+    "requests>=2.33.0",
+    "urllib3>=2.8.0",
+    # `pql-test contract ...`: ODCS contract loading and schema validation.
+    "PyYAML>=6.0",
+    "jsonschema>=4.18",
 ]
 
 [project.urls]
@@ -62,6 +71,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "build>=1.0.0",
     "twine>=4.0.0",
+    "hypothesis>=6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -71,6 +81,8 @@ exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 pql_test = ["skills/**/*.md"]
+"pql_test.odcs" = ["schemas/*.json", "schemas/*.txt"]
+"pql_test.odcs.catalog" = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -81,6 +93,11 @@ addopts = "-v"
 markers = [
     "live: marks tests that need a real Power BI / Fabric XMLA connection. They auto-skip when PQL_* credentials aren't available, so plain `pytest` is safe to run; configure `.env` to opt them in.",
 ]
+
+[tool.bandit]
+# Run by pre-commit and CI (security.yml) at medium severity and up. Mark a reviewed
+# false positive in the code with `# nosec <id>` and the reason, never a blanket skip.
+exclude_dirs = ["tests"]
 
 [tool.coverage.run]
 source = ["pql_test"]

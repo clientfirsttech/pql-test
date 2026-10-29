@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for pql_test.auth.store — Credential storage using keyring.
 """

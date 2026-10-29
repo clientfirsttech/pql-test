@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "generator": "pql-test GOLDEN",
+  "catalog": {
+    "library": "PQL.Assert",
+    "minVersion": "0.7.1"
+  },
+  "contract": {
+    "id": "marvel-sample",
+    "name": "Marvel Sample",
+    "apiVersion": "3.1.0",
+    "source": "marvel.odcs.yaml"
+  },
+  "summary": {
+    "total": 17,
+    "mapped": 15,
+    "approximated": 2,
+    "skipped": 0
+  },
+  "rules": [
+    {
+      "ruleId": "marvel_fact.exists",
+      "status": "mapped",
+      "description": "marvel_fact exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.columns",
+      "status": "mapped",
+      "description": "marvel_fact has columns ID, Name, Appearances, DateID, EyeID, AlignmentID",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.ID.type",
+      "status": "mapped",
+      "description": "marvel_fact.ID is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.Name.type",
+      "status": "mapped",
+      "description": "marvel_fact.Name is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.Appearances.type",
+      "status": "mapped",
+      "description": "marvel_fact.Appearances is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.DateID.type",
+      "status": "mapped",
+      "description": "marvel_fact.DateID is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.EyeID.type",
+      "status": "mapped",
+      "description": "marvel_fact.EyeID is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact.AlignmentID.type",
+      "status": "mapped",
+      "description": "marvel_fact.AlignmentID is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "marvel_fact_has_rows",
+      "status": "mapped",
+      "description": "MarvelFact has rows",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveRows"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.exists",
+      "status": "mapped",
+      "description": "DateDim exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.columns",
+      "status": "mapped",
+      "description": "DateDim has columns DateID, Date, Year",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.DateID.required",
+      "status": "mapped",
+      "description": "DateDim.DateID is required (no nulls)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.NullRateShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.DateID.primaryKey",
+      "status": "approximated",
+      "description": "DateDim.DateID is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
+    },
+    {
+      "ruleId": "DateDim.DateID.type",
+      "status": "mapped",
+      "description": "DateDim.DateID is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "DateDim.Date.type",
+      "status": "approximated",
+      "description": "DateDim.Date is date (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "DateDim.Year.type",
+      "status": "mapped",
+      "description": "DateDim.Year is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "date_dim_has_rows",
+      "status": "mapped",
+      "description": "DateDim has rows",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveRows"
+      ],
+      "severity": "error",
+      "reason": null
+    }
+  ]
+}

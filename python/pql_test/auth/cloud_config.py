@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Cloud environment configuration for sovereign clouds.
 """

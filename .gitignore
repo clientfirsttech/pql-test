@@ -74,3 +74,10 @@ renamedenv
 *.key
 **/id_rsa
 **/id_ed25519
+
+# hypothesis example database (contract property tests)
+.hypothesis/
+.coverage
+
+# Local-only notes (e.g. secret-rotation.local.md); never committed
+*.local.md

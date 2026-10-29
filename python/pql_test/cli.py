@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 pql-test CLI
 
@@ -48,7 +49,7 @@ Environment-specific test discovery (--env):
 
 Power BI cloud environment (Public, USGov, China, …):
   Not a per-command flag.  It comes from the credential stored by
-  `pql-test auth login --environment <cloud>`, or from the PQL_ENVIRONMENT
+  `pql-test auth login --cloud <cloud>`, or from the PQL_ENVIRONMENT
   env var when explicit service-principal credentials are supplied
   (e.g. CI pipelines).  Default: Public.
 
@@ -113,6 +114,15 @@ from pql_test.runner.cli_format import (
 )
 from pql_test.runner.coverage_collector import CoverageReport
 from pql_test.runner.coverage_report import CoverageSummary, coverage_percent, coverage_status
+from pql_test.cli_options import (
+    deprecated_alias,
+    emit_result,
+    format_option,
+    output_option,
+    record_summary,
+    verbosity_options,
+)
+from pql_test.contract_run import RunHooks, register_contract_commands
 
 try:
     _VERSION = _pkg_version("pql-test")
@@ -130,8 +140,8 @@ def _check_prereqs() -> list[dict]:
     major, minor = sys.version_info[:2]
     results.append(
         {
-            "name": "Python >= 3.9",
-            "ok": (major, minor) >= (3, 9),
+            "name": "Python >= 3.10",
+            "ok": (major, minor) >= (3, 10),
             "detail": f"Current: {sys.version.split()[0]}",
         }
     )
@@ -218,17 +228,17 @@ def _print_prereqs(results: list[dict]) -> None:
         icon = "\u2705" if r["ok"] else "\u274c"
         click.echo(f"  {icon} {r['name']} \u2014 {r['detail']}")
     all_ok = all(r["ok"] for r in results)
-    click.echo(
-        "\nAll prerequisites met.\n"
-        if all_ok
-        else "\nSome prerequisites are missing.\n"
-    )
+    summary = "All prerequisites met." if all_ok else "Some prerequisites are missing."
+    record_summary(summary)
+    click.echo(f"\n{summary}\n")
 
 
 def _print_tests(tests: list[PqlTest], verbose: bool) -> None:
     if not tests:
+        record_summary("No tests found.")
         click.echo("No tests found.")
         return
+    record_summary(f"Found {len(tests)} DAX test suite(s).")
     click.echo(f"\nFound {len(tests)} DAX test suite(s):\n")
     for t in tests:
         click.echo(f"  \u2022 {t.name}")
@@ -411,6 +421,7 @@ def _print_results(
                 f"(expected names like <Suite>.{environment}.Tests)."
             )
         click.echo(causes)
+        record_summary("No tests found: 0 passed, 0 failed, 0 total")
         click.echo(banner("0 passed, 0 failed, 0 total", fg=STATUS_COLORS["SKIP"]))
         return
 
@@ -425,6 +436,7 @@ def _print_results(
         summary_color = STATUS_COLORS["SKIP"]
     else:
         summary_color = STATUS_COLORS["PASS"]
+    record_summary(summary)
     click.echo(banner(summary, fg=summary_color))
 
 
@@ -538,7 +550,7 @@ def conn_options(func):
 
 # Test-environment selector (--env).  The Power BI *cloud* environment is
 # not a per-command flag: it comes from the stored `pql-test auth login
-# --environment` credential (or the PQL_ENVIRONMENT env var), so --env here
+# --cloud` credential (or the PQL_ENVIRONMENT env var), so --env here
 # unambiguously means the test-suite environment.
 _env_option = click.option(
     "--env",
@@ -608,6 +620,23 @@ def _format_local_miss_diagnostic(
     return "\n".join(lines)
 
 
+def _exit_unless_windows(command: str) -> None:
+    """Stop an XMLA command off Windows with one clear message, before any connection attempt.
+
+    ADOMD.NET only runs on Windows, so elsewhere every test would otherwise fail
+    with its own pyadomd error.
+    """
+    if sys.platform == "win32":
+        return
+    click.echo(
+        f"Error: `pql-test {command}` queries the model over XMLA, which needs ADOMD.NET and runs on "
+        "Windows only. On this platform, `pql-test retrieve-tests` with a PBIP folder and `pql-test contract "
+        "lint|coverage|generate|trace` work from the PBIP files.",
+        err=True,
+    )
+    sys.exit(1)
+
+
 def _make_conn_opts(
     tenant_id: str | None,
     workspace_id: str | None,
@@ -651,11 +680,17 @@ def cli() -> None:
 # ---------------------------------------------------------------------------
 
 @cli.command("check-prereqs")
-def cmd_check_prereqs() -> None:
+@format_option()
+@verbosity_options()
+def cmd_check_prereqs(output_format: str) -> None:
     """Verify that all required packages and tools are available."""
     results = _check_prereqs()
-    _print_prereqs(results)
-    if not all(r["ok"] for r in results):
+    ok = all(r["ok"] for r in results)
+    if output_format == "json":
+        emit_result(json.dumps({"ok": ok, "checks": results}, indent=2))
+    else:
+        _print_prereqs(results)
+    if not ok:
         sys.exit(1)
 
 
@@ -671,14 +706,15 @@ def cmd_check_prereqs() -> None:
     default=None,
     help="Show only the named test suite.",
 )
-@click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
-@click.option("--verbose", "-v", is_flag=True, help="With --human: show file paths and connection info.")
+@deprecated_alias("--human", to="output_format", use="--format text", value="text")
+@format_option(default="json", help="Output format: JSON (default, for tools and agents) or a text list.")
+@verbosity_options()
 @_env_option
 @conn_options
 def cmd_retrieve_tests(
     model_path: str,
     test_name: str | None,
-    human: bool,
+    output_format: str,
     verbose: bool,
     test_environment: str | None,
     tenant_id: str | None,
@@ -689,7 +725,8 @@ def cmd_retrieve_tests(
 ) -> None:
     """List DAX test suites in MODEL_PATH.
 
-    Outputs a JSON array by default. Use --human for formatted text.
+    Outputs a JSON array by default. Use --format text for a list; --verbose adds
+    file paths and connection info.
 
     By default, test suites are discovered by scanning the SemanticModel's
     DAXQueries/ folder for *.Tests.dax files.  When XMLA options or the
@@ -717,10 +754,14 @@ def cmd_retrieve_tests(
       pql-test retrieve-tests ../examples
       pql-test retrieve-tests local/SampleModel
       pql-test retrieve-tests ../examples --env DEV
+      pql-test retrieve-tests ../examples --format text
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel"
       pql-test retrieve-tests "MyWorkspace.Workspace/MySemanticModel.SemanticModel" --tenant-id ... --client-id ... --client-secret ...
     """
+    human = output_format == "text"
     ident = parse_model_identifier(model_path)
+    if ident.kind in ("local", "service"):
+        _exit_unless_windows("retrieve-tests")  # these forms only exist over XMLA
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
@@ -769,8 +810,9 @@ def cmd_retrieve_tests(
         # auto-detected even when no flags are supplied — matches cmd_run_tests
         # behavior and the README's "Local Power BI Desktop (auto-detected)"
         # section.  Returns None when nothing is available, in which case the
-        # caller falls back to the offline DAXQueries/ file scan.
-        conn = resolve_xmla_connection(abs_path, opts)
+        # caller falls back to the offline DAXQueries/ file scan, which is
+        # all there is off Windows (no ADOMD.NET).
+        conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     if test_name:
         test = retrieve_test_by_name(
@@ -780,7 +822,7 @@ def cmd_retrieve_tests(
             if human:
                 click.echo(f'No test found with name: "{test_name}"')
             else:
-                click.echo(json.dumps(None))
+                emit_result(json.dumps(None))
             sys.exit(1)
         results = [test]
     else:
@@ -797,7 +839,7 @@ def cmd_retrieve_tests(
                     "or supply --tenant-id, --workspace-id, --dataset-id to run tests."
                 )
     else:
-        click.echo(json.dumps([_test_to_dict(t) for t in results], indent=2))
+        emit_result(json.dumps([_test_to_dict(t) for t in results], indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -806,14 +848,17 @@ def cmd_retrieve_tests(
 
 @cli.command("retrieve-test")
 @click.argument("model_path", metavar="MODEL_PATH")
-@click.argument("name")
-@click.option("--human", is_flag=True, help="Human-readable output instead of JSON.")
-@click.option("--verbose", "-v", is_flag=True, help="With --human: also print the full DAX source.")
+@click.argument("name", metavar="[NAME]", required=False)
+@click.option("--test", "test_name", default=None, help="The test suite to show (the same as NAME).")
+@deprecated_alias("--human", to="output_format", use="--format text", value="text")
+@format_option(default="json", help="Output format: JSON (default, for tools and agents) or text.")
+@verbosity_options()
 @conn_options
 def cmd_retrieve_test(
     model_path: str,
-    name: str,
-    human: bool,
+    name: str | None,
+    test_name: str | None,
+    output_format: str,
     verbose: bool,
     tenant_id: str | None,
     workspace_id: str | None,
@@ -823,7 +868,8 @@ def cmd_retrieve_test(
 ) -> None:
     """Show a specific DAX test suite by name.
 
-    Outputs a JSON object by default. Use --human for formatted text.
+    Name the suite with NAME or --test NAME. Outputs a JSON object by default. Use
+    --format text for formatted text; --verbose also prints the full DAX source.
 
     MODEL_PATH accepts these formats:
 
@@ -839,7 +885,13 @@ def cmd_retrieve_test(
     spaces or parentheses, e.g. "local/OLS_Model (1)" — otherwise the shell
     splits it into multiple arguments and the CLI never sees the full name.
     """
+    if (name is None) == (test_name is None):
+        raise click.UsageError("Name the test suite once: as NAME or with --test NAME.")
+    name = name or test_name
+    human = output_format == "text"
     ident = parse_model_identifier(model_path)
+    if ident.kind in ("local", "service"):
+        _exit_unless_windows("retrieve-test")  # these forms only exist over XMLA
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
     conn = None
@@ -874,14 +926,14 @@ def cmd_retrieve_test(
             _sem_name = Path(abs_path).name
             if _sem_name.endswith(".SemanticModel"):
                 opts.dataset_name = _sem_name[: -len(".SemanticModel")]
-        conn = resolve_xmla_connection(abs_path, opts)
+        conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
     if not test:
         if human:
             click.echo(f'No test found with name: "{name}"')
         else:
-            click.echo(json.dumps(None))
+            emit_result(json.dumps(None))
         sys.exit(1)
 
     if human:
@@ -893,7 +945,7 @@ def cmd_retrieve_test(
         d = _test_to_dict(test)
         if verbose:
             d["source"] = test.source
-        click.echo(json.dumps(d, indent=2))
+        emit_result(json.dumps(d, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -908,14 +960,12 @@ def cmd_retrieve_test(
     default=None,
     help="Run only the named test suite.",
 )
-@click.option("--verbose", "-v", is_flag=True, help="Show per-assertion detail (message and duration) for every result.")
-@click.option(
-    "--output",
-    "output",
-    default=None,
-    metavar="FILE",
-    help="Write full JSON results to FILE in addition to the human-readable output.",
+@format_option(help="Output format: the test report (text) or the JSON results on stdout.")
+@verbosity_options(
+    result_on_stdout=lambda kw: bool(kw.get("log_format")),
+    verbose_help="Show per-assertion detail (message and duration) for every result.",
 )
+@output_option("Write the full JSON results to FILE, as well as the report.")
 @click.option(
     "--log-format",
     "log_format",
@@ -932,6 +982,7 @@ def cmd_retrieve_test(
 def cmd_run_tests(
     model_path: str,
     test_name: str | None,
+    output_format: str,
     verbose: bool,
     output: str | None,
     log_format: str | None,
@@ -945,7 +996,8 @@ def cmd_run_tests(
     """Run all DAX test suites in a PBIP model via XMLA.
 
     Results are printed in a pytest-style format by default.
-    Use --output to also save full JSON results to a file.
+    Use --output to also save full JSON results to a file, --format json to print
+    them instead of the report, and --verbose or --quiet for more or less detail.
     Use --log-format to emit CI-native annotations for Azure DevOps or
     GitHub Actions pipelines.
     Use --env to run only the test suites targeting one environment
@@ -977,6 +1029,9 @@ def cmd_run_tests(
       pql-test run-tests ../examples/SampleModel.SemanticModel --output results.json
       pql-test run-tests local/SampleModel --log-format github
     """
+    if output_format == "json" and log_format:
+        raise click.UsageError("Use only one of --format json and --log-format.")
+    _exit_unless_windows("run-tests")
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
 
@@ -1095,7 +1150,9 @@ def cmd_run_tests(
         connection_pre_resolved=True,
     )
 
-    if log_format == "azuredevops":
+    if output_format == "json":
+        emit_result(json.dumps(_suite_to_dict(suite), indent=2))
+    elif log_format == "azuredevops":
         _print_results_azuredevops(suite, pre_warnings=pre_warnings)
     elif log_format == "github":
         _print_results_github(suite, pre_warnings=pre_warnings)
@@ -1146,6 +1203,7 @@ def _print_coverage_report(
         )
     overall_color = STATUS_COLORS[coverage_status(summary.percent, min_coverage)]
     overall = f"{summary.covered}/{summary.eligible} covered ({summary.percent}%)"
+    record_summary(f"Overall: {overall}")
     click.echo(f"\nOverall: {click.style(overall, fg=overall_color)}")
 
     counts = category_counts(report)
@@ -1243,21 +1301,11 @@ def _validate_finite_min_coverage(
 
 @cli.command("code-coverage")
 @click.argument("model_path", metavar="MODEL_PATH")
-@click.option(
-    "--verbose", "-v", is_flag=True,
-    help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
+@format_option(help="Output format: human-readable text (default) or a stable JSON report.")
+@verbosity_options(
+    verbose_help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
 )
-@click.option(
-    "--format", "output_format",
-    type=click.Choice(["text", "json"], case_sensitive=False),
-    default="text",
-    help="Output format: human-readable text (default) or a stable JSON report.",
-)
-@click.option(
-    "--output", "output",
-    default=None, metavar="FILE",
-    help="Write the JSON report to FILE. Requires --format json.",
-)
+@output_option("Write the JSON report to FILE, as well as the report.")
 @click.option(
     "--min-coverage", "min_coverage",
     type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
@@ -1300,9 +1348,8 @@ def cmd_code_coverage(
       pql-test code-coverage local/SampleModel --min-coverage 60
     """
     output_format = output_format.lower()
-    if output and output_format != "json":
-        raise click.UsageError("--output requires --format json.")
 
+    _exit_unless_windows("code-coverage")
     ident = parse_model_identifier(model_path)
     opts = _make_conn_opts(tenant_id, workspace_id, dataset_id, client_id, client_secret)
     abs_path = model_path
@@ -1343,11 +1390,14 @@ def cmd_code_coverage(
         text = json.dumps(payload, indent=2)
         if output:
             Path(output).write_text(text, encoding="utf-8")
-            click.echo(f"Coverage report written to: {output}")
+            emit_result(f"Coverage report written to: {output}")  # on stdout, as before --format json moved notes
         else:
-            click.echo(text)
+            emit_result(text)
     else:
         _print_coverage_report(report, summary, verbose, ident.kind, min_coverage)
+        if output:
+            Path(output).write_text(json.dumps(coverage_report_to_dict(report), indent=2), encoding="utf-8")
+            click.echo(f"Coverage report written to: {output}")
 
     if min_coverage is not None:
         if summary.percent < min_coverage:
@@ -1357,11 +1407,12 @@ def cmd_code_coverage(
             )
             sys.exit(1)
         # Mirror pytest-cov's "Required test coverage of N% reached" so CI logs
-        # show the gate was evaluated. Goes to stderr when JSON is on stdout.
-        click.echo(
-            f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%",
-            err=output_format == "json" and not output,
-        )
+        # show the gate was evaluated. On stderr while the JSON report is on stdout.
+        reached = f"\nRequired coverage of {min_coverage}% reached. Total coverage: {summary.percent}%"
+        if output_format == "json" and output:
+            emit_result(reached)  # stdout has no JSON then (it went to the file), so the note stays there
+        else:
+            click.echo(reached)
 
 
 # ---------------------------------------------------------------------------
@@ -1374,24 +1425,16 @@ def auth() -> None:
 
 
 @auth.command("login")
+@deprecated_alias("-u", "--user", to="user_or_client", use="--client-id", metavar="CLIENT_ID")
+@click.option("--client-id", "user_or_client", help="Client ID (service principal, or a user-assigned managed identity)")
+@deprecated_alias("-p", "--password", to="password", use="--client-secret", metavar="SECRET")
 @click.option(
-    "-u",
-    "--user",
-    "--client-id",
-    "user_or_client",
-    help="Username or client ID for authentication",
+    "--client-secret",
+    "password",
+    help="Client secret, or the certificate's password with --certificate",
 )
-@click.option(
-    "-p",
-    "--password",
-    help="Password, client secret, or certificate password (prompts if not provided)",
-)
-@click.option(
-    "--tenant",
-    "--tenant-id",
-    "tenant_id",
-    help="Azure AD tenant ID",
-)
+@deprecated_alias("--tenant", to="tenant_id", use="--tenant-id", metavar="TENANT_ID")
+@click.option("--tenant-id", "tenant_id", help="Azure AD tenant ID")
 @click.option(
     "--certificate",
     help="Path to certificate file (.pem or .p12) for certificate-based auth",
@@ -1405,11 +1448,19 @@ def auth() -> None:
     is_flag=True,
     help="Use managed identity authentication (Azure VM/Container)",
 )
-@click.option(
+@deprecated_alias(
     "--environment",
+    to="environment",
+    use="--cloud",
+    type=click.Choice(["Public", "USGov", "USGovHigh", "USGovDoD", "Germany", "China"]),
+)
+@click.option(
+    "--cloud",
+    "environment",
     type=click.Choice(["Public", "USGov", "USGovHigh", "USGovDoD", "Germany", "China"]),
     default="Public",
-    help="Azure cloud environment",
+    show_default=True,
+    help="Azure cloud",
 )
 def cmd_auth_login(
     user_or_client: str | None,
@@ -1429,16 +1480,16 @@ def cmd_auth_login(
       pql-test auth login
 
       # Service principal with secret
-      pql-test auth login -u <client-id> -p <secret> --tenant <tenant-id>
+      pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
 
       # Service principal with certificate
-      pql-test auth login -u <client-id> --certificate cert.pem --tenant <tenant-id>
+      pql-test auth login --client-id <client-id> --certificate cert.pem --tenant-id <tenant-id>
 
       # Managed identity (system-assigned)
       pql-test auth login --identity
 
       # Managed identity (user-assigned)
-      pql-test auth login --identity -u <client-id>
+      pql-test auth login --identity --client-id <client-id>
     """
     from pql_test.auth import AuthenticationManager, AuthMethod, CredentialConfig
 
@@ -1460,7 +1511,7 @@ def cmd_auth_login(
         # Federated credential
         if not all([user_or_client, tenant_id]):
             click.echo(
-                "Error: Federated credential requires --user (client ID) and --tenant",
+                "Error: Federated credential requires --client-id and --tenant-id",
                 err=True,
             )
             sys.exit(1)
@@ -1479,7 +1530,7 @@ def cmd_auth_login(
         # Certificate-based auth
         if not all([user_or_client, tenant_id]):
             click.echo(
-                "Error: Certificate auth requires --user (client ID) and --tenant",
+                "Error: Certificate auth requires --client-id and --tenant-id",
                 err=True,
             )
             sys.exit(1)
@@ -1499,7 +1550,7 @@ def cmd_auth_login(
         # Service principal with secret
         if not tenant_id:
             click.echo(
-                "Error: Service principal auth requires --tenant",
+                "Error: Service principal auth requires --tenant-id",
                 err=True,
             )
             sys.exit(1)
@@ -1632,13 +1683,31 @@ def cmd_auth_logout() -> None:
 
 
 @auth.command("status")
-def cmd_auth_status() -> None:
+@format_option()
+@verbosity_options()
+def cmd_auth_status(output_format: str) -> None:
     """Show current authentication status."""
     from pql_test.auth import AuthenticationManager
 
     manager = AuthenticationManager()
     status = manager.get_status()
 
+    if output_format == "json":
+        emit_result(
+            json.dumps(
+                {
+                    "authenticated": status.authenticated,
+                    "method": status.method.value if status.method else None,
+                    "account": status.account_name,
+                    "tenantId": status.tenant_id,
+                    "clientId": status.client_id,
+                    "cloud": status.environment,
+                },
+                indent=2,
+            )
+        )
+        return
+    record_summary("Status: Authenticated" if status.authenticated else "Status: Not authenticated")
     if not status.authenticated:
         click.echo("Status: Not authenticated")
         click.echo("\nTo log in, run: pql-test auth login")
@@ -2079,6 +2148,23 @@ def cmd_skill(name: str | None, format: str, list: bool, version: bool,
     except FileNotFoundError as e:
         click.echo(str(e), err=True)
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# `pql-test contract` (ODCS data contracts)
+# ---------------------------------------------------------------------------
+
+register_contract_commands(
+    cli,
+    RunHooks(
+        conn_options=conn_options,
+        make_conn_opts=_make_conn_opts,
+        print_results=_print_results,
+        print_azuredevops=_print_results_azuredevops,
+        print_github=_print_results_github,
+        suite_to_dict=_suite_to_dict,
+    ),
+)
 
 
 # ---------------------------------------------------------------------------

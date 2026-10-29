@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """Stdlib promptfoo-compatible skill eval runner.
 
 Loads test cases from tests/*.yaml, injects live SKILL.md content into the

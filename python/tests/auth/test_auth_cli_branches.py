@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for the ``pql-test auth`` CLI subcommands — branch coverage.
 
@@ -51,7 +52,7 @@ class TestAuthLoginRouting:
             ["auth", "login", "--federated-token", "tok"],
         )
         assert result.exit_code == 1
-        assert "Federated credential requires --user" in result.output
+        assert "Federated credential requires --client-id and --tenant-id" in result.output
 
     def test_certificate_without_user_or_tenant_errors_and_exits_1(self, runner, tmp_path):
         cert = tmp_path / "cert.pem"
@@ -61,7 +62,7 @@ class TestAuthLoginRouting:
             ["auth", "login", "--certificate", str(cert)],
         )
         assert result.exit_code == 1
-        assert "Certificate auth requires --user" in result.output
+        assert "Certificate auth requires --client-id and --tenant-id" in result.output
 
     def test_spn_secret_without_tenant_errors_and_exits_1(self, runner):
         result = runner.invoke(

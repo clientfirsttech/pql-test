@@ -1,1 +1,4 @@
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
+
+# Contract golden files are compared byte-for-byte; keep LF on every OS.
+python/tests/odcs/golden/** text eol=lf

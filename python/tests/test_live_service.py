@@ -1,10 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Live integration tests that query an actual Power BI / Fabric XMLA endpoint.
 
 These tests require:
   - Power BI Premium or Microsoft Fabric capacity (XMLA read enabled)
   - pyadomd and msal installed
-  - Credentials in python/tests/.env  (copy .env.example → .env and fill in)
+  - Credentials in python/.env  (copy .env.example → .env and fill in);
+    python/tests/.env, if present, overrides it for the tests
     OR the equivalent environment variables set in your CI/CD pipeline
 
 Run with:
@@ -21,14 +23,15 @@ from pathlib import Path
 
 import pytest
 
-# Load tests/.env before importing the runner so that env vars are available.
+# Load the .env files before importing the runner so that env vars are available.
 # override=False means real env vars (e.g. CI secrets) always win over the file.
 try:
     from dotenv import load_dotenv
 
-    _env_file = Path(__file__).parent / ".env"
-    if _env_file.exists():
-        load_dotenv(_env_file, override=False)
+    # python/tests/.env (optional override) first, then python/.env; the first value set wins.
+    for _env_file in (Path(__file__).parent / ".env", Path(__file__).parent.parent / ".env"):
+        if _env_file.exists():
+            load_dotenv(_env_file, override=False)
 except ImportError:
     pass  # python-dotenv missing; rely on env vars being set externally
 
@@ -61,7 +64,7 @@ def _require_credentials() -> None:
     if missing:
         pytest.skip(
             f"Live service credentials not configured: {', '.join(missing)}\n"
-            "Copy python/tests/.env.example → python/tests/.env and fill in your values."
+            "Copy python/.env.example → python/.env and fill in your values."
         )
 
 
@@ -98,7 +101,7 @@ class TestLiveService:
     connect to the service with real credentials, run every *.Tests.dax file
     found in the SampleModel, and assert that all tests pass.
 
-    Skipped automatically unless python/tests/.env is populated.
+    Skipped automatically unless python/.env (or python/tests/.env) is populated.
     """
 
     def test_connection_resolves_with_service_credentials(self, sample_model_path):

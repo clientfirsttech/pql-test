@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Unit tests for [python/pql_test/runner/coverage_report.py](../pql_test/runner/coverage_report.py).
 

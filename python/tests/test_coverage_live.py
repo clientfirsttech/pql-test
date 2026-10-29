@@ -1,8 +1,9 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Live integration test pinning direct test-UDF coverage evidence for
 SampleModel against tasks/direct-udf-code-coverage-metadata-contract.md.
 
-Requires the same python/tests/.env service-principal credentials as
+Requires the same service-principal credentials (python/.env) as
 test_live_service.py. Skipped automatically when they aren't configured.
 
 Run with:
@@ -20,9 +21,10 @@ import pytest
 try:
     from dotenv import load_dotenv
 
-    _env_file = Path(__file__).parent / ".env"
-    if _env_file.exists():
-        load_dotenv(_env_file, override=False)
+    # python/tests/.env (optional override) first, then python/.env; the first value set wins.
+    for _env_file in (Path(__file__).parent / ".env", Path(__file__).parent.parent / ".env"):
+        if _env_file.exists():
+            load_dotenv(_env_file, override=False)
 except ImportError:
     pass
 
@@ -44,7 +46,7 @@ def _require_credentials() -> None:
     if missing:
         pytest.skip(
             f"Live service credentials not configured: {', '.join(missing)}\n"
-            "Copy python/tests/.env.example → python/tests/.env and fill in your values."
+            "Copy python/.env.example → python/.env and fill in your values."
         )
 
 

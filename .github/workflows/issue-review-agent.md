@@ -2,9 +2,9 @@
 name: Issue Review and Fix Agent
 description: Analyzes GitHub issues and generates code fixes - automatically reviews issue content, identifies relevant components, and creates pull requests with targeted solutions.
 
+# Manual only: a maintainer runs it for one issue (Actions > Run workflow). Issue text
+# is untrusted, so no issue event (opened, labeled) starts it on its own.
 on:
-  issues:
-    types: [labeled]
   workflow_dispatch:
     inputs:
       issue_number:
@@ -43,7 +43,7 @@ tools:
 
 steps:
   - name: Checkout repository
-    uses: actions/checkout@v4
+    uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
     with:
       ref: dev
       fetch-depth: 0
@@ -62,12 +62,7 @@ steps:
 
       mkdir -p "$AGENT_DIR"
 
-      # Determine issue number from trigger or input
-      if [ "$GITHUB_EVENT_NAME" = "issues" ]; then
-        ISSUE_NUMBER=$(jq -r '.issue.number' "$GITHUB_EVENT_PATH")
-      else
-        ISSUE_NUMBER="$INPUT_ISSUE_NUMBER"
-      fi
+      ISSUE_NUMBER="$INPUT_ISSUE_NUMBER"
 
       echo "Fetching issue #$ISSUE_NUMBER..."
 
@@ -127,7 +122,7 @@ Constraints {
   Read status from /tmp/gh-aw/agent/status.txt
   Use `edit` tool to modify files — do NOT use bash heredoc or redirection to write files
   Only use allowed bash commands: cat, echo, find, git diff, git log, git status
-  If `issueData.pull_request` is present, do not create a new PR from this run; report incomplete with reason "Triggered from PR-labeled issue event"
+  If `issueData.pull_request` is present, do not create a new PR from this run; report incomplete with reason "Issue number is a pull request"
   If `git diff --name-only` shows a large or unrelated change set, do not create a PR; report incomplete with reason "Unexpected diff scope"
   Make surgical, minimal changes — do not refactor unrelated code
   If source code changes are required, update plan.md and the corresponding tasks epic file to keep AIDD artifacts in sync
@@ -267,7 +262,7 @@ Key files:
 - `tests/` - Python unit tests (pytest)
 
 Development guidelines:
-- Python >= 3.9 with PEP 8 style
+- Python >= 3.10 with PEP 8 style
 - Type annotations and Google-style docstrings required
 - Click framework for CLI commands
 - XMLA/ADOMD.NET for remote connections (Windows-only)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 pql_test.auth package — Authentication management for pql-test.
 

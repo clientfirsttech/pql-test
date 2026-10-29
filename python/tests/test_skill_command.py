@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for pql-test skill command."""
 
 from __future__ import annotations

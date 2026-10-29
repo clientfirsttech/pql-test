@@ -1,0 +1,49 @@
+# Good-data contract for examples/SampleModel (MarvelFact, DateDim).
+# Every mapped rule should pass against the sample model.
+apiVersion: v3.1.0
+kind: DataContract
+id: marvel-sample
+name: Marvel Sample
+version: 1.0.0
+status: active
+dataProduct: marvel
+schema:
+  - name: marvel_fact
+    physicalType: table
+    customProperties:
+      - property: pbiTable
+        value: MarvelFact
+    properties:
+      - name: ID
+        logicalType: integer
+      - name: Name
+        logicalType: string
+      - name: Appearances
+        logicalType: integer
+      - name: DateID
+        logicalType: integer
+      - name: EyeID
+        logicalType: integer
+      - name: AlignmentID
+        logicalType: integer
+    quality:
+      - id: marvel_fact_has_rows
+        metric: rowCount
+        mustBeGreaterThan: 0
+        description: MarvelFact has rows
+  - name: DateDim
+    physicalType: table
+    properties:
+      - name: DateID
+        logicalType: integer
+        primaryKey: true
+        required: true
+      - name: Date
+        logicalType: date
+      - name: Year
+        logicalType: integer
+    quality:
+      - id: date_dim_has_rows
+        metric: rowCount
+        mustBeGreaterThan: 0
+        description: DateDim has rows

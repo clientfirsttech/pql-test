@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Power BI REST API helpers for workspace and dataset resolution.
 
@@ -9,6 +10,9 @@ from __future__ import annotations
 
 import json
 import urllib.request
+
+REST_TIMEOUT_SECONDS = 60  # a stalled connection must not hang the CLI
+# Every urlopen below takes an https Power BI API URL built here (bandit B310 reviewed).
 
 __all__ = [
     "_acquire_service_principal_token",
@@ -52,7 +56,7 @@ def _resolve_pbi_workspace_and_dataset_names(
 
     def _get(url: str) -> dict:
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as resp:
+        with urllib.request.urlopen(req, timeout=REST_TIMEOUT_SECONDS) as resp:  # nosec B310
             return json.loads(resp.read().decode())
 
     workspace_data = _get(f"{base}/groups/{workspace_id}")
@@ -75,7 +79,7 @@ def _resolve_pbi_workspace_name(
         f"{api_prefix}/v1.0/myorg/groups/{workspace_id}",
         headers={"Authorization": f"Bearer {access_token}"},
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=REST_TIMEOUT_SECONDS) as resp:  # nosec B310
         return json.loads(resp.read().decode())["name"]
 
 
@@ -96,7 +100,7 @@ def _verify_dataset_exists_in_workspace(
         f"{api_prefix}/v1.0/myorg/groups/{workspace_id}/datasets",
         headers={"Authorization": f"Bearer {access_token}"},
     )
-    with urllib.request.urlopen(req) as resp:
+    with urllib.request.urlopen(req, timeout=REST_TIMEOUT_SECONDS) as resp:  # nosec B310
         datasets = json.loads(resp.read().decode()).get("value", [])
     available = [d.get("name") for d in datasets]
     if not any((n or "").lower() == dataset_name.lower() for n in available):

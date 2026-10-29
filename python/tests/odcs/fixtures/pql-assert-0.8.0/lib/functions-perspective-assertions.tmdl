@@ -1,0 +1,386 @@
+createOrReplace
+    /// Perspective Assertions - PQL.Assert.Perspective namespace
+    /// These functions validate perspective configurations and membership in semantic models
+    /// Asserts that a perspective exists and contains expected tables, columns, and measures.
+    /// Uses INFO.PERSPECTIVES() and related DMV functions to validate perspective membership.
+    /// Model-independent: accepts comma-separated string lists instead of TABLE parameters.
+    /// NOTE: List items should not contain commas. Use exact names without extra delimiters.
+    /// @param {STRING} testName - Description of the test being performed
+    /// @param {STRING} perspectiveName - Name of the perspective to validate
+    /// @param {STRING} expectedTablesList - Comma-separated table names (empty string for no tables)
+    /// @param {STRING} expectedColumnsList - Comma-separated column references in Table[Column] format (empty string for no columns)
+    /// @param {STRING} expectedMeasuresList - Comma-separated measure references in Table[Measure] format (empty string for no measures)
+    function 'PQL.Assert.Perspective.ShouldContain' =
+            (testName: STRING, perspectiveName: STRING, expectedTablesList: STRING, expectedColumnsList: STRING, expectedMeasuresList: STRING) =>
+                VAR _Perspective =
+                    FILTER(
+                        INFO.PERSPECTIVES(),
+                        [Name] = perspectiveName
+                    )
+                VAR _PerspectiveExists = COUNTROWS(_Perspective) > 0
+                VAR _PerspectiveID = MAXX(_Perspective, [ID])
+                VAR _PerspectiveTables =
+                    FILTER(
+                        INFO.PERSPECTIVETABLES(),
+                        [PerspectiveID] = _PerspectiveID
+                    )
+                
+                // Get actual tables in perspective
+                VAR _ActualTables =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            SELECTCOLUMNS(
+                                _PerspectiveTables,
+                                "TableID", [TableID]
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "TableID", [ID],
+                                "Name", [Name]
+                            )
+                        ),
+                        "Name", [Name]
+                    )
+                
+                // Get actual columns in perspective
+                VAR _ActualColumns =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            NATURALINNERJOIN(
+                                NATURALINNERJOIN(
+                                    SELECTCOLUMNS(
+                                        INFO.PERSPECTIVECOLUMNS(),
+                                        "PerspectiveTableID", [PerspectiveTableID],
+                                        "ColumnID", [ColumnID]
+                                    ),
+                                    SELECTCOLUMNS(
+                                        _PerspectiveTables,
+                                        "PerspectiveTableID", [ID],
+                                        "TableID", [TableID]
+                                    )
+                                ),
+                                SELECTCOLUMNS(
+                                    INFO.COLUMNS(),
+                                    "ColumnID", [ID],
+                                    "ColumnName", IF(NOT ISBLANK([ExplicitName]), [ExplicitName], [InferredName])
+                                )
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "TableID", [ID],
+                                "TableName", [Name]
+                            )
+                        ),
+                        "Name", [TableName] & "[" & [ColumnName] & "]"
+                    )
+                
+                // Get actual measures in perspective
+                VAR _ActualMeasures =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            NATURALINNERJOIN(
+                                NATURALINNERJOIN(
+                                    SELECTCOLUMNS(
+                                        INFO.PERSPECTIVEMEASURES(),
+                                        "PerspectiveTableID", [PerspectiveTableID],
+                                        "MeasureID", [MeasureID]
+                                    ),
+                                    SELECTCOLUMNS(
+                                        _PerspectiveTables,
+                                        "PerspectiveTableID", [ID]
+                                    )
+                                ),
+                                SELECTCOLUMNS(
+                                    INFO.MEASURES(),
+                                    "MeasureID", [ID],
+                                    "MeasureTableID", [TableID],
+                                    "MeasureName", [Name]
+                                )
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "MeasureTableID", [ID],
+                                "TableName", [Name]
+                            )
+                        ),
+                        "Name", [TableName] & "[" & [MeasureName] & "]"
+                    )
+                
+                // Calculate expected counts from comma-separated lists
+                VAR _ExpectedTablesCount =
+                    IF(
+                        LEN(TRIM(expectedTablesList)) = 0,
+                        0,
+                        LEN(expectedTablesList) - LEN(SUBSTITUTE(expectedTablesList, ",", "")) + 1
+                    )
+                VAR _ExpectedColumnsCount =
+                    IF(
+                        LEN(TRIM(expectedColumnsList)) = 0,
+                        0,
+                        LEN(expectedColumnsList) - LEN(SUBSTITUTE(expectedColumnsList, ",", "")) + 1
+                    )
+                VAR _ExpectedMeasuresCount =
+                    IF(
+                        LEN(TRIM(expectedMeasuresList)) = 0,
+                        0,
+                        LEN(expectedMeasuresList) - LEN(SUBSTITUTE(expectedMeasuresList, ",", "")) + 1
+                    )
+                
+                // Prepare for case-insensitive string matching with proper delimiters to avoid substring false matches
+                VAR _ExpectedTablesUpper = "," & UPPER(TRIM(expectedTablesList)) & ","
+                VAR _ExpectedColumnsUpper = "," & UPPER(TRIM(expectedColumnsList)) & ","
+                VAR _ExpectedMeasuresUpper = "," & UPPER(TRIM(expectedMeasuresList)) & ","
+                
+                // Count matched items using exact string matching (with delimiters to prevent substring matches)
+                VAR _MatchedTablesCount =
+                    COUNTROWS(
+                        FILTER(
+                            _ActualTables,
+                            CONTAINSSTRING(_ExpectedTablesUpper, "," & TRIM(UPPER([Name])) & ",")
+                        )
+                    )
+                VAR _MatchedColumnsCount =
+                    COUNTROWS(
+                        FILTER(
+                            _ActualColumns,
+                            CONTAINSSTRING(_ExpectedColumnsUpper, "," & TRIM(UPPER([Name])) & ",")
+                        )
+                    )
+                VAR _MatchedMeasuresCount =
+                    COUNTROWS(
+                        FILTER(
+                            _ActualMeasures,
+                            CONTAINSSTRING(_ExpectedMeasuresUpper, "," & TRIM(UPPER([Name])) & ",")
+                        )
+                    )
+                
+                // Calculate missing counts
+                VAR _MissingTablesCount = MAX(0, _ExpectedTablesCount - _MatchedTablesCount)
+                VAR _MissingColumnsCount = MAX(0, _ExpectedColumnsCount - _MatchedColumnsCount)
+                VAR _MissingMeasuresCount = MAX(0, _ExpectedMeasuresCount - _MatchedMeasuresCount)
+                
+                VAR _ExpectedCount = _ExpectedTablesCount + _ExpectedColumnsCount + _ExpectedMeasuresCount
+                VAR _ActualCount = COUNTROWS(_ActualTables) + COUNTROWS(_ActualColumns) + COUNTROWS(_ActualMeasures)
+                VAR _MissingCount = _MissingTablesCount + _MissingColumnsCount + _MissingMeasuresCount
+                
+                VAR _Passed = _PerspectiveExists && _MissingCount = 0
+                VAR _Details =
+                    IF(
+                        NOT _PerspectiveExists,
+                        "Perspective not found",
+                        IF(
+                            _MissingCount > 0,
+                            "Missing " & FORMAT(_MissingCount, "0") & " of " & FORMAT(_ExpectedCount, "0") & " expected objects",
+                            "All expected objects present"
+                        )
+                    )
+                
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Perspective '" & perspectiveName & "' with " & FORMAT(_ExpectedCount, "0") & " expected objects",
+                    "Actual", _Details & " (" & FORMAT(_ActualCount, "0") & " actual objects)",
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.8.0
+
+    /// Asserts that a perspective exactly matches expected tables, columns, and measures from comma-separated lists.
+    /// This is a schema-check style function aligned with other PQL.Assert schema assertions.
+    /// @param {STRING} testName - Description of the test being performed
+    /// @param {STRING} perspectiveName - Name of the perspective to validate
+    /// @param {STRING} expectedTablesList - Comma-separated table names
+    /// @param {STRING} expectedColumnsList - Comma-separated column refs in Table[Column] format
+    /// @param {STRING} expectedMeasuresList - Comma-separated measure refs in Table[Measure] format
+    function 'PQL.Assert.Perspective.ShouldMatchSchema' =
+            (testName: STRING, perspectiveName: STRING, expectedTablesList: STRING, expectedColumnsList: STRING, expectedMeasuresList: STRING) =>
+                VAR _Perspective =
+                    FILTER(
+                        INFO.PERSPECTIVES(),
+                        [Name] = perspectiveName
+                    )
+                VAR _PerspectiveExists = COUNTROWS(_Perspective) > 0
+                VAR _PerspectiveID = MAXX(_Perspective, [ID])
+                VAR _PerspectiveTables =
+                    FILTER(
+                        INFO.PERSPECTIVETABLES(),
+                        [PerspectiveID] = _PerspectiveID
+                    )
+
+                VAR _ActualTables =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            SELECTCOLUMNS(
+                                _PerspectiveTables,
+                                "TableID", [TableID]
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "TableID", [ID],
+                                "Name", [Name]
+                            )
+                        ),
+                        "Name", [Name]
+                    )
+
+                VAR _ActualColumns =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            NATURALINNERJOIN(
+                                NATURALINNERJOIN(
+                                    SELECTCOLUMNS(
+                                        INFO.PERSPECTIVECOLUMNS(),
+                                        "PerspectiveTableID", [PerspectiveTableID],
+                                        "ColumnID", [ColumnID]
+                                    ),
+                                    SELECTCOLUMNS(
+                                        _PerspectiveTables,
+                                        "PerspectiveTableID", [ID],
+                                        "TableID", [TableID]
+                                    )
+                                ),
+                                SELECTCOLUMNS(
+                                    INFO.COLUMNS(),
+                                    "ColumnID", [ID],
+                                    "ColumnName", IF(NOT ISBLANK([ExplicitName]), [ExplicitName], [InferredName])
+                                )
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "TableID", [ID],
+                                "TableName", [Name]
+                            )
+                        ),
+                        "Name", [TableName] & "[" & [ColumnName] & "]"
+                    )
+
+                VAR _ActualMeasures =
+                    SELECTCOLUMNS(
+                        NATURALINNERJOIN(
+                            NATURALINNERJOIN(
+                                NATURALINNERJOIN(
+                                    SELECTCOLUMNS(
+                                        INFO.PERSPECTIVEMEASURES(),
+                                        "PerspectiveTableID", [PerspectiveTableID],
+                                        "MeasureID", [MeasureID]
+                                    ),
+                                    SELECTCOLUMNS(
+                                        _PerspectiveTables,
+                                        "PerspectiveTableID", [ID]
+                                    )
+                                ),
+                                SELECTCOLUMNS(
+                                    INFO.MEASURES(),
+                                    "MeasureID", [ID],
+                                    "MeasureTableID", [TableID],
+                                    "MeasureName", [Name]
+                                )
+                            ),
+                            SELECTCOLUMNS(
+                                INFO.TABLES(),
+                                "MeasureTableID", [ID],
+                                "TableName", [Name]
+                            )
+                        ),
+                        "Name", [TableName] & "[" & [MeasureName] & "]"
+                    )
+
+                VAR _ExpectedTablesCount =
+                    IF(
+                        LEN(TRIM(expectedTablesList)) = 0,
+                        0,
+                        LEN(expectedTablesList) - LEN(SUBSTITUTE(expectedTablesList, ",", "")) + 1
+                    )
+                VAR _ExpectedColumnsCount =
+                    IF(
+                        LEN(TRIM(expectedColumnsList)) = 0,
+                        0,
+                        LEN(expectedColumnsList) - LEN(SUBSTITUTE(expectedColumnsList, ",", "")) + 1
+                    )
+                VAR _ExpectedMeasuresCount =
+                    IF(
+                        LEN(TRIM(expectedMeasuresList)) = 0,
+                        0,
+                        LEN(expectedMeasuresList) - LEN(SUBSTITUTE(expectedMeasuresList, ",", "")) + 1
+                    )
+
+                VAR _ExpectedTablesUpper = "," & UPPER(expectedTablesList) & ","
+                VAR _ExpectedColumnsUpper = "," & UPPER(expectedColumnsList) & ","
+                VAR _ExpectedMeasuresUpper = "," & UPPER(expectedMeasuresList) & ","
+
+                VAR _MatchedTables =
+                    FILTER(
+                        _ActualTables,
+                        CONTAINSSTRING(_ExpectedTablesUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+                VAR _ExtraTables =
+                    FILTER(
+                        _ActualTables,
+                        NOT CONTAINSSTRING(_ExpectedTablesUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+
+                VAR _MatchedColumns =
+                    FILTER(
+                        _ActualColumns,
+                        CONTAINSSTRING(_ExpectedColumnsUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+                VAR _ExtraColumns =
+                    FILTER(
+                        _ActualColumns,
+                        NOT CONTAINSSTRING(_ExpectedColumnsUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+
+                VAR _MatchedMeasures =
+                    FILTER(
+                        _ActualMeasures,
+                        CONTAINSSTRING(_ExpectedMeasuresUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+                VAR _ExtraMeasures =
+                    FILTER(
+                        _ActualMeasures,
+                        NOT CONTAINSSTRING(_ExpectedMeasuresUpper, "," & TRIM(UPPER([Name])) & ",")
+                    )
+
+                VAR _MissingTablesCount = COALESCE(MAX(0, _ExpectedTablesCount - COUNTROWS(_MatchedTables)), 0)
+                VAR _MissingColumnsCount = COALESCE(MAX(0, _ExpectedColumnsCount - COUNTROWS(_MatchedColumns)), 0)
+                VAR _MissingMeasuresCount = COALESCE(MAX(0, _ExpectedMeasuresCount - COUNTROWS(_MatchedMeasures)), 0)
+
+                VAR _ExtraTablesCount = COALESCE(COUNTROWS(_ExtraTables), 0)
+                VAR _ExtraColumnsCount = COALESCE(COUNTROWS(_ExtraColumns), 0)
+                VAR _ExtraMeasuresCount = COALESCE(COUNTROWS(_ExtraMeasures), 0)
+
+                VAR _MissingTotal = _MissingTablesCount + _MissingColumnsCount + _MissingMeasuresCount
+                VAR _ExtraTotal = _ExtraTablesCount + _ExtraColumnsCount + _ExtraMeasuresCount
+                VAR _Passed = _PerspectiveExists && _MissingTotal = 0 && _ExtraTotal = 0
+
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Perspective schema exactly matches expected tables/columns/measures",
+                    "Actual", IF(
+                        NOT _PerspectiveExists,
+                        "Perspective not found",
+                        "Missing=" & FORMAT(_MissingTotal, "0") & ", Extra=" & FORMAT(_ExtraTotal, "0")
+                    ),
+                    "Passed", _Passed
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.8.0
+
+    /// Asserts that a perspective exists in the semantic model.
+    /// @param {STRING} testName - Description of the test being performed
+    /// @param {STRING} perspectiveName - Name of the perspective that should exist
+    function 'PQL.Assert.Perspective.ShouldExist' =
+            (testName: STRING, perspectiveName: STRING) =>
+                VAR _Perspective =
+                    FILTER(
+                        INFO.PERSPECTIVES(),
+                        [Name] = perspectiveName
+                    )
+                VAR _Exists = COUNTROWS(_Perspective) > 0
+                RETURN ROW(
+                    "TestName", testName,
+                    "Expected", "Perspective '" & perspectiveName & "' exists",
+                    "Actual", IF(_Exists, "EXISTS", "NOT FOUND"),
+                    "Passed", _Exists
+                )
+        annotation DAXLIB_PackageId = PQL.Assert
+        annotation DAXLIB_PackageVersion = 0.8.0

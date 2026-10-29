@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 PQL Test Runner Package — Core library for discovering and executing DAX tests.
 

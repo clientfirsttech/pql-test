@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 CLI tests for the `code-coverage` command.
 
@@ -200,17 +201,16 @@ class TestCodeCoverageJsonOutput:
         payload = json.loads(out_file.read_text(encoding="utf-8"))
         assert payload["summary"]["covered"] == 1
 
-    def test_output_without_format_json_fails_before_any_xmla_query(self, monkeypatch):
-        spy = MagicMock(return_value=_report())
-        monkeypatch.setattr(cli_module, "collect_coverage", spy)
+    def test_output_with_text_format_writes_json_and_prints_the_report(self, monkeypatch, tmp_path):
+        # --output always writes the JSON report; the screen shows the --format report (text here).
+        monkeypatch.setattr(cli_module, "collect_coverage", MagicMock(return_value=_report()))
+        out_file = tmp_path / "coverage.json"
 
-        result = CliRunner().invoke(
-            cli_module.cli, ["code-coverage", "local/SampleModel", "--output", "out.json"]
-        )
+        result = CliRunner().invoke(cli_module.cli, ["code-coverage", "local/SampleModel", "-o", str(out_file)])
 
-        assert result.exit_code != 0
-        assert "--output requires --format json" in result.output
-        spy.assert_not_called()
+        assert result.exit_code == 0
+        assert json.loads(out_file.read_text(encoding="utf-8"))["summary"]["covered"] == 1
+        assert "Overall:" in result.output
 
 
 class TestCodeCoverageMinThreshold:
