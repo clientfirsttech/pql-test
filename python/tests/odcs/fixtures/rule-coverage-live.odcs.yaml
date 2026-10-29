@@ -1,0 +1,102 @@
+# Live proof of the rule-coverage mappings against examples/SampleModel (PQL.Assert 0.8 catalog).
+# Each rule says whether it must pass or fail, and the SampleModel fact behind that (facts from
+# marvel-0-8.odcs.yaml and docs/pql-assert-gap-plan.md, 2026-10-25, and the model's TMDL).
+# "executes" rules have no recorded fact, so they only have to run. python/tests/
+# test_contract_live.py pins the same outcomes in EXPECTED_RULE_COVERAGE.
+apiVersion: v3.1.0
+kind: DataContract
+id: rule-coverage-live
+name: Rule Coverage Live
+version: 1.0.0
+status: draft
+dataProduct: rule-coverage-live
+schema:
+  - name: MarvelSource
+    properties:
+      - name: Year
+        logicalType: integer
+        quality:
+          - id: source_year_missing_pct_at_most_5     # pass: 815 of 16,376 rows are null (4.98%)
+            metric: missingValues
+            mustBeLessOrEqualTo: 5
+            unit: percent
+          - id: source_year_missing_at_most_814       # fail: 815 null rows
+            metric: missingValues
+            mustBeLessOrEqualTo: 814
+  - name: DateDim
+    properties:
+      - name: DateID
+        logicalType: integer
+        quality:
+          - id: date_id_missing_none                  # pass: DateID has no null rows
+            metric: missingValues
+            mustBe: 0
+      - name: Year
+        logicalType: integer
+        logicalTypeOptions:
+          maximum: 1000                               # fail: the newest year is 2026
+        quality:
+          - id: date_year_only_minus_one              # fail: no year is -1
+            metric: invalidValues
+            mustBe: 0
+            arguments:
+              validValues: [-1]
+          - id: date_year_outside_minus_one_below_2   # fail: more than one row has a year other than -1
+            metric: invalidValues
+            mustBeLessThan: 2
+            arguments:
+              validValues: [-1]
+      - name: Date
+        logicalType: date
+    relationships:
+      - from: DateDim.DateID                          # fail: the model defines it from MarvelFact to DateDim
+        to: marvel_fact.DateID
+    quality:
+      - id: date_dim_rows_dax                         # pass: 1,039 rows
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: COUNTROWS('DateDim')
+          mustBe: 1039
+      - id: date_dim_rows_over_2000_dax               # fail: 1,039 rows
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: COUNTROWS('DateDim')
+          mustBeGreaterThan: 2000
+      - id: date_years_at_least_two                   # pass: many years (950 duplicate values)
+        type: custom
+        engine: pql-test
+        implementation:
+          function: PQL.Assert.Col.DistinctCountShouldBeAtLeast
+          args: ["'DateDim'[Year]", 2]
+      - id: date_years_at_most_one                    # fail: many years
+        type: custom
+        engine: pql-test
+        implementation:
+          function: PQL.Assert.Col.DistinctCountShouldBeAtMost
+          args: ["'DateDim'[Year]", 1]
+      - id: no_data_year_returns_zero                 # executes: the Calculations.DEV.Tests scenario
+        type: custom
+        engine: pql-test
+        implementation:
+          expression: CALCULATE([Number of Characters], FILTER(ALL('DateDim'), 'DateDim'[Year] = -1))
+          mustBe: 0
+  - name: marvel_fact
+    customProperties:
+      - property: pbiTable
+        value: MarvelFact
+    properties:
+      - name: DateID
+        logicalType: integer
+        relationships:
+          - to: DateDim.DateID                        # pass: relationships.tmdl, MarvelFact.DateID -> DateDim.DateID
+slaProperties:
+  - property: latency                                 # fail: newest DateDim[Date] was 238 days old on 2026-10-25
+    value: 1
+    unit: h
+    element: DateDim.Date
+  - property: frequency                               # refresh: depends on the last refresh; errors without INFO.* permission
+    value: 1
+    unit: d
+    element: DateDim

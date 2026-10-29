@@ -11,8 +11,9 @@ from typing import Any
 SCHEMA_SUITE = "Schema"
 DATA_QUALITY_SUITE = "DataQuality"
 # Refresh checks read INFO.* model metadata; their own suite keeps a permission error
-# from failing every other rule (a suite runs as one query).
-REFRESH_SUITE = "Refresh"
+# from failing every other rule (a suite runs as one query). Not "Refresh": the DAX query
+# parser rejects that word as a segment of a function name.
+REFRESH_SUITE = "RefreshAge"
 ERROR = "error"
 WARNING = "warning"
 # A contract rule's direct call of a PQL.Assert function: args["function"] and args["arguments"]

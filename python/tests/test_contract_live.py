@@ -8,6 +8,8 @@ SampleModel, runs them over XMLA, and checks the traced rule statuses:
   - marvel.odcs.yaml (good data, PQL.Assert 0.7 catalog): every mapped rule passes
   - marvel-must-fail.odcs.yaml (0.7 catalog): exactly the rules in EXPECTED_FAILURES fail
   - marvel-0-8.odcs.yaml (0.8 catalog): every 0.8 op runs, with the outcomes in EXPECTED_0_8
+  - rule-coverage-live.odcs.yaml (0.8 catalog): value rules, relationships, engine: pql-test
+    DAX rules, latency, and frequency, with the outcomes in EXPECTED_RULE_COVERAGE
 
 The 0.8 run works on a model that still has an older PQL.Assert: the 0.8.0 functions the
 model lacks are defined in each suite's query (see pql_assert_library.py). Separate tests
@@ -95,6 +97,38 @@ EXPECTED_0_8 = {
     "marvel_fact.DateID.type": "passed",
     "marvel_fact.EyeID.type": "passed",
     "marvel_fact.AlignmentID.type": "passed",
+}
+
+# Every mapped rule in rule-coverage-live.odcs.yaml, with the SampleModel fact the fixture
+# comments give. "refresh" is the frequency rule: its outcome depends on when SampleModel last
+# refreshed, and it may error when the run identity cannot read INFO.PARTITIONS().
+EXPECTED_RULE_COVERAGE = {
+    "MarvelSource.exists": "passed",
+    "MarvelSource.columns": "passed",
+    "MarvelSource.Year.type": "passed",
+    "source_year_missing_pct_at_most_5": "passed",
+    "source_year_missing_at_most_814": "failed",
+    "DateDim.exists": "passed",
+    "DateDim.columns": "passed",
+    "DateDim.DateID.type": "passed",
+    "date_id_missing_none": "passed",
+    "DateDim.Year.type": "passed",
+    "DateDim.Year.range": "failed",
+    "date_year_only_minus_one": "failed",
+    "date_year_outside_minus_one_below_2": "failed",
+    "DateDim.Date.type": "passed",
+    "DateDim.relationships[0]": "failed",
+    "date_dim_rows_dax": "passed",
+    "date_dim_rows_over_2000_dax": "failed",
+    "date_years_at_least_two": "passed",
+    "date_years_at_most_one": "failed",
+    "no_data_year_returns_zero": "executed",
+    "marvel_fact.exists": "passed",
+    "marvel_fact.columns": "passed",
+    "marvel_fact.DateID.type": "passed",
+    "marvel_fact.DateID.relationships[0]": "passed",
+    "slaProperties[0]": "failed",
+    "slaProperties[1]": "refresh",
 }
 
 
@@ -240,28 +274,33 @@ def test_must_fail_contract_fails_exactly_the_planted_rules(sample_model_copy, t
     assert (result.exit_code, failed) == (1, EXPECTED_FAILURES), f"{given}: {should}\n{result.output}"
 
 
-def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, tmp_path, monkeypatch):
-    given = "the PQL.Assert 0.8 SampleModel contract"
-    should = "run every 0.8 op (none errored or not executed) with the outcomes in EXPECTED_0_8"
+def _with_0_8_library(model: Path, monkeypatch) -> None:
+    """When the model's PQL.Assert is older than 0.8.0, define the 0.8.0 functions it lacks in each suite's query."""
     from pql_test import contract_run
     from pql_test.contract_run import detect_pql_assert
     from pql_test.runner import _execute_dax_query
     from tests.pql_assert_library import load_library, missing_definitions, model_function_names, with_definitions
 
-    conn = _connect(sample_model_copy / "SampleModel.SemanticModel")
+    conn = _connect(model / "SampleModel.SemanticModel")
     if conn is None:
         pytest.fail("No XMLA connection to SampleModel, although credentials or Desktop were detected.")
-    if detect_pql_assert(conn) != "0.8":
-        # Older PQL.Assert in the model: define the 0.8.0 functions it lacks in each suite's query.
-        library, model_names = load_library(), model_function_names(conn, _execute_dax_query)
-        suite_test = contract_run.suite_test
+    if detect_pql_assert(conn) == "0.8":
+        return
+    library, model_names = load_library(), model_function_names(conn, _execute_dax_query)
+    suite_test = contract_run.suite_test
 
-        def suite_test_with_library(suite_file):
-            test = suite_test(suite_file)
-            test.source = with_definitions(test.source, missing_definitions(test.source, model_names, library))
-            return test
+    def suite_test_with_library(suite_file):
+        test = suite_test(suite_file)
+        test.source = with_definitions(test.source, missing_definitions(test.source, model_names, library))
+        return test
 
-        monkeypatch.setattr(contract_run, "suite_test", suite_test_with_library)
+    monkeypatch.setattr(contract_run, "suite_test", suite_test_with_library)
+
+
+def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, tmp_path, monkeypatch):
+    given = "the PQL.Assert 0.8 SampleModel contract"
+    should = "run every 0.8 op (none errored or not executed) with the outcomes in EXPECTED_0_8"
+    _with_0_8_library(sample_model_copy, monkeypatch)
 
     result, statuses = _run("marvel-0-8.odcs.yaml", sample_model_copy, tmp_path / "v08.json", "0.8")
 
@@ -271,6 +310,28 @@ def test_0_8_contract_runs_every_op_with_the_pinned_outcomes(sample_model_copy, 
         if s != "skipped"
     }
     assert actual == EXPECTED_0_8, f"{given}: {should}\n{result.output}"
+
+
+def test_rule_coverage_contract_runs_with_the_pinned_outcomes(sample_model_copy, tmp_path, monkeypatch):
+    given = "the rule-coverage SampleModel contract (value rules, relationships, DAX rules, latency, frequency)"
+    should = (
+        "give each rule its pinned outcome, with no error outside the RefreshAge suite (a run identity without "
+        "INFO.* permission may error only the frequency rule)"
+    )
+    _with_0_8_library(sample_model_copy, monkeypatch)
+
+    result, statuses = _run("rule-coverage-live.odcs.yaml", sample_model_copy, tmp_path / "rc.json", "0.8")
+
+    def normalised(rid, status):
+        expected = EXPECTED_RULE_COVERAGE.get(rid)
+        if expected == "executed" and status in ("passed", "failed"):
+            return "executed"
+        if expected == "refresh" and status in ("passed", "failed", "error"):
+            return "refresh"
+        return status
+
+    actual = {rid: normalised(rid, s) for rid, s in statuses.items() if s != "skipped"}
+    assert actual == EXPECTED_RULE_COVERAGE, f"{given}: {should}\n{result.output}"
 
 
 @pytest.mark.parametrize("model, dataset_var", [("SampleModel", "PQL_DATASET_ID"), ("RLS_Model", "PQL_DATASET_ID_RLS")])

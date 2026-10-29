@@ -134,7 +134,16 @@ Avoid a business date (such as an order date) for data age: it can lag for legit
 
 ## Live checks before release
 
-None of these can be checked from the TMDL. Run each against a real model, and record the result in the function's description or the README:
+None of these can be checked from the TMDL. Run each against a real model, and record the result in the function's description or the README.
+
+**Already observed** (pql-test, 2026-10-29, SampleModel in the `pqlint-demos` workspace, queried by a service principal over XMLA):
+
+- The service principal could read `INFO.PARTITIONS()` and `INFO.TABLES()`.
+- Every partition was Import (`Mode` 0). The Power Query tables (`Type` 4) and the calculated tables (`Type` 2, `_Measures` and `Timezone`) all had a `RefreshedTime` from the same refresh, 2026-03-02 18:27:45 to 18:27:52, so calculated tables do move with the model refresh. `ModifiedTime` (2026-01-30, the last deployment) is a different value; do not use it.
+- In the service, `NOW()` and `UTCNOW()` returned the same time, so the service clock is UTC. That does not prove `RefreshedTime` is UTC: compare it with the refresh history (check 1).
+- The two kinds of freshness differed on real data: the newest `DateDim[Date]` was 5,830 hours old, and the last refresh 5,787 hours old.
+
+Still to check:
 
 1. **Time zone:** is `INFO.PARTITIONS()[RefreshedTime]` UTC? Refresh a model, then compare the value with the refresh history in the Power BI service. If it is local time, convert it before comparing it with `UTCNOW()`.
 2. **Never refreshed:** what does a partition that has never been refreshed report: BLANK, or a placeholder such as `1699-12-30`? Adjust the `> DATE(1900, 1, 1)` filter to match.

@@ -84,7 +84,7 @@ Map ODCS `frequency` to the time since the table's partitions last refreshed.
 
 **Requirements**:
 - Given `frequency` with a table `element` under 0.8, should emit `PQL.Assert.ShouldBeLessOrEqual` on the hours since `MAX(INFO.PARTITIONS()[RefreshedTime])` for that table, as approximated with the reason "proves the refresh ran, not that the source sent new data"
-- Given any refresh check, should put it in its own `<Prefix>.Refresh.<ENV>.Tests` suite, so an `INFO.*` permission error cannot fail the Schema or DataQuality rules
+- Given any refresh check, should put it in its own `<Prefix>.RefreshAge.<ENV>.Tests` suite (not `Refresh`, which the DAX parser rejects in a function name), so an `INFO.*` permission error cannot fail the Schema or DataQuality rules
 - Given `timeOfAvailability` or `retention`, should stay skipped with a specific reason
 
 ---
@@ -153,7 +153,7 @@ Add must-pass and must-fail contracts against SampleModel to `test_contract_live
 
 **Requirements**:
 - Given the must-fail contract, should fail each targeted rule for the reason its fixture states, not for a DAX error
-- Given a run identity without `INFO.*` permission, should error only the Refresh suite
+- Given a run identity without `INFO.*` permission, should error only the RefreshAge suite
 
 ---
 

@@ -351,7 +351,7 @@ class TestFreshness:
 
     def test_frequency_checks_refresh_age_in_its_own_suite(self):
         given = "a frequency SLA of 2 days on table T"
-        should = "approximate it with a 48-hour refresh-age check in the Refresh suite"
+        should = "approximate it with a 48-hour refresh-age check in the RefreshAge suite"
 
         sla = _sla(2, "d", "T", "frequency")
         outcome = _outcomes(_table(prop("a", "date")), slaProperties=[sla])["slaProperties[0]"]
@@ -360,24 +360,24 @@ class TestFreshness:
 
         assert (outcome.status, assertion.suite, _call(outcome), explains) == (
             Status.APPROXIMATED,
-            "Refresh",
+            "RefreshAge",
             ("tbl.refresh_age_at_most", Target("T"), {"maxAgeHours": 48}),
             True,
         ), f"{given}: {should}"
 
     def test_frequency_renders_an_info_partitions_age(self):
         given = "a frequency SLA rendered for PQL.Assert 0.8"
-        should = "compare hours since INFO.PARTITIONS()[RefreshedTime] with ShouldBeLessOrEqual, in the Refresh suite"
+        should = "compare hours since INFO.PARTITIONS()[RefreshedTime] with ShouldBeLessOrEqual, in the RefreshAge suite"
         contract = contract_dict(schema=_table(prop("a", "date")), slaProperties=[_sla(3, "h", "T", "frequency")])
 
         files = render(plan_contract(contract, pql_assert="0.8"), env="DEV")
-        refresh = next(f for f in files if f.suite == "Refresh")
+        refresh = next(f for f in files if f.suite == "RefreshAge")
 
         assert (
             refresh.function_name,
             "PQL.Assert.ShouldBeLessOrEqual(" in refresh.content,
             "[RefreshedTime]" in refresh.content,
-        ) == ("MarvelCharacters.Refresh.DEV.Tests", True, True), f"{given}: {should}"
+        ) == ("MarvelCharacters.RefreshAge.DEV.Tests", True, True), f"{given}: {should}"
 
     @pytest.mark.parametrize(
         "sla",

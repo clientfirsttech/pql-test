@@ -101,7 +101,7 @@ def dax_problem(text: str) -> str | None:
 def _describe(rule: Mapping, scope: str, detail: str) -> str:
     text = rule.get("description") or rule.get("name") or f"{scope} {detail}"
     text = " ".join(str(text).split())
-    return text if len(text) <= _DESCRIPTION_LIMIT else text[: _DESCRIPTION_LIMIT - 1] + "…"
+    return text if len(text) <= _DESCRIPTION_LIMIT else text[: _DESCRIPTION_LIMIT - 3] + "..."
 
 
 def map_dax_rule(ctx: MapContext, rule: Mapping, rule_id: str, obj: Mapping, scope: str) -> RuleOutcome:
