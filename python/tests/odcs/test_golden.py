@@ -28,6 +28,8 @@ CASES = {
     "marvel-must-fail": {"contract": "marvel-must-fail.odcs.yaml"},
     "every-row": {"contract": "every-row.odcs.yaml", "closed_schema": True},
     "every-row-0-8": {"contract": "every-row.odcs.yaml", "closed_schema": True, "pql_assert": "0.8"},
+    "rule-coverage": {"contract": "rule-coverage.odcs.yaml"},
+    "rule-coverage-0-8": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.8"},
 }
 
 

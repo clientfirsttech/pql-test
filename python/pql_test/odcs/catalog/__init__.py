@@ -13,6 +13,7 @@ DEFAULT_CATALOG = "pql_assert_0_7"
 # `--pql-assert` choices -> bundled catalog. The default stays 0.7 until 0.8 is common.
 PQL_ASSERT_CATALOGS = {"0.7": "pql_assert_0_7", "0.8": "pql_assert_0_8"}
 DEFAULT_PQL_ASSERT = "0.7"
+LATEST_PQL_ASSERT = "0.8"
 
 
 class CatalogError(Exception):
@@ -58,6 +59,33 @@ def load_catalog(name: str = DEFAULT_CATALOG) -> Catalog:
         return Catalog(name=name, library=data["library"], min_version=str(data["min_version"]), ops=ops)
     except (KeyError, TypeError) as exc:
         raise CatalogError(f"Catalog {name} is malformed: {exc}") from exc
+
+
+@dataclass(frozen=True)
+class Signature:
+    params: int
+    optional: int
+    use: str  # mapped | dax | none (see pql_assert_functions.yaml)
+
+    @property
+    def callable(self) -> bool:
+        """True when a contract may call it directly (``engine: pql-test`` with ``function``)."""
+        return self.use != "none"
+
+
+@dataclass(frozen=True)
+class Signatures:
+    version: str  # the PQL.Assert release they were read from
+    functions: dict
+
+
+@cache
+def load_signatures() -> Signatures:
+    """Every PQL.Assert function's parameter counts, from the bundled ``pql_assert_functions.yaml``."""
+    text = files("pql_test.odcs.catalog").joinpath("pql_assert_functions.yaml").read_text(encoding="utf-8")
+    data = yaml.safe_load(text)
+    functions = {name: Signature(**spec) for name, spec in data["functions"].items()}
+    return Signatures(version=str(data["version"]), functions=functions)
 
 
 def catalog_for(pql_assert: str = DEFAULT_PQL_ASSERT) -> Catalog:

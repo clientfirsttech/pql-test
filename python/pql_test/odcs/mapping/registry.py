@@ -8,9 +8,10 @@ from collections import Counter
 from collections.abc import Iterator, Mapping
 
 from pql_test.odcs.catalog import Catalog, load_catalog
-from pql_test.odcs.ir import RuleOutcome, Status
+from pql_test.odcs.ir import CONTRACT_DAX, RuleOutcome, Status
 from pql_test.odcs.loader import Contract
 from pql_test.odcs.mapping.context import MapContext, is_column, skipped
+from pql_test.odcs.mapping.dax_rules import is_pql_test_rule, map_dax_rule
 from pql_test.odcs.mapping.freshness import sla_rules
 from pql_test.odcs.mapping.library import describe, map_library
 from pql_test.odcs.mapping.relationships import relationship_rules
@@ -68,6 +69,9 @@ def _quality_rule_id(scope: str, index: int, rule: Mapping, duplicate_ids: set) 
 
 
 def _map_quality(ctx: MapContext, obj, prop, scope, rule_id, rule, top_level) -> RuleOutcome:
+    if is_pql_test_rule(rule):
+        # The contract wrote the DAX: mark the outcome (skipped too, so lint can report it).
+        return dataclasses.replace(map_dax_rule(ctx, rule, rule_id, obj, scope), source=CONTRACT_DAX)
     kind = rule.get("type", "library")
     if kind in _TYPE_REASONS:
         return skipped(rule_id, _TYPE_REASONS[kind], describe(rule, scope))

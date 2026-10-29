@@ -220,7 +220,9 @@ def coverage_cmd(contract_path, output_format, closed_schema, pql_assert, fail_o
 def lint_cmd(contract_path, model_path, output_format):
     """Schema-validate CONTRACT and check that its names resolve (in MODEL_PATH, when given)."""
     from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.catalog import LATEST_PQL_ASSERT
     from pql_test.odcs.datatypes import tmdl_model_type
+    from pql_test.odcs.ir import CONTRACT_DAX, Status
     from pql_test.odcs.loader import ContractError
     from pql_test.odcs.mapping.context import is_column
     from pql_test.odcs.naming import DATA_TYPE_KEY
@@ -233,11 +235,15 @@ def lint_cmd(contract_path, model_path, output_format):
 
     problems: list[str] = []
     try:
-        plan = plan_contract(contract_path)
+        # The newest catalog, so a rule that only an older PQL.Assert cannot run is not a problem.
+        plan = plan_contract(contract_path, pql_assert=LATEST_PQL_ASSERT)
     except ContractError as exc:
         plan, problems = None, exc.problems or [str(exc)]
     if plan is not None:
         problems.extend(plan.names.problems())
+        problems.extend(
+            f"{o.rule_id}: {o.reason}" for o in plan.outcomes if o.source == CONTRACT_DAX and o.status is Status.SKIPPED
+        )
         problems.extend(
             f"{o.rule_id}: {o.reason}"
             for o in plan.outcomes
