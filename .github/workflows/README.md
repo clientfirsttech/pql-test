@@ -15,13 +15,14 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 
 ## Agentic Workflows
 
-### `issue-review-agent.yml`
+### `issue-review-agent.md` (compiled to `issue-review-agent.lock.yml`)
 
-**Purpose**: Automatically analyzes GitHub issues and generates code fixes via PR.
+**Purpose**: Analyzes one GitHub issue and generates a code fix via PR.
 
 **Triggers**:
-- Automatically when an issue is opened (`issues.opened`)
-- Manually via workflow_dispatch with issue number input
+- Manually only: Actions > Issue Review and Fix Agent > Run workflow, with the issue number. Running a workflow needs write access to the repository.
+- No issue event (opened, labeled) starts it: issue text is untrusted, so a maintainer chooses which issues it reads. Review its pull requests as you would an outside contribution.
+- After editing the `.md`, run `gh aw compile issue-review-agent`; the lock file fails at runtime if it is stale.
 
 **How It Works**:
 
