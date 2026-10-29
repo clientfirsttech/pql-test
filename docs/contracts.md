@@ -18,6 +18,8 @@ pql-test contract trace orders.odcs.yaml results.json                   # failur
 
 `pql-test contract run` never changes the PBIP project or the model: it builds the suites in memory and runs them as read-only queries. Writing suites into `DAXQueries/` (and so into git and Fabric Git integration) is always a separate act: `generate`, or `run --write`. `pql-test run-tests` runs the suites registered in the deployed model, so it sees generated suites only after the model is published.
 
+[`examples/contracts/`](../examples/contracts/) has three runnable contracts against [`examples/SampleModel`](../examples/SampleModel.SemanticModel): a starter from `init`, one with scenario tests and direct PQL.Assert calls, and one with `latency` and `frequency`. Each one passes every mapped rule (checked live by `python/tests/test_contract_live.py`), so `pql-test contract run examples/contracts/starter.odcs.yaml local/SampleModel --env DEV` works as written if you have SampleModel open.
+
 ## Start a contract from the model
 
 ```bash
@@ -27,7 +29,7 @@ pql-test contract init local/SalesModel --table Sales --table Customer -o sales.
 
 `init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
 
-The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`.
+The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init`'s own output against SampleModel, unedited except for a comment.
 
 ## Commands
 
@@ -241,6 +243,8 @@ slaProperties:
 
 PQL.Assert 0.8 has no refresh function, so `frequency` uses `ShouldBeLessOrEqual` on an inline expression. A dedicated `Tbl.LastRefreshShouldBeWithinHours`, with clearer failure messages, is requested for PQL.Assert 0.9 ([request](pql-assert-freshness-request.md)).
 
+[`examples/contracts/freshness.odcs.yaml`](../examples/contracts/freshness.odcs.yaml) runs both against SampleModel (it has to point `latency` at a business date, with a comment explaining why: SampleModel has no load-timestamp column).
+
 ## DAX rules in the contract (`engine: pql-test`)
 
 Some tests are scenarios, not column rules: a measure's value in a given filter context, or any PQL.Assert check ODCS has no metric for. Write them as ODCS `type: custom` rules with `engine: pql-test`. Other tools skip an engine they do not run, so the contract stays usable for them. (`type: sql` is not used for DAX: ODCS ties a SQL rule to no server, so a tool reading the contract would try to run the DAX as SQL.)
@@ -284,6 +288,12 @@ With `--pql-assert 0.7`, a BLANK result passes the text `mustBe` and the number 
 **Reporting.** These rules run in their own `<Prefix>.ContractDax.<ENV>.Tests` suite, so a wrong measure or column name in hand-written DAX cannot fail the translated rules. They keep status `mapped` (or `approximated`), with `"source": "contract-dax"` in the `coverage --format json` output and "(contract DAX)" in the text output, so a reviewer can tell DAX written in the contract from rules pql-test translated. `severity: warning` sends them to the `ContractDax.<ENV>WARN` suite.
 
 **What reaches each PQL.Assert function.** [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml) lists every PQL.Assert 0.8.0 function as `mapped` (an ODCS rule generates it), `dax` (only a DAX rule calls it, such as `ShouldEqual`), or `none` (best-practice checks and discovery helpers). A test fails when a new PQL.Assert release adds a function nobody has classified.
+
+[`examples/contracts/scenario-tests.odcs.yaml`](../examples/contracts/scenario-tests.odcs.yaml) runs both forms against SampleModel: an expression over `[Number of Characters]`, a boolean expression compared with `mustBe: true`, and two direct calls (`ShouldStartWith` on a measure, which has no column to attach a `pattern` rule to; `Col.MeanShouldBeInRange`, a statistic ODCS has no metric for).
+
+## How we keep this mapping complete
+
+Two tests fail before a gap reaches a user: [`test_odcs_rule_matrix.py`](../python/tests/odcs/test_odcs_rule_matrix.py) classifies every value in ODCS's closed vocabularies (quality metrics, quality types, `logicalType`, relationship types, `logicalTypeOptions` keys) the way [`test_function_matrix.py`](../python/tests/odcs/test_function_matrix.py) already classifies every PQL.Assert function, and [`test_docs_contracts_agreement.py`](../python/tests/odcs/test_docs_contracts_agreement.py) checks this page's mapping tables against the catalogs. A new ODCS or PQL.Assert release, or a mapping change that forgets to update this page, fails one of them. `aidd-custom/skills/pql-test-contract-gap-check/SKILL.md` runs both as part of an AIDD review and before every release.
 
 ## Python API
 

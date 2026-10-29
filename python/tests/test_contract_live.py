@@ -10,6 +10,8 @@ SampleModel, runs them over XMLA, and checks the traced rule statuses:
   - marvel-0-8.odcs.yaml (0.8 catalog): every 0.8 op runs, with the outcomes in EXPECTED_0_8
   - rule-coverage-live.odcs.yaml (0.8 catalog): value rules, relationships, engine: pql-test
     DAX rules, latency, and frequency, with the outcomes in EXPECTED_RULE_COVERAGE
+  - examples/contracts/*.odcs.yaml (0.8 catalog): the learner-facing examples (not test
+    fixtures) each pass every mapped rule, so a reader who runs one sees it work
 
 The 0.8 run works on a model that still has an older PQL.Assert: the 0.8.0 functions the
 model lacks are defined in each suite's query (see pql_assert_library.py). Separate tests
@@ -49,6 +51,7 @@ pytestmark = pytest.mark.live
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
 EXAMPLES = REPO_ROOT / "examples"
+EXAMPLE_CONTRACTS = REPO_ROOT / "examples" / "contracts"
 SERVICE_VARS = ("PQL_TENANT_ID", "PQL_WORKSPACE_ID")
 
 # Rules in marvel-must-fail.odcs.yaml that must fail against SampleModel's data. These 0.7
@@ -298,6 +301,17 @@ def test_good_contract_passes_every_mapped_rule(sample_model_copy, tmp_path):
     should = "pass every mapped rule and exit 0"
 
     result, statuses = _run("marvel.odcs.yaml", sample_model_copy, tmp_path / "good.json", "0.7")
+
+    not_passed = {rid: s for rid, s in statuses.items() if s not in ("passed", "skipped")}
+    assert (result.exit_code, not_passed) == (0, {}), f"{given}: {should}\n{result.output}"
+
+
+@pytest.mark.parametrize("name", ["starter.odcs.yaml", "scenario-tests.odcs.yaml", "freshness.odcs.yaml"])
+def test_example_contracts_pass_every_mapped_rule(sample_model_copy, tmp_path, name):
+    given = f"examples/contracts/{name}, the learner-facing example (not a test fixture)"
+    should = "pass every mapped rule and exit 0, so a reader who runs it sees it work"
+
+    result, statuses = _run(str(EXAMPLE_CONTRACTS / name), sample_model_copy, tmp_path / f"{name}.json", "0.8")
 
     not_passed = {rid: s for rid, s in statuses.items() if s not in ("passed", "skipped")}
     assert (result.exit_code, not_passed) == (0, {}), f"{given}: {should}\n{result.output}"

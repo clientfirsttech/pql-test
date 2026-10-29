@@ -1,0 +1,35 @@
+# latency (data age) and frequency (refresh recency) against examples/SampleModel
+# (docs/contracts.md, "Freshness: latency vs frequency"). Verified live 2026-10-29; see
+# python/tests/test_contract_live.py, test_example_contracts_pass_every_mapped_rule.
+#
+# SampleModel is a static demo model with no load-timestamp column, so `latency` points at
+# DateDim's business date instead — exactly what docs/contracts.md says to avoid in a real
+# contract, where a business date can lag for legitimate reasons and gives false failures.
+# A real contract should point `latency` at a load or ingestion timestamp column.
+#
+# Both thresholds here are generous (about two years) so this example keeps passing for a
+# long time without anyone having to refresh SampleModel on a schedule. A production
+# contract should use your actual SLA, not this margin.
+#
+# One of three examples/contracts/ files. See starter.odcs.yaml for a plain schema contract,
+# and scenario-tests.odcs.yaml for scenario tests and direct PQL.Assert calls.
+apiVersion: v3.1.0
+kind: DataContract
+id: freshness-example
+name: Freshness Example
+version: 1.0.0
+status: draft
+schema:
+  - name: DateDim
+    properties:
+      - name: Date
+        logicalType: date
+slaProperties:
+  - property: latency # data age: how old is the newest value in DateDim[Date]?
+    value: 20000
+    unit: h
+    element: DateDim.Date
+  - property: frequency # refresh recency: when did DateDim's partitions last refresh?
+    value: 20000
+    unit: h
+    element: DateDim
