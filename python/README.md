@@ -1443,10 +1443,9 @@ the CLI — typically the repo root or `python/`. The CLI loads `.env`
 automatically via `python-dotenv` by walking up from the current working
 directory. Copy `python/.env.example` to get started.
 
-> `python/tests/.env` is a separate file — it is **only** consumed by the
-> live integration suite (`python/tests/test_live_service.py`), not by the
-> CLI itself. Copy `python/tests/.env.example` to populate it when you want
-> to run the `@pytest.mark.live` tests against your tenant.
+> The live integration tests (`@pytest.mark.live`) read `python/.env` too. An
+> optional `python/tests/.env` overrides it for the tests only; the CLI never
+> reads it.
 
 > **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
 

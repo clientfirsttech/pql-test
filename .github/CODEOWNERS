@@ -5,3 +5,10 @@
 /NOTICE              @kerski-cft
 /python/NOTICE       @kerski-cft
 /LICENSES.md         @kerski-cft
+
+# Workflows and the secret/security checks need the maintainer's review too:
+# a change here can expose repository secrets or turn a check off.
+/.github/                  @kerski-cft
+/.pre-commit-config.yaml   @kerski-cft
+/.gitleaksignore           @kerski-cft
+/SECURITY.md               @kerski-cft

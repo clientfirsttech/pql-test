@@ -35,9 +35,10 @@ from click.testing import CliRunner
 try:
     from dotenv import load_dotenv
 
-    _env_file = Path(__file__).parent / ".env"
-    if _env_file.exists():
-        load_dotenv(_env_file, override=False)
+    # python/tests/.env (optional override) first, then python/.env; the first value set wins.
+    for _env_file in (Path(__file__).parent / ".env", Path(__file__).parent.parent / ".env"):
+        if _env_file.exists():
+            load_dotenv(_env_file, override=False)
 except ImportError:
     pass
 

@@ -22,6 +22,9 @@ repos:
       - id: check-added-large-files
         args: ["--maxkb=2048"]
       - id: check-merge-conflict
+      # Workflows: GitHub rejects a file with a repeated key (e.g. two env: on one step).
+      - id: check-yaml
+        files: ^\.github/
 
   # Python security flaws (settings in python/pyproject.toml, [tool.bandit]).
   - repo: https://github.com/PyCQA/bandit

@@ -246,7 +246,7 @@ If `pyadomd` shows ❌, the ADOMD.NET install above did not complete.
 # Fast: everything except live integration tests
 .\.venv\Scripts\pytest -m "not live"
 
-# Slow: include live tests (needs python/tests/.env)
+# Slow: include live tests (needs python/.env)
 .\.venv\Scripts\pytest
 ```
 
@@ -450,7 +450,7 @@ pql-test auth login `
 
 ## Service smoke test (Power BI Premium / Fabric)
 
-1. Copy `python/.env.example` to `python/tests/.env` and fill in:
+1. Copy `python/.env.example` to `python/.env` (or `python/tests/.env`, which overrides it for the tests only) and fill in:
    ```
    PQL_TENANT_ID=...
    PQL_WORKSPACE_ID=...

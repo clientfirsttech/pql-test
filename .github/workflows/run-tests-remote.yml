@@ -221,6 +221,12 @@ jobs:
           RESULT_FILE: ${{ steps.result-name.outputs.filename }}
           TEST_NAME: ${{ inputs.test_name }}
           VERBOSE: ${{ inputs.verbose }}
+          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
+          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+          # Use the secret if set; fall back to the input (or default Public)
+          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
         run: |
           ARGS=("$MODEL")
           ARGS+=(--log-format github)
@@ -282,13 +288,6 @@ jobs:
               exit $rc
               ;;
           esac
-        env:
-          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
-          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
-          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
-          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
-          # Use the secret if set; fall back to the input (or default Public)
-          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
 
       # -----------------------------------------------------------------------
       # Upload the JSON results file so they are available as pipeline artifacts
