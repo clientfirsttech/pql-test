@@ -14,10 +14,8 @@
 ## Open Items
 
 - **Before the repository goes public (2026-10-28).** gitleaks found no committed credential (196 commits, all branches). See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
-  1. **Decide on identifying data gitleaks cannot detect**, before the first public push (after it, forks and caches keep the history):
-     - in current files: company emails (`…@cftechnologiesllc.com`) as RLS/OLS test members in `examples/OLS_Model.SemanticModel` (TMDLScripts and functions.tmdl) and `examples/RLS_Model.SemanticModel/definition/functions.tmdl`, and a SharePoint URL (`kerski.sharepoint.com/sites/DataOpsDemo`) in `research/Low-Code Coverage.SemanticModel/definition/expressions.tmdl`. The live RLS/OLS tests may depend on these accounts, so replacing them with placeholders needs matching test accounts;
-     - in history only: another person's company email, the `pqlint-demos` workspace name, a `C:\Users\giorg` path, and `examples/RLS_Model.pbix` (whose `Connections` part holds real workspace, dataset, and report IDs). Removing them needs a history rewrite (`git filter-repo`) and a force-push.
-  2. Run `git fetch origin '+refs/pull/*/head:refs/pr/*'` and re-run `gitleaks git . --log-opts=--all`: old pull request refs become public too, and a rewrite cannot remove them (only GitHub Support can).
+  1. ~~Decide on identifying data gitleaks cannot detect.~~ Decided 2026-10-29: no history rewrite. The test-identity emails (`atlas.kerski@`, `jkerski@`, `lbarker@`), the SharePoint URL, `pqlint-demos`, the `C:\Users\giorg` path, the `.pbix` test models, and the commit author emails all stay; they belong to test models and test accounts.
+  2. ~~Re-scan with the pull request refs.~~ Done 2026-10-29 on a mirror clone: all branches, tags, and 31 pull request refs (228 commits), every stored file version (1,715 blobs), and the two zip archives among them. No real secret. The only plain-text hit is the public client ID already in `.gitleaksignore`. The deleted `pq-lint-copilot-remove-pqlint-references.zip` (commit `321a102`) holds pqlint lint-rule test fixtures with fake secrets (an Entra-format `PfY8Q~…` value, a 32-hex API key, a GUID token); gitleaks does not open archives by default, so CI does not flag them.
   3. Review or delete old GitHub Actions run logs and artifacts (DAX results, coverage); they become public with the repository.
   4. In the repository settings, turn on:
      - secret scanning and push protection;
