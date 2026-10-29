@@ -23,7 +23,8 @@ from collections.abc import Sequence
 
 from pql_test.odcs import __version__
 from pql_test.odcs.catalog import Catalog, load_catalog
-from pql_test.odcs.ir import RuleOutcome, Status
+from pql_test.odcs.emit.dax import function_name
+from pql_test.odcs.ir import CONTRACT_DAX, RuleOutcome, Status
 from pql_test.odcs.loader import Contract
 
 SCHEMA_VERSION = 1
@@ -47,11 +48,13 @@ def build_report(
                 "status": o.status.value,
                 "description": o.description,
                 "assertions": len(o.assertions),
-                "functions": [catalog.op(a.op).fn for a in o.assertions],
+                "functions": [function_name(a, catalog) for a in o.assertions],
                 "severity": severities[0] if len(severities) == 1 else None,
                 "reason": o.reason,
             }
         )
+        if o.source:
+            rules[-1]["source"] = o.source
     summary = {"total": len(outcomes)}
     summary.update({s.value: sum(1 for o in outcomes if o.status is s) for s in Status})
     return {
@@ -85,6 +88,8 @@ def format_text(report: dict) -> str:
         detail = ", ".join(r["functions"]) or r["reason"]
         if r["status"] == Status.APPROXIMATED.value:
             detail += f" — {r['reason']}"
+        if r.get("source") == CONTRACT_DAX:
+            detail += " (contract DAX)"
         if r["functions"] and r["severity"] == "warning":
             detail += " (warning)"
         lines.append(f"  {r['status']:<13}{r['ruleId']:<{width + 2}}{detail}")

@@ -27,6 +27,7 @@ from pql_test.odcs.mapping.context import (
 )
 from pql_test.odcs.mapping.patterns import MATCH_CASE, simple_pattern
 from pql_test.odcs.mapping.schema import NO_COLUMN
+from pql_test.odcs.mapping.validity import CASE_INSENSITIVE, allowed_values, case_matters, value_list
 
 OPERATORS = (
     "mustBe",
@@ -121,21 +122,101 @@ def map_library(
     if metric == "duplicateValues":
         return _duplicate_values(rule, *args)
     if metric == "missingValues":
+        if ctx.supports("tbl.matching_rows_at_most"):
+            return _missing_values(rule, *args)
         return skipped(
             rule_id,
             "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)",
             description,
         )
     if metric == "invalidValues":
-        pattern = (rule.get("arguments") or {}).get("pattern")
+        arguments = rule.get("arguments") or {}
+        pattern = arguments.get("pattern")
         if pattern and not ctx.supports("col.contains"):
             return skipped(
                 rule_id, "invalidValues with a pattern is planned for a later release (ShouldMatch per gap plan C3 / R7)", description
             )
         if pattern:
             return _invalid_pattern(ctx, rule_id, obj, prop, cmp, description, severity_of(rule), pattern)
-        return skipped(rule_id, "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)", description)
+        if not ctx.supports("col.values_in_set"):
+            return skipped(rule_id, "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)", description)
+        if not isinstance(arguments.get("validValues"), list):
+            reason = "invalidValues needs arguments.validValues (a list) or arguments.pattern"
+            return skipped(rule_id, reason, description)
+        return _invalid_values(arguments["validValues"], rule, *args)
     return skipped(rule_id, f"unrecognised library metric {metric!r}", description)
+
+
+def _ceiling(rule: Mapping, cmp: tuple[str, Any]) -> tuple[str, Any] | str:
+    """``("count", n)`` or ``("percent", pct)`` for a ceiling comparator; otherwise the skip reason."""
+    if _is_zero_ceiling(cmp):
+        return "count", 0
+    op, value = cmp
+    if rule.get("unit") == "percent":
+        if op == "mustBeLessOrEqualTo" and _is_number(value) and 0 <= value <= 100:
+            return "percent", value
+        return f"percent thresholds map only for mustBeLessOrEqualTo 0-100, got {op} {value!r}"
+    ceiling = _whole_ceiling(cmp)
+    if ceiling is None:
+        return f"maps only as a ceiling (mustBeLessOrEqualTo / mustBeLessThan), got {op} {value!r}"
+    return "count", ceiling
+
+
+def _matching_rows(rule_id, target, filter_args, limit, description, severity) -> Assertion:
+    """Count or share of the rows that ``filter_args`` selects, at most *limit*."""
+    kind, value = limit
+    op, key = ("tbl.matching_rate_at_most", "maxPct") if kind == "percent" else ("tbl.matching_rows_at_most", "maxCount")
+    return Assertion(rule_id, DATA_QUALITY_SUITE, op, target, {**filter_args, key: value}, description, severity)
+
+
+def _case_checked(rule_id: str, prop: Mapping, values: list, assertion: Assertion) -> RuleOutcome:
+    """Approximated when DAX's case-insensitive text comparison could match an unlisted value; else mapped."""
+    if case_matters(prop, values):
+        return approximated(rule_id, CASE_INSENSITIVE, assertion)
+    return mapped(rule_id, assertion)
+
+
+def _missing_values(rule, ctx, rule_id, obj, prop, cmp, description, severity) -> RuleOutcome:
+    """Rows that are null or hold a listed "missing" value, at most a count or a percentage."""
+    target = _column_target(ctx, rule_id, obj, prop, description, "missingValues")
+    if isinstance(target, RuleOutcome):
+        return target
+    arguments = rule.get("arguments") or {}
+    if "missingValues" in arguments:
+        listed = arguments["missingValues"]
+        if not isinstance(listed, list) or not listed:
+            return skipped(rule_id, "arguments.missingValues needs a non-empty list", description)
+    else:
+        listed = [None, ""] if is_text(prop) else [None]  # ODCS default: null, and the empty string for text
+    limit = _ceiling(rule, cmp)
+    if isinstance(limit, str):
+        return skipped(rule_id, f"missingValues {limit}", description)
+    non_null = [v for v in listed if v is not None]
+    values, problem = value_list(prop, non_null) if non_null else ([], None)
+    if problem:
+        return skipped(rule_id, problem, description)
+    filter_args = {"values": values, "matchNull": None in listed}
+    assertion = _matching_rows(rule_id, target, filter_args, limit, description, severity)
+    return _case_checked(rule_id, prop, values, assertion)
+
+
+def _invalid_values(valid, rule, ctx, rule_id, obj, prop, cmp, description, severity) -> RuleOutcome:
+    """Non-null values outside ``validValues``: none (``Col.ValuesShouldBeInSet``), or at most a count or percentage."""
+    target = _column_target(ctx, rule_id, obj, prop, description, "invalidValues")
+    if isinstance(target, RuleOutcome):
+        return target
+    limit = _ceiling(rule, cmp)
+    if isinstance(limit, str):
+        return skipped(rule_id, f"invalidValues {limit}", description)
+    if limit == ("count", 0):
+        return allowed_values(ctx, rule_id, obj, prop, valid, description, severity)
+    values, problem = value_list(prop, [v for v in valid if v is not None])
+    if not values and not problem:
+        problem = "arguments.validValues has no value besides null"
+    if problem:
+        return skipped(rule_id, problem, description)
+    assertion = _matching_rows(rule_id, target, {"values": values, "negate": True}, limit, description, severity)
+    return _case_checked(rule_id, prop, values, assertion)
 
 
 def _invalid_pattern(ctx, rule_id, obj, prop, cmp, description, severity, pattern) -> RuleOutcome:

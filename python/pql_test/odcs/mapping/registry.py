@@ -11,15 +11,15 @@ from pql_test.odcs.catalog import Catalog, load_catalog
 from pql_test.odcs.ir import RuleOutcome, Status
 from pql_test.odcs.loader import Contract
 from pql_test.odcs.mapping.context import MapContext, is_column, skipped
+from pql_test.odcs.mapping.freshness import sla_rules
 from pql_test.odcs.mapping.library import describe, map_library
+from pql_test.odcs.mapping.relationships import relationship_rules
 from pql_test.odcs.mapping.schema import (
     NO_COLUMN,
     nested_rules,
     object_rules,
     property_rules,
-    relationship_rules,
     scheduled_property_rules,
-    sla_rules,
 )
 
 _TYPE_REASONS = {
@@ -136,9 +136,9 @@ def map_contract(
                 outcomes.extend(scheduled_property_rules(ctx, obj, prop, scope))
             else:
                 outcomes.extend(nested_rules(prop, scope))
-            outcomes.extend(relationship_rules(prop, scope))
+            outcomes.extend(relationship_rules(ctx, obj, prop, scope, top_level and is_column(prop)))
             outcomes.extend(quality_by_scope.pop(scope, []))
-        outcomes.extend(relationship_rules(obj, obj["name"]))
+        outcomes.extend(relationship_rules(ctx, obj, None, obj["name"]))
         outcomes.extend(quality_by_scope.pop(obj["name"], []))
     outcomes.extend(sla_rules(ctx, contract.data))
     return _dedupe(_unique_ids(outcomes))

@@ -294,11 +294,12 @@ class TestPatterns:
 
     def test_property_logical_type_pattern_maps_separately(self):
         given = "a property with logicalTypeOptions pattern and minLength"
-        should = "map the pattern, and leave only minLength in the skipped options rule"
+        should = "map the pattern and the length as separate rules, leaving no skipped options rule"
 
         out = _outcomes(_table(prop("a", logicalTypeOptions={"pattern": "^AB", "minLength": 2})))
 
-        assert (out["T.a.pattern"].status, "pattern" in out["T.a.logicalTypeOptions"].reason) == (
+        assert (out["T.a.pattern"].status, out["T.a.length"].status, "T.a.logicalTypeOptions" in out) == (
+            Status.MAPPED,
             Status.MAPPED,
             False,
         ), f"{given}: {should}"
@@ -309,21 +310,82 @@ def _sla(value=2, unit="d", element="T.a", prop_name="latency"):
 
 
 class TestFreshness:
-    def test_latency_in_hours_converts_to_days(self):
+    def test_latency_in_hours_uses_the_hours_function(self):
         given = "a latency SLA of 36 hours on T.a"
-        should = "map to a 1.5-day freshness check on T.a"
+        should = "map to a 36-hour data-age check on T.a"
 
         outcome = _outcomes(_table(prop("a", "date")), slaProperties=[_sla(36, "h")])["slaProperties[0]"]
 
         assert (outcome.status, _call(outcome)) == (
             Status.APPROXIMATED,
-            ("col.max_date_within_days", Target("T", "a"), {"maxAgeDays": 1.5}),
+            ("col.max_date_within_hours", Target("T", "a"), {"maxAgeHours": 36}),
         ), f"{given}: {should}"
+
+    def test_latency_in_days_uses_the_days_function(self):
+        given = "a latency SLA of 2 days on T.a"
+        should = "map to a 2-day data-age check on T.a"
+
+        outcome = _outcomes(_table(prop("a", "date")), slaProperties=[_sla(2, "days")])["slaProperties[0]"]
+
+        assert _call(outcome) == ("col.max_date_within_days", Target("T", "a"), {"maxAgeDays": 2}), f"{given}: {should}"
+
+    def test_latency_with_several_elements_checks_each(self):
+        given = "a latency SLA whose element lists two columns"
+        should = "emit one data-age check per column"
+        schema = _table(prop("a", "date"), prop("b", "timestamp"))
+
+        outcome = _outcomes(schema, slaProperties=[_sla(element="T.a, T.b")])["slaProperties[0]"]
+
+        assert [a.target for a in outcome.assertions] == [Target("T", "a"), Target("T", "b")], f"{given}: {should}"
+
+    def test_latency_on_a_table_is_not_refresh_time(self):
+        given = "a latency SLA whose element is a table, not a column"
+        should = "stay skipped, saying refresh time is not source latency"
+
+        outcome = _outcomes(_table(prop("a", "date")), slaProperties=[_sla(element="T")])["slaProperties[0]"]
+
+        assert (outcome.status, "refresh time is not source latency" in outcome.reason) == (
+            Status.SKIPPED,
+            True,
+        ), f"{given}: {should}"
+
+    def test_frequency_checks_refresh_age_in_its_own_suite(self):
+        given = "a frequency SLA of 2 days on table T"
+        should = "approximate it with a 48-hour refresh-age check in the Refresh suite"
+
+        sla = _sla(2, "d", "T", "frequency")
+        outcome = _outcomes(_table(prop("a", "date")), slaProperties=[sla])["slaProperties[0]"]
+        (assertion,) = outcome.assertions
+        explains = "not that the source sent new data" in outcome.reason
+
+        assert (outcome.status, assertion.suite, _call(outcome), explains) == (
+            Status.APPROXIMATED,
+            "Refresh",
+            ("tbl.refresh_age_at_most", Target("T"), {"maxAgeHours": 48}),
+            True,
+        ), f"{given}: {should}"
+
+    def test_frequency_renders_an_info_partitions_age(self):
+        given = "a frequency SLA rendered for PQL.Assert 0.8"
+        should = "compare hours since INFO.PARTITIONS()[RefreshedTime] with ShouldBeLessOrEqual, in the Refresh suite"
+        contract = contract_dict(schema=_table(prop("a", "date")), slaProperties=[_sla(3, "h", "T", "frequency")])
+
+        files = render(plan_contract(contract, pql_assert="0.8"), env="DEV")
+        refresh = next(f for f in files if f.suite == "Refresh")
+
+        assert (
+            refresh.function_name,
+            "PQL.Assert.ShouldBeLessOrEqual(" in refresh.content,
+            "[RefreshedTime]" in refresh.content,
+        ) == ("MarvelCharacters.Refresh.DEV.Tests", True, True), f"{given}: {should}"
 
     @pytest.mark.parametrize(
         "sla",
         [
-            _sla(prop_name="frequency"),
+            _sla(prop_name="timeOfAvailability"),
+            _sla(prop_name="retention"),
+            _sla(prop_name="frequency", element=""),
+            _sla(prop_name="frequency", element="Nope"),
             _sla(unit="y"),
             _sla(value="soon"),
             _sla(value=-1),

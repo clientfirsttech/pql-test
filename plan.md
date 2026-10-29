@@ -4,6 +4,7 @@
 
 ## Active Work
 
+- **Contract rule coverage** — map the remaining ODCS rules to PQL.Assert 0.8, add `type: custom` / `engine: pql-test` DAX rules, split freshness into `latency` (data age) and `frequency` (refresh recency), and write the PQL.Assert 0.9 freshness handoff. See [tasks/contract-rule-coverage-epic.md](tasks/contract-rule-coverage-epic.md). Planned 2026-10-29; adopting 0.9 waits on the upstream release.
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)

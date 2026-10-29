@@ -10,8 +10,16 @@ from typing import Any
 
 SCHEMA_SUITE = "Schema"
 DATA_QUALITY_SUITE = "DataQuality"
+# Refresh checks read INFO.* model metadata; their own suite keeps a permission error
+# from failing every other rule (a suite runs as one query).
+REFRESH_SUITE = "Refresh"
 ERROR = "error"
 WARNING = "warning"
+# A contract rule's direct call of a PQL.Assert function: args["function"] and args["arguments"]
+# (DAX source), with no catalog entry.
+DIRECT_CALL = "dax.call"
+# RuleOutcome.source for rules whose DAX comes from the contract (`engine: pql-test`).
+CONTRACT_DAX = "contract-dax"
 
 
 class Status(Enum):
@@ -49,6 +57,7 @@ class RuleOutcome:
     assertions: tuple[Assertion, ...] = field(default_factory=tuple)
     reason: str | None = None
     description: str = ""
+    source: str | None = None  # CONTRACT_DAX when the contract wrote the DAX
 
     def __post_init__(self) -> None:
         if self.status is not Status.MAPPED and not self.reason:
