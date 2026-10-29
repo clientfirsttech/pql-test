@@ -5,7 +5,7 @@ DEFINE
 	FUNCTION RuleCoverage.Schema.DEV.Tests = () =>
 		UNION (
 			PQL.Assert.Tbl.ShouldExist("ODCS rule-coverage orders.exists: orders exists", "Orders"),
-			PQL.Assert.Tbl.ShouldHaveColumns("ODCS rule-coverage orders.columns: orders has columns order_id, customer_id, quantity, amount, discount, code, status, priority, region, loaded_at, order_date", "Orders", "order_id,customer_id,quantity,amount,discount,code,status,priority,region,loaded_at,order_date"),
+			PQL.Assert.Tbl.ShouldHaveColumns("ODCS rule-coverage orders.columns: orders has columns order_id, customer_id, quantity, amount, discount, code, is_active, ship_time, status, priority, region, loaded_at, order_date", "Orders", "order_id,customer_id,quantity,amount,discount,code,is_active,ship_time,status,priority,region,loaded_at,order_date"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.order_id.type: orders.order_id is integer (Integer in the model)", "Orders", "order_id", "Integer"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.customer_id.type: orders.customer_id is integer (Integer in the model)", "Orders", "customer_id", "Integer"),
 			PQL.Assert.Relationship.ShouldExist("ODCS rule-coverage orders.customer_id.relationships[0]: orders.customer_id relationship to customers.customer_id", "Orders", "customer_id", "Customer", "customer_id"),
@@ -13,6 +13,8 @@ DEFINE
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.amount.type: orders.amount is number (Number or Currency in the model)", "Orders", "amount", SWITCH(MAXX(FILTER(INFO.VIEW.COLUMNS(), [Table] = "Orders" && [Name] = "amount"), [DataType]), "Currency", "Currency", "Number")),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.discount.type: orders.discount is number (Number or Currency in the model)", "Orders", "discount", SWITCH(MAXX(FILTER(INFO.VIEW.COLUMNS(), [Table] = "Orders" && [Name] = "discount"), [DataType]), "Currency", "Currency", "Number")),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.code.type: orders.code is string (Text in the model)", "Orders", "code", "Text"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.is_active.type: orders.is_active is boolean (True/False in the model)", "Orders", "is_active", "True/False"),
+			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.ship_time.type: orders.ship_time is time (Date in the model)", "Orders", "ship_time", "Date"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.status.type: orders.status is string (Text in the model)", "Orders", "status", "Text"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.priority.type: orders.priority is integer (Integer in the model)", "Orders", "priority", "Integer"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.region.type: orders.region is string (Text in the model)", "Orders", "region", "Text"),

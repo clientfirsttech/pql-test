@@ -12,9 +12,9 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 43,
-    "mapped": 29,
-    "approximated": 8,
+    "total": 46,
+    "mapped": 31,
+    "approximated": 9,
     "skipped": 6
   },
   "rules": [
@@ -32,7 +32,7 @@
     {
       "ruleId": "orders.columns",
       "status": "mapped",
-      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, status, priority, region, loaded_at, order_date",
+      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, is_active, ship_time, status, priority, region, loaded_at, order_date",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Tbl.ShouldHaveColumns"
@@ -172,6 +172,17 @@
       "reason": null
     },
     {
+      "ruleId": "orders.code.pattern",
+      "status": "mapped",
+      "description": "orders.code matches pattern ^OR",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldStartWith"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
       "ruleId": "orders.code.length",
       "status": "mapped",
       "description": "orders.code length is >= 2",
@@ -181,6 +192,28 @@
       ],
       "severity": "error",
       "reason": null
+    },
+    {
+      "ruleId": "orders.is_active.type",
+      "status": "mapped",
+      "description": "orders.is_active is boolean (True/False in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.ship_time.type",
+      "status": "approximated",
+      "description": "orders.ship_time is time (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
       "ruleId": "orders.status.type",

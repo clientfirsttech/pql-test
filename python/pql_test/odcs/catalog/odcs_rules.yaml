@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Every value in the closed ODCS vocabularies this release maps against (union across the
+# bundled v3.0.2, v3.1.0, and v3.2.0 schemas), classified by how a contract reaches it.
+# python/tests/odcs/test_odcs_rule_matrix.py re-extracts these vocabularies from the bundled
+# schemas and checks them against this file: a schema gaining a new value (a new quality
+# metric, a new logicalTypeOptions key, ...) fails that test until it is classified here.
+#
+#   use   mapped        an ODCS rule of this kind generates PQL.Assert DAX. This means "the
+#                        code dispatches on it", not "every instance of it succeeds" — some
+#                        are approximated or skipped case-by-case (see the mapper's own reason)
+#         dax-only       only reachable through a `type: custom`, `engine: pql-test` rule
+#         out-of-scope   no DAX check applies; `reason` says why
+#
+# Not enumerated here: `slaProperties.property` is free text in ODCS, not an enum, so it
+# cannot be extracted from the schema. sla_rules() skips an unrecognised property name with
+# its own generic reason; only `latency` and `frequency` are classified, informally, as mapped.
+
+quality_metrics: # DataQualityLibrary.metric
+  nullValues: { use: mapped }
+  missingValues: { use: mapped }
+  invalidValues: { use: mapped }
+  duplicateValues: { use: mapped }
+  rowCount: { use: mapped }
+
+quality_types: # DataQuality.type
+  library: { use: mapped, reason: "dispatched by metric; see quality_metrics" }
+  custom:
+    {
+      use: dax-only,
+      reason: "engine: pql-test maps (dax_rules.py); any other engine runs in its own engine, no DAX equivalent",
+    }
+  sql:
+    {
+      use: out-of-scope,
+      reason: "type: sql rules are not translated to DAX (ODCS ties no server to a sql rule; an optional review-marked DAX stub is planned)",
+    }
+  text: { use: out-of-scope, reason: "human-readable only; nothing to execute" }
+
+logical_types: # SchemaBaseProperty.logicalType
+  string: { use: mapped }
+  integer: { use: mapped }
+  number: { use: mapped }
+  boolean: { use: mapped }
+  date: { use: mapped, reason: "approximated: the model has one date/time type" }
+  timestamp: { use: mapped, reason: "approximated: the model has one date/time type" }
+  time: { use: mapped, reason: "approximated: the model has one date/time type" }
+  object: { use: out-of-scope, reason: "no semantic model column" }
+  array: { use: out-of-scope, reason: "no semantic model column" }
+  map: { use: out-of-scope, reason: "no semantic model column (ODCS 3.2)" }
+  vector: { use: out-of-scope, reason: "no semantic model column (ODCS 3.2)" }
+
+relationship_types: { foreignKey: { use: mapped } } # RelationshipBase.type (ODCS 3.1+)
+
+# logicalTypeOptions keys, scoped per logicalType: the same key name checks a different
+# thing on a different type (e.g. "minimum" is a number on integer, a date string on date).
+# object / array / map / vector keys are not enumerated: the type itself is out-of-scope
+# above (no semantic model column), so none of its constraint keys can be checked either.
+logical_type_options:
+  integer:
+    minimum: { use: mapped }
+    maximum: { use: mapped }
+    exclusiveMinimum: { use: mapped }
+    exclusiveMaximum: { use: mapped }
+    multipleOf: { use: out-of-scope, reason: "no PQL.Assert check" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+  number:
+    minimum: { use: mapped }
+    maximum: { use: mapped }
+    exclusiveMinimum:
+      { use: mapped, reason: "only exclusiveMinimum: 0 maps (Col.ShouldBePositive); any other value is skipped" }
+    exclusiveMaximum: { use: out-of-scope, reason: "a number's exclusiveMaximum has no PQL.Assert check" }
+    multipleOf: { use: out-of-scope, reason: "no PQL.Assert check" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+  string:
+    minLength: { use: mapped }
+    maxLength: { use: mapped }
+    pattern: { use: mapped, reason: "only ^literal, literal$, and a bare literal map; any other regex is skipped" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+  date:
+    minimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    maximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMinimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMaximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+  timestamp:
+    minimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    maximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMinimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMaximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+    defaultTimezone:
+      { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+    timezone: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  time:
+    minimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    maximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMinimum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    exclusiveMaximum: { use: out-of-scope, reason: "date bounds have no PQL.Assert check (planned)" }
+    format: { use: out-of-scope, reason: "no PQL.Assert check" }
+    defaultTimezone:
+      { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+    timezone: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+
+# Property- and rule-level fields that describe data without stating a rule a DAX check
+# could verify.
+descriptive_fields:
+  classification: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  semanticType: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  partitioned: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  encryptedName: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  transformLogic: { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  transformSourceObjects:
+    { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  criticalDataElement:
+    { use: out-of-scope, reason: "descriptive metadata, not a data quality rule — no DAX check applies" }
+  dimension:
+    {
+      use: out-of-scope,
+      reason: "a label on a quality rule (its KPI category); does not change what DAX is generated",
+    }

@@ -42,6 +42,11 @@ schema:
         logicalType: string
         logicalTypeOptions:
           minLength: 2
+          pattern: "^OR"
+      - name: is_active
+        logicalType: boolean
+      - name: ship_time
+        logicalType: time
       - name: status
         logicalType: string
         enum:

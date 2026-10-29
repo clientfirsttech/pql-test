@@ -12,9 +12,9 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 42,
-    "mapped": 15,
-    "approximated": 6,
+    "total": 44,
+    "mapped": 16,
+    "approximated": 7,
     "skipped": 21
   },
   "rules": [
@@ -32,7 +32,7 @@
     {
       "ruleId": "orders.columns",
       "status": "mapped",
-      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, status, priority, region, loaded_at, order_date",
+      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, is_active, ship_time, status, priority, region, loaded_at, order_date",
       "assertions": 1,
       "functions": [
         "PQL.Assert.Tbl.ShouldHaveColumns"
@@ -156,11 +156,33 @@
     {
       "ruleId": "orders.code.logicalTypeOptions",
       "status": "skipped",
-      "description": "orders.code logicalTypeOptions ['minLength']",
+      "description": "orders.code logicalTypeOptions ['minLength', 'pattern']",
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "minLength checks are planned (Col.TextLengthShouldBeInRange)"
+      "reason": "minLength checks are planned (Col.TextLengthShouldBeInRange); pattern checks are planned for a later release (ShouldMatch per gap plan C3 / R7)"
+    },
+    {
+      "ruleId": "orders.is_active.type",
+      "status": "mapped",
+      "description": "orders.is_active is boolean (True/False in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.ship_time.type",
+      "status": "approximated",
+      "description": "orders.ship_time is time (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
       "ruleId": "orders.status.type",

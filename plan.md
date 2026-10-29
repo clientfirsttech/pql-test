@@ -4,6 +4,7 @@
 
 ## Active Work
 
+- **Contract gap detection** — an ODCS rule matrix (mirroring the PQL.Assert function matrix) so a new ODCS release's metrics, quality types, or `logicalTypeOptions` keys fail a test instead of silently skipping; a docs-to-code agreement test for `docs/contracts.md`'s mapping tables; an AIDD skill that checks both Bitol and DAX Lib for new releases, wired into `/aidd-review` step 9; and runnable example contracts under `examples/contracts/`. See [tasks/contract-gap-detection-epic.md](tasks/contract-gap-detection-epic.md). Planned 2026-10-29.
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)

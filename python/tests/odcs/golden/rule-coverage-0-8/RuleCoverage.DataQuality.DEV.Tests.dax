@@ -9,6 +9,7 @@ DEFINE
 			PQL.Assert.Col.MaxShouldBeAtMost("ODCS rule-coverage orders.quantity.range: orders.quantity is > 0 and < 1000 (2)", 'Orders'[quantity], 999),
 			PQL.Assert.Col.ShouldBeInRange("ODCS rule-coverage orders.amount.range: orders.amount is >= 0 and <= 100000", 'Orders'[amount], 0, 100000),
 			PQL.Assert.Col.ShouldBePositive("ODCS rule-coverage orders.discount.range: orders.discount is > 0", 'Orders'[discount]),
+			PQL.Assert.Col.ShouldStartWith("ODCS rule-coverage orders.code.pattern: orders.code matches pattern ^OR", 'Orders'[code], "OR", "Y"),
 			PQL.Assert.Col.TextLengthShouldBeInRange("ODCS rule-coverage orders.code.length: orders.code length is >= 2", 'Orders'[code], 2, 2147483647),
 			PQL.Assert.Col.ValuesShouldBeInSet("ODCS rule-coverage orders.status.enum: orders.status is one of open, closed", 'Orders'[status], {"open", "closed"}, [Value]),
 			PQL.Assert.Tbl.RowRateShouldBeAtMost("ODCS rule-coverage orders.status.quality[0]: orders.status invalidValues mustBeLessOrEqualTo 5", FILTER('Orders', NOT ISBLANK('Orders'[status]) && NOT ('Orders'[status] IN {"open", "closed"})), 'Orders', 5),
