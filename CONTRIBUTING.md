@@ -174,7 +174,7 @@ fails when a command drifts.
 
 | Requirement | Why | How to install |
 |---|---|---|
-| Python 3.9+ | Runs the CLI | `winget install Python.Python.3.12` (or [python.org](https://www.python.org/downloads/)) |
+| Python 3.10+ | Runs the CLI | `winget install Python.Python.3.12` (or [python.org](https://www.python.org/downloads/)) |
 | ADOMD.NET client DLL | `pyadomd` loads this at import time | See **ADOMD.NET install** below — required even if you have Power BI Desktop |
 | Power BI Desktop | Needed for the local-mode smoke test only | Microsoft Store or [powerbi.microsoft.com](https://www.microsoft.com/power-platform/products/power-bi/desktop) |
 | Service credentials | Needed for service-mode smoke test only | Service principal with `Dataset.Read.All` + Contributor on the workspace |
@@ -228,7 +228,7 @@ Expected output:
 
 ```
 Prerequisites check:
-  ✅ Python >= 3.9 — Current: 3.12.x
+  ✅ Python >= 3.10 — Current: 3.12.x
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available

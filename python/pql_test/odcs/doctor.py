@@ -62,7 +62,7 @@ def _installed(package: str) -> str | None:
 def environment_checks() -> list[Check]:
     python = ".".join(str(p) for p in sys.version_info[:3])
     checks = [
-        Check("Python", OK if sys.version_info >= (3, 9) else FAIL, f"{python} (needs 3.9 or later)"),
+        Check("Python", OK if sys.version_info >= (3, 10) else FAIL, f"{python} (needs 3.10 or later)"),
         Check("pql-test", OK, __version__),
     ]
     for dep in _DEPENDENCIES:

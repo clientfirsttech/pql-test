@@ -15,7 +15,7 @@ If you find a secret (a client secret, token, or key) in this repository or its 
 
 Security fixes go into the latest release. Releases up to v0.1.x (BUSL-1.1) are not updated.
 
-pql-test still installs on Python 3.9, which reached end of life in October 2025. Fixes for some dependencies (for example `requests`, `urllib3`, and `python-dotenv`) need Python 3.10 or later, so a Python 3.9 install keeps versions with known vulnerabilities. Use Python 3.10 or later.
+pql-test needs Python 3.10 or later. Python 3.9 reached end of life in October 2025, and the security fixes for some dependencies (for example `requests`, `urllib3`, and `python-dotenv`) need 3.10.
 
 ## How this repository guards against leaks and flaws
 

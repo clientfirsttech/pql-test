@@ -32,7 +32,7 @@
 #    test suite against the deployed datasets in the workspace.
 #
 #  Stage 3c – linux
-#    Installs pql-test on ubuntu (no pyadomd) on Python 3.9 and 3.13. Runs the
+#    Installs pql-test on ubuntu (no pyadomd) on Python 3.10 and 3.13. Runs the
 #    contract and platform tests, smoke-tests the file-based commands, and checks
 #    that the XMLA commands stop with one Windows-only message. No secrets.
 #

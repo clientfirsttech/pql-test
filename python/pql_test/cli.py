@@ -140,8 +140,8 @@ def _check_prereqs() -> list[dict]:
     major, minor = sys.version_info[:2]
     results.append(
         {
-            "name": "Python >= 3.9",
-            "ok": (major, minor) >= (3, 9),
+            "name": "Python >= 3.10",
+            "ok": (major, minor) >= (3, 10),
             "detail": f"Current: {sys.version.split()[0]}",
         }
     )

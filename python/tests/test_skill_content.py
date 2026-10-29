@@ -269,8 +269,8 @@ def test_check_prereqs_lists_all_dependencies():
 
 def test_check_prereqs_documents_python_version_floor():
     content = _skill_content("check-prereqs")
-    assert re.search(r"3\.9|>=\s*3\.9", content), (
-        "check-prereqs must state Python >= 3.9 minimum"
+    assert re.search(r">=\s*3\.10\b", content), (
+        "check-prereqs must state Python >= 3.10 minimum"
     )
 
 

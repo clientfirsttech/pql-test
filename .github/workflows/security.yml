@@ -54,8 +54,7 @@ jobs:
 
       - name: pip-audit on pql-test's locked runtime dependencies
         # Audits exactly what uv.lock resolves for this Python (3.12), not the runner's own
-        # packages. Python 3.9 installs keep known-vulnerable requests, urllib3, and
-        # python-dotenv, whose fixes need 3.10+ (see SECURITY.md).
+        # packages.
         run: |
           uv export --frozen --no-dev --no-hashes --no-emit-workspace > locked-requirements.txt
           pip-audit -r locked-requirements.txt --no-deps --disable-pip --progress-spinner off

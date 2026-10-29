@@ -52,7 +52,7 @@ pql-test is licensed under AGPL-3.0-only (Client First Technologies).
 - ADOMD.NET / pyadomd requires Windows and .NET runtime for XMLA queries
 - Remote test execution requires Power BI Premium or Fabric workspace with XMLA endpoint enabled
 - Service principal authentication requires Azure AD app registration
-- Python >= 3.9 is the minimum supported version
+- Python >= 3.10 is the minimum supported version (3.9 is end of life, and dependency security fixes need 3.10)
 - DAX test files must follow `*.Tests.dax` naming convention in `DAXQueries/` directory
 - **One license** — Everything is AGPL-3.0-only, except unmodified third-party files that keep their own license (the Bitol ODCS JSON schemas, the vendored PQL.Assert test fixture). Runtime dependencies must be AGPL-compatible.
 - The file-only contract commands (`lint`, `coverage`, `generate`, `trace`) need no ADOMD.NET and should run on Linux for CI pipelines. XMLA commands stay Windows-only.

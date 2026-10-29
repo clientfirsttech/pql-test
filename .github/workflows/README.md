@@ -11,7 +11,7 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 - `release.yml` — Publishes pql-test to PyPI on `vX.Y.Z` tags (Trusted Publishing is bound to this file name; do not rename)
 - `security.yml` — Stage 0: gitleaks on the full history, bandit, pip-audit, and the offline dead-link check
 - `pytest.yml` — The full pytest suite on Windows with ADOMD.NET (Stage 3a)
-- `linux.yml` — Stage 3c, pql-test on ubuntu without pyadomd (Python 3.9 and 3.13): the contract and platform tests, a smoke test of the file-based commands (`contract lint|coverage|generate|trace|doctor`, `retrieve-tests`), and a check that `run-tests`, `code-coverage`, and `contract run` stop with one Windows-only message
+- `linux.yml` — Stage 3c, pql-test on ubuntu without pyadomd (Python 3.10 and 3.13): the contract and platform tests, a smoke test of the file-based commands (`contract lint|coverage|generate|trace|doctor`, `retrieve-tests`), and a check that `run-tests`, `code-coverage`, and `contract run` stop with one Windows-only message
 
 ## Agentic Workflows
 
@@ -88,7 +88,7 @@ If no changes are needed:
 **Repository Context**:
 
 The agent understands this is the **pql-test** repository and follows:
-- Python >= 3.9 with PEP 8 style
+- Python >= 3.10 with PEP 8 style
 - Click framework for CLI
 - Type annotations and Google-style docstrings
 - Conventional commits

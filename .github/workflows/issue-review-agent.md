@@ -262,7 +262,7 @@ Key files:
 - `tests/` - Python unit tests (pytest)
 
 Development guidelines:
-- Python >= 3.9 with PEP 8 style
+- Python >= 3.10 with PEP 8 style
 - Type annotations and Google-style docstrings required
 - Click framework for CLI commands
 - XMLA/ADOMD.NET for remote connections (Windows-only)

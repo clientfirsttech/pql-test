@@ -8,7 +8,7 @@ name = "pql-test"
 version = "0.2.0"
 description = "CLI for discovering and running DAX tests in Power BI PBIP semantic models via XMLA"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "AGPL-3.0-only"
 license-files = ["LICENSE.txt", "NOTICE"]
 keywords = ["power-bi", "fabric", "dax", "xmla", "testing", "pql", "semantic-model", "pbip"]
@@ -26,7 +26,6 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -43,17 +42,15 @@ dependencies = [
     "azure-identity>=1.19.0",
     "keyring>=25.0.0",
     "click>=8.1.0",
-    "python-dotenv>=1.2.2; python_version >= '3.10'",  # PYSEC-2026-2270 (fix needs 3.10+)
-    "python-dotenv>=1.0.0; python_version < '3.10'",
+    "python-dotenv>=1.2.2",  # PYSEC-2026-2270
     "psutil>=5.9.0",
     # Transitive via msal/azure-core -> requests; floor excludes the compromised
     # emSign ECC Root CA - G3 bundle (PYSEC-2026-4320).
     "certifi>=2026.10.19",
     # Transitive via msal/azure-core; floors exclude published vulnerabilities
     # (requests PYSEC-2026-2275; urllib3 PYSEC-2026-141/142/4175/4176/4177).
-    # The fixed releases need Python 3.10+, so Python 3.9 (end of life) keeps the old ones.
-    "requests>=2.33.0; python_version >= '3.10'",
-    "urllib3>=2.8.0; python_version >= '3.10'",
+    "requests>=2.33.0",
+    "urllib3>=2.8.0",
     # `pql-test contract ...`: ODCS contract loading and schema validation.
     "PyYAML>=6.0",
     "jsonschema>=4.18",

@@ -4,7 +4,7 @@ Add project-specific agent instructions here. Settings in this file override the
 
 ## Project-Specific Rules
 
-- **Python is the primary language** — All core logic is in Python >= 3.9
+- **Python is the primary language** — All core logic is in Python >= 3.10
 - **Follow PEP 8** — Use type annotations, Google-style docstrings
 - **CLI uses Click** — The CLI framework is Click >= 8.1
 - **CLI output goes through `cli_format.py`** — Any new command printing a session banner, bordered table, or status color must reuse `python/pql_test/runner/cli_format.py`, not a new per-command implementation. See [CONTRIBUTING.md's CLI Output Conventions](../CONTRIBUTING.md#cli-output-conventions) before writing presentation code for a command.

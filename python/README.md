@@ -84,11 +84,11 @@ can both read.
 
 ## Prerequisites
 
-The only thing you install manually is **Python 3.9+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
+The only thing you install manually is **Python 3.10+** ([python.org](https://www.python.org/downloads/) — check "Add python.exe to PATH" on Windows). Everything else is handled automatically:
 
 | Requirement | How it's installed |
 |---|---|
-| Python 3.9+ | **Manual** — install from python.org and ensure it's on PATH |
+| Python 3.10+ | **Manual** — install from python.org and ensure it's on PATH |
 | pythonnet, msal, azure-identity, keyring, click, python-dotenv, psutil | **Automatic via pip** — pulled in as Python dependencies when you `pip install pql-test` |
 | ADOMD.NET assemblies (the .NET XMLA client) | **Automatic on first use** — when no ADOMD.NET install is detected, pql-test downloads the official `Microsoft.AnalysisServices.AdomdClient` NuGet package (~5 MB) from `nuget.org` to `%USERPROFILE%\.pql-test\adomd\` and uses it for every subsequent run. No admin rights, no manual MSI. Set `PQL_TEST_NO_AUTO_INSTALL_ADOMD=1` if you'd rather provide ADOMD yourself. |
 | Power BI Desktop *(optional)* | Only needed for `local/<model_name>` mode against a locally-open model. Skip if you only target the service. |
@@ -107,7 +107,7 @@ pql-test check-prereqs
 
 ### From PyPI (recommended)
 
-Requires Python 3.9+ on Windows (the XMLA driver is ADOMD.NET, a
+Requires Python 3.10+ on Windows (the XMLA driver is ADOMD.NET, a
 Windows/.NET component):
 
 ```powershell
@@ -700,7 +700,7 @@ pql-test check-prereqs
 
 ```
 Prerequisites check:
-  ✅ Python >= 3.9 — Current: 3.12.6
+  ✅ Python >= 3.10 — Current: 3.12.6
   ✅ pyadomd (ADOMD.NET XMLA client) — pyadomd available
   ✅ msal (Azure AD / service-principal auth) — msal available
   ✅ psutil (local Power BI Desktop detection) — psutil available

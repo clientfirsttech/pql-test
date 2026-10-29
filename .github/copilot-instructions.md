@@ -135,7 +135,7 @@ pql-test/
 
 ## Language and Frameworks
 
-- **Python >= 3.9** is the primary language.
+- **Python >= 3.10** is the primary language.
 - **Click >= 8.1** is used for the CLI framework.
 - **pyadomd >= 0.0.5** is the ADOMD.NET wrapper for XMLA queries (Windows/.NET only).
 - **msal >= 1.24.0** handles Azure AD / service-principal authentication.

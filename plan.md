@@ -26,7 +26,7 @@
      - branch protection requiring CI (including Stage 0) and a Code Owners review of `.github/`.
   5. After launch, GitHub Environments are free: add a `pypi` environment with required reviewers to `release.yml`'s publish job, and set it in the PyPI trusted publisher (the header of `release.yml` explains).
   6. ~~Decide what the issue-review agent may do with outsider-written issues.~~ Decided 2026-10-29: manual only (`workflow_dispatch` with an issue number; the `issues: labeled` trigger is removed). The issue text it reads is still untrusted, so review its pull requests as outside contributions.
-  7. Decide whether to raise `requires-python` to `>=3.10` (Python 3.9 is end of life, and the fixes for `requests`, `urllib3`, and `python-dotenv` need 3.10+). It changes the vision's "Python >= 3.9" constraint and the Linux CI matrix; SECURITY.md already warns 3.9 users.
+  7. ~~Decide whether to raise `requires-python` to `>=3.10`.~~ Done 2026-10-29 (0.2.0): `requires-python = ">=3.10"`, the dependency floors no longer need Python markers, the Linux CI matrix runs 3.10 and 3.13, and the vision, README, skills, and doctor checks say 3.10.
   8. Every maintainer runs `pip install pre-commit && pre-commit install` once per clone, and confirms they are fine with the author and maintainer details in `python/pyproject.toml`.
   9. The old, expired client secret in `python/tests/.env` was never committed; delete or update that file.
 
