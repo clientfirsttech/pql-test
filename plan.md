@@ -16,19 +16,16 @@
 - **Before the repository goes public (2026-10-28).** gitleaks found no committed credential (196 commits, all branches). See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
   1. ~~Decide on identifying data gitleaks cannot detect.~~ Decided 2026-10-29: no history rewrite. The test-identity emails (`atlas.kerski@`, `jkerski@`, `lbarker@`), the SharePoint URL, `pqlint-demos`, the `C:\Users\giorg` path, the `.pbix` test models, and the commit author emails all stay; they belong to test models and test accounts.
   2. ~~Re-scan with the pull request refs.~~ Done 2026-10-29 on a mirror clone: all branches, tags, and 31 pull request refs (228 commits), every stored file version (1,715 blobs), and the two zip archives among them. No real secret. The only plain-text hit is the public client ID already in `.gitleaksignore`. The deleted `pq-lint-copilot-remove-pqlint-references.zip` (commit `321a102`) holds pqlint lint-rule test fixtures with fake secrets (an Entra-format `PfY8Q~…` value, a 32-hex API key, a GUID token); gitleaks does not open archives by default, so CI does not flag them.
-  3. Review or delete old GitHub Actions run logs and artifacts (DAX results, coverage); they become public with the repository.
-  4. In the repository settings, turn on:
-     - secret scanning and push protection;
-     - private vulnerability reporting (SECURITY.md links to it; the link 404s until then);
-     - Dependabot alerts;
-     - "Require approval for all outside collaborators" for fork pull request workflows;
-     - a read-only default `GITHUB_TOKEN`;
-     - branch protection requiring CI (including Stage 0) and a Code Owners review of `.github/`.
+  3. ~~Review old GitHub Actions run logs and artifacts.~~ Scanned 2026-10-29: all 185 artifacts and the 124 of 349 run logs the API still serves (the other 222 return HTTP 500, 4 return 404). gitleaks (archives opened) found nothing, and no value from the local `.env` files appears in them. Optional: delete runs older than the log retention before launch, so nothing unscanned can surface.
+  4. Repository settings, applied 2026-10-29 (private repo):
+     - done: Dependabot alerts and security updates; a read-only default `GITHUB_TOKEN`, and Actions can no longer approve pull requests;
+     - done: `main` protected: a pull request with 1 approving review (Code Owners for owned files, stale approvals dismissed, conversations resolved), the Stage 0, 3a, and 3c checks passing, no force-push or deletion. Admins can bypass. `.github/CODEOWNERS` covers `.github/`, the license files, and the security-check config;
+     - **at launch** (needs a public repository, or a GitHub Secret Protection license while private): secret scanning and push protection; private vulnerability reporting (SECURITY.md links to it; the link 404s until then); "Require approval for all outside collaborators" for fork pull request workflows.
   5. After launch, GitHub Environments are free: add a `pypi` environment with required reviewers to `release.yml`'s publish job, and set it in the PyPI trusted publisher (the header of `release.yml` explains).
   6. ~~Decide what the issue-review agent may do with outsider-written issues.~~ Decided 2026-10-29: manual only (`workflow_dispatch` with an issue number; the `issues: labeled` trigger is removed). The issue text it reads is still untrusted, so review its pull requests as outside contributions.
   7. ~~Decide whether to raise `requires-python` to `>=3.10`.~~ Done 2026-10-29 (0.2.0): `requires-python = ">=3.10"`, the dependency floors no longer need Python markers, the Linux CI matrix runs 3.10 and 3.13, and the vision, README, skills, and doctor checks say 3.10.
   8. Every maintainer runs `pip install pre-commit && pre-commit install` once per clone, and confirms they are fine with the author and maintainer details in `python/pyproject.toml`.
-  9. The old, expired client secret in `python/tests/.env` was never committed; delete or update that file.
+  9. ~~The old, expired client secret in `python/tests/.env`.~~ Done 2026-10-29: the file is deleted (its app's secret had expired: AADSTS7000222), and the live tests now fall back to `python/.env`, with `python/tests/.env` an optional override. Rotation checklist: `secret-rotation.local.md` (git-ignored).
 
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
