@@ -19,12 +19,12 @@ def simple_pattern(pattern: object) -> tuple[str, str] | str:
     anchored_start = pattern.startswith("^")
     anchored_end = pattern.endswith("$") and not pattern.endswith("\\$")
     core = pattern[1 if anchored_start else 0 : len(pattern) - 1 if anchored_end else len(pattern)]
+    if any(ch in _META for ch in core):
+        return "regular expressions beyond ^literal, literal$, and a bare literal are not translated to DAX"
     if anchored_start and anchored_end:
         return "an exact-match pattern (^literal$) has no PQL.Assert column function"
     if not core:
         return "the pattern has no literal text"
-    if any(ch in _META for ch in core):
-        return "regular expressions beyond ^literal, literal$, and a bare literal are not translated to DAX"
     if anchored_start:
         return "col.starts_with", core
     if anchored_end:

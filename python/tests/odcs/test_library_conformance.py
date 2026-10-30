@@ -27,6 +27,10 @@ SOURCE_TYPES = {
     "tableRef": _TABLE,
     "keyProjection": _TABLE,
     "columnRef": {"ANYREF EXPR"},
+    "valueTable": _TABLE,
+    "valueColumn": {"ANYREF EXPR"},
+    "filteredRows": _TABLE,
+    "refreshAgeHours": {"DOUBLE"},
 }
 
 

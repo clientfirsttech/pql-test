@@ -1,0 +1,54 @@
+# Scenario tests and direct PQL.Assert calls against examples/SampleModel, using `type: custom`,
+# `engine: pql-test` rules (docs/contracts.md, "DAX rules in the contract"). Every rule here
+# passes against the live model (verified 2026-10-29; see python/tests/test_contract_live.py,
+# test_example_contracts_pass_every_mapped_rule).
+#
+# One of three examples/contracts/ files. See starter.odcs.yaml for a plain schema contract,
+# and freshness.odcs.yaml for latency and frequency.
+apiVersion: v3.1.0
+kind: DataContract
+id: scenario-tests-example
+name: Scenario Tests Example
+version: 1.0.0
+status: draft
+schema:
+  - name: MarvelFact
+    quality:
+      # Expression + comparator: a measure's value in the model's default filter context.
+      # ODCS has no metric for this, so it would otherwise be invisible to a contract.
+      - id: character-count-is-plausible
+        type: custom
+        engine: pql-test
+        description: Number of Characters is well above 1000 (a sanity floor, not the exact count)
+        implementation:
+          expression: "[Number of Characters]"
+          mustBeGreaterThan: 1000
+
+      # Expression + comparator, on a boolean expression: any condition you can write in DAX
+      # becomes a scenario test this way, not just a single numeric comparison.
+      - id: running-total-does-not-exceed-row-count
+        type: custom
+        engine: pql-test
+        description: Running Total of Character Appearances never exceeds the base row count
+        implementation:
+          expression: "[Running Total of Character Appearances] <= COUNTROWS('MarvelFact')"
+          mustBe: true
+
+      # Direct call: PQL.Assert.ShouldStartWith (the generic, non-column form) on a measure.
+      # A measure has no column to attach a `pattern` rule to, so only a direct call reaches it.
+      - id: title-measure-has-the-expected-prefix
+        type: custom
+        engine: pql-test
+        description: Number of Characters Title By Date starts with the expected prefix
+        implementation:
+          function: PQL.Assert.ShouldStartWith
+          args: ['"Number of Characters that first appeared "', "[Number of Characters Title By Date]"]
+
+      # Direct call: PQL.Assert.Col.MeanShouldBeInRange, a statistic ODCS has no metric for.
+      - id: appearances-mean-is-in-range
+        type: custom
+        engine: pql-test
+        description: Appearances average stays within a plausible range
+        implementation:
+          function: PQL.Assert.Col.MeanShouldBeInRange
+          args: ["'MarvelFact'[Appearances]", 0, 100]

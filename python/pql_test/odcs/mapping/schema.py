@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 
 from pql_test.odcs.datatypes import LOGICAL_TYPES, MODEL_TYPES, model_type
@@ -23,6 +22,14 @@ from pql_test.odcs.mapping.context import (
     is_text,
     mapped,
     skipped,
+)
+from pql_test.odcs.mapping.validity import (
+    LENGTH_KEYS,
+    RANGE_KEYS,
+    enum_rule,
+    length_rule,
+    option_skips,
+    range_rule,
 )
 from pql_test.odcs.naming import DATA_TYPE_KEY, custom_property
 
@@ -136,7 +143,6 @@ _TYPE_OPTION_RELEASES = (
     (("minLength", "maxLength"), "planned (Col.TextLengthShouldBeInRange)"),
     (("pattern",), "planned for a later release (ShouldMatch per gap plan C3 / R7)"),
 )
-RELATIONSHIP_REASON = "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
 
 
 def type_rule(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> RuleOutcome | None:
@@ -175,20 +181,13 @@ def type_rule(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> RuleO
 
 
 def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope: str) -> list[RuleOutcome]:
-    """The column type rule, plus the enum and logicalTypeOptions rules (patterns from PQL.Assert 0.8)."""
+    """The column type rule, plus the enum and logicalTypeOptions rules (values and patterns from PQL.Assert 0.8)."""
     out = []
     typed = type_rule(ctx, obj, prop, scope)
     if typed is not None:
         out.append(typed)
     if prop.get("enum"):
-        values = [str(e.get("value")) if isinstance(e, Mapping) else str(e) for e in prop["enum"]]
-        out.append(
-            skipped(
-                f"{scope}.enum",
-                "enum (allowed values, ODCS 3.2) is planned (Col.ValuesShouldBeInSet)",
-                f"{scope} is one of {', '.join(values)}",
-            )
-        )
+        out.append(enum_rule(ctx, obj, prop, scope))
     options = prop.get("logicalTypeOptions") or {}
     handled: tuple = ()
     if options.get("pattern") and ctx.supports("col.contains"):
@@ -199,77 +198,23 @@ def scheduled_property_rules(ctx: MapContext, obj: Mapping, prop: Mapping, scope
         description = f"{scope} matches pattern {options['pattern']}"
         out.append(pattern_outcome(ctx, f"{scope}.pattern", target, options["pattern"], description))
         handled = ("pattern",)
+    if ctx.supports("col.in_range"):
+        for rule in (range_rule(ctx, obj, prop, scope, options), length_rule(ctx, obj, prop, scope, options)):
+            if rule is not None:
+                out.append(rule)
+        handled += (*RANGE_KEYS, *LENGTH_KEYS)
     checkable = []
     for keys, release in _TYPE_OPTION_RELEASES:
         present = [k for k in keys if k in options and k not in handled]
         if present:
             checkable.append(f"{', '.join(present)} checks are {release}")
+    checkable.extend(option_skips(options, handled))
     if checkable:
         remaining = sorted(k for k in options if k not in handled)
         out.append(
             skipped(f"{scope}.logicalTypeOptions", "; ".join(checkable), f"{scope} logicalTypeOptions {remaining}")
         )
     return out
-
-
-def relationship_rules(element: Mapping, scope: str) -> list[RuleOutcome]:
-    """v3.1 relationships on a schema object or property (planned)."""
-    return [
-        skipped(f"{scope}.relationships[{i}]", RELATIONSHIP_REASON, f"{scope} relationship to {rel.get('to', '?')}")
-        for i, rel in enumerate(element.get("relationships") or [])
-    ]
-
-
-_DAY_UNITS = {"d": 1.0, "day": 1.0, "days": 1.0, "h": 1 / 24, "hr": 1 / 24, "hour": 1 / 24, "hours": 1 / 24}
-LATENCY_APPROXIMATION = (
-    "latency is checked as the age, in UTC days, of the newest value in the element column "
-    "(Col.MaxDateShouldBeWithinDays); the result depends on when the test runs"
-)
-
-
-def sla_rules(ctx: MapContext, contract_data: Mapping) -> list[RuleOutcome]:
-    """Contract-level SLA properties: ``latency`` maps to a freshness check from PQL.Assert 0.8 (gap plan R8)."""
-    out = []
-    for i, sla in enumerate(contract_data.get("slaProperties") or []):
-        rule_id, description = f"slaProperties[{i}]", f"SLA {sla.get('property', '?')}"
-        if not ctx.supports("col.max_date_within_days"):
-            out.append(
-                skipped(rule_id, "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)", description)
-            )
-            continue
-        out.append(_latency(ctx, sla, rule_id, description))
-    return out
-
-
-def _latency(ctx: MapContext, sla: Mapping, rule_id: str, description: str) -> RuleOutcome:
-    if sla.get("property") != "latency":
-        return skipped(
-            rule_id, f"SLA property {sla.get('property')!r} has no PQL.Assert check; only latency maps", description
-        )
-    value, unit = sla.get("value"), str(sla.get("unit", "")).lower()
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
-        return skipped(rule_id, f"latency needs a non-negative number, got {value!r}", description)
-    if unit not in _DAY_UNITS:
-        return skipped(rule_id, f"latency unit {sla.get('unit')!r} is not days or hours", description)
-    element = str(sla.get("element") or "")
-    table_name, _, column_name = element.partition(".")
-    obj = next((o for o in ctx.contract.schema_objects if o["name"] == table_name), None)
-    prop = next((p for p in (obj or {}).get("properties") or [] if p.get("name") == column_name), None)
-    if obj is None or prop is None or not is_column(prop):
-        return skipped(
-            rule_id, f"latency element {element!r} is not a table.column in the contract schema", description
-        )
-    target = Target(ctx.names.table(obj), ctx.names.column(obj, prop))
-    days = round(value * _DAY_UNITS[unit], 6)
-    assertion = Assertion(
-        rule_id,
-        DATA_QUALITY_SUITE,
-        "col.max_date_within_days",
-        target,
-        {"maxAgeDays": days},
-        f"{element} is at most {value} {sla.get('unit')} old",
-    )
-    return approximated(rule_id, LATENCY_APPROXIMATION, assertion)
 
 
 def _distinct(rule_id: str, target: Target, description: str) -> Assertion:

@@ -220,23 +220,30 @@ def coverage_cmd(contract_path, output_format, closed_schema, pql_assert, fail_o
 def lint_cmd(contract_path, model_path, output_format):
     """Schema-validate CONTRACT and check that its names resolve (in MODEL_PATH, when given)."""
     from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.catalog import LATEST_PQL_ASSERT
     from pql_test.odcs.datatypes import tmdl_model_type
+    from pql_test.odcs.ir import CONTRACT_DAX, Status
     from pql_test.odcs.loader import ContractError
     from pql_test.odcs.mapping.context import is_column
     from pql_test.odcs.naming import DATA_TYPE_KEY
     from pql_test.odcs.pbip import (
         ModelPathError,
         model_columns,
+        model_relationships,
         require_semantic_model_dir,
     )
 
     problems: list[str] = []
     try:
-        plan = plan_contract(contract_path)
+        # The newest catalog, so a rule that only an older PQL.Assert cannot run is not a problem.
+        plan = plan_contract(contract_path, pql_assert=LATEST_PQL_ASSERT)
     except ContractError as exc:
         plan, problems = None, exc.problems or [str(exc)]
     if plan is not None:
         problems.extend(plan.names.problems())
+        problems.extend(
+            f"{o.rule_id}: {o.reason}" for o in plan.outcomes if o.source == CONTRACT_DAX and o.status is Status.SKIPPED
+        )
         problems.extend(
             f"{o.rule_id}: {o.reason}"
             for o in plan.outcomes
@@ -261,6 +268,7 @@ def lint_cmd(contract_path, model_path, output_format):
                             f"{obj['name']}.{prop['name']}: column {column!r} not found in model table {table!r}"
                         )
             problems.extend(_type_problems(plan, model_ci, tmdl_model_type))
+            problems.extend(_relationship_problems(plan, model_relationships(require_semantic_model_dir(model_path))))
     name = Path(contract_path).name
     if output_format == "json":
         emit_result(
@@ -303,6 +311,27 @@ def _type_problems(plan, model_ci: dict, tmdl_model_type) -> list[str]:
                     f"{outcome.rule_id}: column {a.target.column!r} is {actual} in the model, the contract expects "
                     f"{expected} (set pbiDataType to pin another model type)"
                 )
+    return problems
+
+
+def _relationship_problems(plan, model: set[tuple[str, str, str, str]]) -> list[str]:
+    """Contract relationships (any catalog) that the model's TMDL does not define, from foreign key to key."""
+    from pql_test.odcs.mapping.relationships import relationship_entries, resolve
+
+    defined = {tuple(n.lower() for n in r) for r in model}
+    problems = []
+    for obj, prop, scope, index, rel in relationship_entries(plan.contract):
+        found = resolve(plan.contract, plan.names, obj, prop, rel)
+        if isinstance(found, str):
+            continue  # reported as skipped by `coverage`
+        key = tuple(n.lower() for n in found)
+        if key in defined:
+            continue
+        where = "is defined from the key side in the model" if key[2:] + key[:2] in defined else "is not in the model"
+        problems.append(
+            f"{scope}.relationships[{index}]: relationship {found.from_table}[{found.from_column}] -> "
+            f"{found.to_table}[{found.to_column}] {where}"
+        )
     return problems
 
 

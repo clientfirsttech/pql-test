@@ -82,7 +82,7 @@ exclude = ["tests*"]
 [tool.setuptools.package-data]
 pql_test = ["skills/**/*.md"]
 "pql_test.odcs" = ["schemas/*.json", "schemas/*.txt"]
-"pql_test.odcs.catalog" = ["*.yaml"]
+"pql_test.odcs.catalog" = ["*.yaml"]  # pql_assert_*.yaml, pql_assert_functions.yaml, odcs_rules.yaml
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

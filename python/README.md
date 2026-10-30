@@ -1342,7 +1342,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 | `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
 | `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
 | `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
-| `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table and column resolves in the model |
+| `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table, column, and relationship resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
 | `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them, and traces every failure back to its contract rule id. It writes no files and never changes the model; `--write` also saves the suites into `DAXQueries/` |
 | `pql-test contract trace CONTRACT RESULTS_JSON` | Joins an earlier `run-tests --output` file to the contract's rule ids |
@@ -1367,6 +1367,10 @@ The generated files follow the rules below:
 You can regenerate the suites in CI on every run, or commit them to the PBIP repo and fail CI when they drift from the contract. [docs/contracts.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md) compares the two workflows, and documents the full rule mapping and name resolution (`pbiTable` / `pbiColumn` custom properties on the contract).
 
 Each property's `logicalType` is checked against the column's model data type (for example `integer` → `Integer`, TMDL `int64`); the ODCS-to-model type table and the `pbiDataType` override are in [Column types](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#column-types).
+
+Scenario tests, such as a measure's value in a given filter context, can live in the contract too: an ODCS `type: custom` rule with `engine: pql-test` holds a DAX expression and a comparator, or calls any PQL.Assert assertion by name. See [DAX rules in the contract](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#dax-rules-in-the-contract-engine-pql-test).
+
+Freshness is two checks. An ODCS `latency` SLA on a timestamp column checks **data age** (how old the newest row is), and a `frequency` SLA on a table checks **refresh recency** (when the model last refreshed). A refresh that succeeds against stale source data passes the second and fails the first, so a contract usually wants both. See [Freshness: latency vs frequency](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#freshness-latency-vs-frequency).
 
 ---
 

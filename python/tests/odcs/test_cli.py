@@ -233,3 +233,49 @@ def test_lint_model_names_are_case_insensitive(tmp_path):
     result = _run("lint", _write_contract(tmp_path), model)
 
     assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
+
+
+class TestLintRelationships:
+    def _contract(self, tmp_path):
+        fk = prop("dim_id", "integer", relationships=[{"to": "dim.id"}])
+        data = contract_dict(schema=[schema_object("Fact Table", [fk]), schema_object("dim", [prop("id", "integer")])])
+        return _write_contract(tmp_path, data)
+
+    def _model(self, tmp_path, relationship: str):
+        model = _pbip(tmp_path, {"'Fact Table'": ["dim_id"], "dim": ["id"]})
+        tmdl = model / "Sample.SemanticModel" / "definition" / "relationships.tmdl"
+        tmdl.write_text(f"relationship 1a2b\n{relationship}", encoding="utf-8")
+        return model
+
+    def test_relationship_in_the_model_passes(self, tmp_path):
+        given = "a contract foreign key the model defines (quoted table name)"
+        should = "pass lint"
+        model = self._model(tmp_path, "\tfromColumn: 'Fact Table'.dim_id\n\ttoColumn: dim.id\n")
+
+        result = _run("lint", self._contract(tmp_path), model)
+
+        assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
+
+    def test_reversed_relationship_is_reported(self, tmp_path):
+        given = "a contract foreign key the model defines from the key side"
+        should = "fail lint, saying the model defines it from the key side"
+        model = self._model(tmp_path, "\tfromColumn: dim.id\n\ttoColumn: 'Fact Table'.dim_id\n")
+
+        result = _run("lint", self._contract(tmp_path), model)
+
+        assert (result.exit_code, "is defined from the key side in the model" in result.output) == (
+            1,
+            True,
+        ), f"{given}: {should}\n{result.output}"
+
+    def test_missing_relationship_is_reported(self, tmp_path):
+        given = "a contract foreign key the model does not define"
+        should = "fail lint, naming the relationship"
+        model = _pbip(tmp_path, {"'Fact Table'": ["dim_id"], "dim": ["id"]})
+
+        result = _run("lint", self._contract(tmp_path), model)
+
+        assert (result.exit_code, "Fact Table[dim_id] -> dim[id] is not in the model" in result.output) == (
+            1,
+            True,
+        ), f"{given}: {should}\n{result.output}"

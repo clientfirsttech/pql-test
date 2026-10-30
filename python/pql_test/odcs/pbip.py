@@ -146,6 +146,37 @@ def _scan_tables(semantic_model_dir: Path) -> dict[str, dict]:
     return tables
 
 
+def _tmdl_column_ref(raw: str) -> tuple[str, str]:
+    """``(table, column)`` from a TMDL ``Table.Column`` reference; either part may be quoted."""
+    raw = raw.strip()
+    if raw.startswith("'"):
+        table = _tmdl_name(raw)
+        rest = raw[len(table.replace("'", "''")) + 2 :]
+    else:
+        table, _, rest = raw.partition(".")
+        rest = "." + rest
+    return table, _tmdl_name(rest[1:])
+
+
+def model_relationships(semantic_model_dir: Path) -> set[tuple[str, str, str, str]]:
+    """``(from table, from column, to table, to column)`` per relationship in ``definition/relationships.tmdl``."""
+    tmdl = semantic_model_dir / "definition" / "relationships.tmdl"
+    if not tmdl.is_file():
+        return set()
+    found, ends = set(), {}
+    for line in [*tmdl.read_text(encoding="utf-8-sig").splitlines(), "relationship"]:
+        stripped = line.strip()
+        if stripped.startswith("relationship") and not line.startswith("\t"):
+            if "fromColumn" in ends and "toColumn" in ends:
+                found.add((*ends["fromColumn"], *ends["toColumn"]))
+            ends = {}
+            continue
+        key, _, value = stripped.partition(":")
+        if key in ("fromColumn", "toColumn"):
+            ends[key] = _tmdl_column_ref(value)
+    return found
+
+
 def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
     """``table -> {column: TMDL dataType or None}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
     return {name: t["columns"] for name, t in _scan_tables(semantic_model_dir).items()}

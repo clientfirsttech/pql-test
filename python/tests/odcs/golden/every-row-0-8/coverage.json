@@ -13,9 +13,9 @@
   },
   "summary": {
     "total": 46,
-    "mapped": 33,
-    "approximated": 0,
-    "skipped": 13
+    "mapped": 35,
+    "approximated": 2,
+    "skipped": 9
   },
   "rules": [
     {
@@ -161,21 +161,25 @@
     },
     {
       "ruleId": "orders.status.quality[0]",
-      "status": "skipped",
+      "status": "approximated",
       "description": "orders.status invalidValues mustBe 0",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ValuesShouldBeInSet"
+      ],
+      "severity": "error",
+      "reason": "DAX compares text without regard to case, so a value that differs from a listed value only in case also matches"
     },
     {
       "ruleId": "orders.status.quality[1]",
-      "status": "skipped",
+      "status": "approximated",
       "description": "orders.status missingValues mustBe 0",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": "DAX compares text without regard to case, so a value that differs from a listed value only in case also matches"
     },
     {
       "ruleId": "orders.status.quality[2]",
@@ -184,7 +188,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "pattern '^[a-z]+$': an exact-match pattern (^literal$) has no PQL.Assert column function"
+      "reason": "pattern '^[a-z]+$': regular expressions beyond ^literal, literal$, and a bare literal are not translated to DAX"
     },
     {
       "ruleId": "orders.status.quality[3]",
@@ -193,7 +197,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+      "reason": "invalidValues needs arguments.validValues (a list) or arguments.pattern"
     },
     {
       "ruleId": "orders.status.quality[4]",
@@ -218,13 +222,15 @@
       "reason": null
     },
     {
-      "ruleId": "orders.amount.logicalTypeOptions",
-      "status": "skipped",
-      "description": "orders.amount logicalTypeOptions ['maximum', 'minimum']",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "minimum, maximum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
+      "ruleId": "orders.amount.range",
+      "status": "mapped",
+      "description": "orders.amount is >= 0 and <= 100000",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.code.type",
@@ -238,13 +244,15 @@
       "reason": null
     },
     {
-      "ruleId": "orders.code.logicalTypeOptions",
-      "status": "skipped",
-      "description": "orders.code logicalTypeOptions ['maxLength', 'minLength']",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "minLength, maxLength checks are planned (Col.TextLengthShouldBeInRange)"
+      "ruleId": "orders.code.length",
+      "status": "mapped",
+      "description": "orders.code length is >= 2 and <= 8",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.TextLengthShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null
     },
     {
       "ruleId": "orders.address.zip.required",
@@ -262,7 +270,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "'customers.customer_id' names no column property in the contract schema"
     },
     {
       "ruleId": "orders.quality[0]",
@@ -496,7 +504,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "latency element '' is not a table.column in the contract schema"
+      "reason": "latency needs a timestamp column (table.column); refresh time is not source latency"
     }
   ]
 }

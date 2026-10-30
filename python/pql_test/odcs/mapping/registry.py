@@ -8,18 +8,19 @@ from collections import Counter
 from collections.abc import Iterator, Mapping
 
 from pql_test.odcs.catalog import Catalog, load_catalog
-from pql_test.odcs.ir import RuleOutcome, Status
+from pql_test.odcs.ir import CONTRACT_DAX, RuleOutcome, Status
 from pql_test.odcs.loader import Contract
 from pql_test.odcs.mapping.context import MapContext, is_column, skipped
+from pql_test.odcs.mapping.dax_rules import is_pql_test_rule, map_dax_rule
+from pql_test.odcs.mapping.freshness import sla_rules
 from pql_test.odcs.mapping.library import describe, map_library
+from pql_test.odcs.mapping.relationships import relationship_rules
 from pql_test.odcs.mapping.schema import (
     NO_COLUMN,
     nested_rules,
     object_rules,
     property_rules,
-    relationship_rules,
     scheduled_property_rules,
-    sla_rules,
 )
 
 _TYPE_REASONS = {
@@ -68,6 +69,9 @@ def _quality_rule_id(scope: str, index: int, rule: Mapping, duplicate_ids: set) 
 
 
 def _map_quality(ctx: MapContext, obj, prop, scope, rule_id, rule, top_level) -> RuleOutcome:
+    if is_pql_test_rule(rule):
+        # The contract wrote the DAX: mark the outcome (skipped too, so lint can report it).
+        return dataclasses.replace(map_dax_rule(ctx, rule, rule_id, obj, scope), source=CONTRACT_DAX)
     kind = rule.get("type", "library")
     if kind in _TYPE_REASONS:
         return skipped(rule_id, _TYPE_REASONS[kind], describe(rule, scope))
@@ -136,9 +140,9 @@ def map_contract(
                 outcomes.extend(scheduled_property_rules(ctx, obj, prop, scope))
             else:
                 outcomes.extend(nested_rules(prop, scope))
-            outcomes.extend(relationship_rules(prop, scope))
+            outcomes.extend(relationship_rules(ctx, obj, prop, scope, top_level and is_column(prop)))
             outcomes.extend(quality_by_scope.pop(scope, []))
-        outcomes.extend(relationship_rules(obj, obj["name"]))
+        outcomes.extend(relationship_rules(ctx, obj, None, obj["name"]))
         outcomes.extend(quality_by_scope.pop(obj["name"], []))
     outcomes.extend(sla_rules(ctx, contract.data))
     return _dedupe(_unique_ids(outcomes))

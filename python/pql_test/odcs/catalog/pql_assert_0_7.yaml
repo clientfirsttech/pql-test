@@ -18,6 +18,7 @@
 #   dataType    the assertion's `types`: one model type name  -> DAX string;
 #               several -> the column's type when it is one of them, else the first
 #   rowCount    the target table's row count                 -> COUNTROWS('Table')
+#   expression  the assertion's `expression`: DAX from the contract (engine: pql-test), unchanged
 #   <other>     the assertion argument of that name          -> DAX literal
 
 library: PQL.Assert
@@ -72,3 +73,30 @@ ops:
   col.distinct:
     fn: PQL.Assert.Col.ShouldBeDistinct
     args: [testName, columnRef]
+  # `type: custom`, `engine: pql-test` rules: a contract-supplied DAX expression compared
+  # with the rule's comparator. These scalar assertions predate 0.7.1 (they are in 0.4.0).
+  dax.equal:
+    fn: PQL.Assert.ShouldEqual
+    args: [testName, expected, expression]
+  dax.equal_exactly:
+    # Text: DAX `=` ignores case, the contract's value does not.
+    fn: PQL.Assert.ShouldEqualExactly
+    args: [testName, expected, expression]
+  dax.not_equal:
+    fn: PQL.Assert.ShouldNotEqual
+    args: [testName, expected, expression]
+  dax.gt:
+    fn: PQL.Assert.ShouldBeGreaterThan
+    args: [testName, threshold, expression]
+  dax.ge:
+    fn: PQL.Assert.ShouldBeGreaterOrEqual
+    args: [testName, threshold, expression]
+  dax.lt:
+    fn: PQL.Assert.ShouldBeLessThan
+    args: [testName, threshold, expression]
+  dax.le:
+    fn: PQL.Assert.ShouldBeLessOrEqual
+    args: [testName, threshold, expression]
+  dax.between:
+    fn: PQL.Assert.ShouldBeBetween
+    args: [testName, lower, upper, expression]

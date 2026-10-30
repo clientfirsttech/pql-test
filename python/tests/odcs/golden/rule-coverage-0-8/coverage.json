@@ -1,0 +1,523 @@
+{
+  "schemaVersion": 1,
+  "generator": "pql-test GOLDEN",
+  "catalog": {
+    "library": "PQL.Assert",
+    "minVersion": "0.8.0"
+  },
+  "contract": {
+    "id": "rule-coverage",
+    "name": "Rule Coverage",
+    "apiVersion": "3.2.0",
+    "source": "rule-coverage.odcs.yaml"
+  },
+  "summary": {
+    "total": 46,
+    "mapped": 31,
+    "approximated": 9,
+    "skipped": 6
+  },
+  "rules": [
+    {
+      "ruleId": "orders.exists",
+      "status": "mapped",
+      "description": "orders exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.columns",
+      "status": "mapped",
+      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, is_active, ship_time, status, priority, region, loaded_at, order_date",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.primaryKey",
+      "status": "mapped",
+      "description": "orders.order_id is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBePrimaryKey"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.type",
+      "status": "mapped",
+      "description": "orders.order_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.type",
+      "status": "mapped",
+      "description": "orders.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.relationships[0]",
+      "status": "mapped",
+      "description": "orders.customer_id relationship to customers.customer_id",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Relationship.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quantity.type",
+      "status": "mapped",
+      "description": "orders.quantity is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quantity.range",
+      "status": "mapped",
+      "description": "orders.quantity is > 0 and < 1000",
+      "assertions": 2,
+      "functions": [
+        "PQL.Assert.Col.ShouldBePositive",
+        "PQL.Assert.Col.MaxShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.type",
+      "status": "mapped",
+      "description": "orders.amount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.range",
+      "status": "mapped",
+      "description": "orders.amount is >= 0 and <= 100000",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.amount logicalTypeOptions ['multipleOf']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "multipleOf has no PQL.Assert check"
+    },
+    {
+      "ruleId": "orders.discount.type",
+      "status": "mapped",
+      "description": "orders.discount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.discount.range",
+      "status": "mapped",
+      "description": "orders.discount is > 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBePositive"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.code.type",
+      "status": "mapped",
+      "description": "orders.code is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.code.pattern",
+      "status": "mapped",
+      "description": "orders.code matches pattern ^OR",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldStartWith"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.code.length",
+      "status": "mapped",
+      "description": "orders.code length is >= 2",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.TextLengthShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.is_active.type",
+      "status": "mapped",
+      "description": "orders.is_active is boolean (True/False in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.ship_time.type",
+      "status": "approximated",
+      "description": "orders.ship_time is time (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.status.type",
+      "status": "mapped",
+      "description": "orders.status is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.status.enum",
+      "status": "approximated",
+      "description": "orders.status is one of open, closed",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ValuesShouldBeInSet"
+      ],
+      "severity": "error",
+      "reason": "DAX compares text without regard to case, so a value that differs from a listed value only in case also matches"
+    },
+    {
+      "ruleId": "orders.status.quality[0]",
+      "status": "approximated",
+      "description": "orders.status invalidValues mustBeLessOrEqualTo 5",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowRateShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": "DAX compares text without regard to case, so a value that differs from a listed value only in case also matches"
+    },
+    {
+      "ruleId": "orders.status.quality[1]",
+      "status": "mapped",
+      "description": "orders.status missingValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.priority.type",
+      "status": "mapped",
+      "description": "orders.priority is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.priority.quality[0]",
+      "status": "mapped",
+      "description": "orders.priority invalidValues mustBe 0",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ValuesShouldBeInSet"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.priority.quality[1]",
+      "status": "mapped",
+      "description": "orders.priority invalidValues mustBeLessThan 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.priority.quality[2]",
+      "status": "mapped",
+      "description": "orders.priority missingValues mustBeLessOrEqualTo 2",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowRateShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.region.type",
+      "status": "mapped",
+      "description": "orders.region is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.region.quality[0]",
+      "status": "approximated",
+      "description": "orders.region missingValues mustBeLessOrEqualTo 10",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.RowCountShouldBeAtMost"
+      ],
+      "severity": "error",
+      "reason": "DAX compares text without regard to case, so a value that differs from a listed value only in case also matches"
+    },
+    {
+      "ruleId": "orders.loaded_at.type",
+      "status": "approximated",
+      "description": "orders.loaded_at is timestamp (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.order_date.type",
+      "status": "approximated",
+      "description": "orders.order_date is date (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.quality[0]",
+      "status": "mapped",
+      "description": "Order count is 0, not blank, for a year with no data",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldEqual"
+      ],
+      "severity": "error",
+      "reason": null,
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[1]",
+      "status": "mapped",
+      "description": "Average quantity stays between 1 and 50",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeBetween"
+      ],
+      "severity": "warning",
+      "reason": null,
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[2]",
+      "status": "mapped",
+      "description": "Order status label is exactly Open",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldEqualExactly"
+      ],
+      "severity": "error",
+      "reason": null,
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[3]",
+      "status": "mapped",
+      "description": "Quantity mean is in range",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.MeanShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null,
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[4]",
+      "status": "skipped",
+      "description": "A query is not an expression",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "implementation.expression has EVALUATE (the DAX must be an expression, not a query)",
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "customers.exists",
+      "status": "mapped",
+      "description": "customers exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.columns",
+      "status": "mapped",
+      "description": "customers has columns customer_id",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.customer_id.primaryKey",
+      "status": "mapped",
+      "description": "customers.customer_id is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBePrimaryKey"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.customer_id.type",
+      "status": "mapped",
+      "description": "customers.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.relationships[0]",
+      "status": "skipped",
+      "description": "customers relationship to orders.nope",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "'orders.nope' names no column property in the contract schema"
+    },
+    {
+      "ruleId": "slaProperties[0]",
+      "status": "approximated",
+      "description": "orders.loaded_at is at most 3 h old",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.MaxDateShouldBeWithinHours"
+      ],
+      "severity": "error",
+      "reason": "latency is checked as the age, in UTC, of the newest value in the element column (Col.MaxDateShouldBeWithinDays / Hours): it measures the source delay plus the refresh delay, as the model's users see it, and the result depends on when the test runs"
+    },
+    {
+      "ruleId": "slaProperties[1]",
+      "status": "approximated",
+      "description": "orders.loaded_at is at most 2 d old",
+      "assertions": 2,
+      "functions": [
+        "PQL.Assert.Col.MaxDateShouldBeWithinDays",
+        "PQL.Assert.Col.MaxDateShouldBeWithinDays"
+      ],
+      "severity": "error",
+      "reason": "latency is checked as the age, in UTC, of the newest value in the element column (Col.MaxDateShouldBeWithinDays / Hours): it measures the source delay plus the refresh delay, as the model's users see it, and the result depends on when the test runs"
+    },
+    {
+      "ruleId": "slaProperties[2]",
+      "status": "skipped",
+      "description": "SLA latency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "latency needs a timestamp column (table.column); refresh time is not source latency"
+    },
+    {
+      "ruleId": "slaProperties[3]",
+      "status": "approximated",
+      "description": "orders refreshed within the last 1 d",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeLessOrEqual"
+      ],
+      "severity": "error",
+      "reason": "frequency is checked as the hours since the table's partitions last refreshed (INFO.PARTITIONS): it proves the refresh ran, not that the source sent new data (check that with latency)"
+    },
+    {
+      "ruleId": "slaProperties[4]",
+      "status": "skipped",
+      "description": "SLA timeOfAvailability",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "timeOfAvailability is a time of day; a test of it would depend on when it runs, so it is not checked"
+    },
+    {
+      "ruleId": "slaProperties[5]",
+      "status": "skipped",
+      "description": "SLA retention",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "retention (how long data is kept) has no PQL.Assert check yet (Partitions.ShouldExist could approximate it)"
+    }
+  ]
+}
