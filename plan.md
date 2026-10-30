@@ -97,7 +97,7 @@
 - With `--pql-assert 0.8`: numeric bounds, text length, `enum`, `invalidValues` value lists, `missingValues`, and `relationships` map to PQL.Assert; `lint` checks relationships against the TMDL. 0.7 output is unchanged.
 - `type: custom` rules with `engine: pql-test` carry DAX (an expression and a comparator, or a direct PQL.Assert call), run in their own `ContractDax` suite. `pql_assert_functions.yaml` classifies all 126 PQL.Assert 0.8.0 functions, and a test fails on an unclassified one.
 - Freshness: `latency` is data age (a timestamp column), `frequency` is refresh recency (`INFO.PARTITIONS()`, in its own `RefreshAge` suite). [docs/pql-assert-freshness-request.md](docs/pql-assert-freshness-request.md) asks PQL.Assert 0.9.0 for a refresh function and docs that separate the two.
-- Proven live against SampleModel (`rule-coverage-live.odcs.yaml`, 45 rules with pinned outcomes and failure text). Still for the maintainer: run the frequency check as an identity without `INFO.*` permission, to see only `RefreshAge` error.
+- Proven live against SampleModel (`rule-coverage-live.odcs.yaml`, 45 rules with pinned outcomes and failure text). Confirmed 2026-10-29: the standard service principal in `python/.env` reads `INFO.PARTITIONS()` fine (it already does, for `Partitions.*`), so `RefreshAge` runs cleanly end to end with the identity pql-test uses everywhere; no separate restricted-identity gap to chase.
 
 ### 2026-10-28 — pql-odcs merged into pql-test; AGPL-3.0-only (branch `dev-odcs`)
 
