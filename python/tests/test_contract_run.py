@@ -204,7 +204,7 @@ class TestTraceAnnotations:
 class TestContractDoctor:
     @staticmethod
     def _doctor(monkeypatch, conn, reported, *args):
-        """Run `pql-test contract doctor` on examples/SampleModel (PQL.Assert 0.8.0) with a stubbed connection."""
+        """Run `pql-test contract doctor` on examples/SampleModel (PQL.Assert 0.9.0) with a stubbed connection."""
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: conn)
 
         def query(_conn, dax):
@@ -240,15 +240,15 @@ class TestContractDoctor:
         ) == (0, "ok", True, "warn"), f"{given}: {should}\n{result.output}"
 
     def test_matching_deployed_library(self, monkeypatch):
-        given = "a deployed model reporting PQL.Assert 0.8.0, like the folder"
+        given = "a deployed model reporting PQL.Assert 0.9.0, like the folder"
         should = "report the deployed version and no drift"
         from types import SimpleNamespace
 
-        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "0.8.0")
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "0.9.0")
 
         checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
         assert (checks["Deployed PQL.Assert"]["detail"], checks["Deployed vs. model folder"]["status"]) == (
-            "0.8.0",
+            "0.9.0",
             "ok",
         ), f"{given}: {should}\n{result.output}"
 
