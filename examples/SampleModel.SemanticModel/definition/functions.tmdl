@@ -2980,8 +2980,8 @@ function 'PQL.Assert.ShouldNotBeBetween' =
 	annotation DAXLIB_PackageVersion = 0.9.0
 
 /// Library Version - PQL.Assert namespace
-/// Returns the installed PQL.Assert version as text, e.g. "0.8.0". Added in 0.8.0: if EVALUATE { PQL.Assert.LibraryVersion() } errors, the model has 0.7.x or older.
-function 'PQL.Assert.LibraryVersion' = () => "0.8.0"
+/// Returns the installed PQL.Assert version as text, e.g. "0.9.0". Added in 0.8.0: if EVALUATE { PQL.Assert.LibraryVersion() } errors, the model has 0.7.x or older.
+function 'PQL.Assert.LibraryVersion' = () => "0.9.0"
 	lineageTag: 2698353b-10e3-4138-be26-a046cdf057d7
 
 	annotation DAXLIB_PackageId = PQL.Assert
