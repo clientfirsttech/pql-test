@@ -30,6 +30,7 @@ CASES = {
     "every-row-0-8": {"contract": "every-row.odcs.yaml", "closed_schema": True, "pql_assert": "0.8"},
     "rule-coverage": {"contract": "rule-coverage.odcs.yaml"},
     "rule-coverage-0-8": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.8"},
+    "rule-coverage-0-9": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.9"},
 }
 
 

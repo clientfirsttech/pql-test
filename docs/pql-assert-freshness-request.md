@@ -1,5 +1,7 @@
 # PQL.Assert 0.9.0 request: refresh recency, and latency vs frequency in the docs
 
+**Fulfilled (2026-11-02):** PQL.Assert 0.9.0 shipped `Tbl.LastRefreshShouldBeWithinHours` (commit [`d181ac8`](https://github.com/clientfirsttech/PQL.Assert/commit/d181ac8)), close to the function requested below plus some refinements (DirectQuery tables report `DIRECTQUERY (no refresh)`). `pql-test contract` adopts it with `--pql-assert 0.9`; see [contracts.md](contracts.md#pqlassert-09). The rest of this document is the original request, kept as a historical record.
+
 **For:** the PQL.Assert repository (a maintainer, or an AI agent working there).
 **From:** pql-test, whose `pql-test contract` command turns ODCS data contracts into PQL.Assert test suites.
 **Asks for:** one new function, `PQL.Assert.Tbl.LastRefreshShouldBeWithinHours`, and documentation changes that separate two kinds of freshness. Nothing existing changes behaviour.

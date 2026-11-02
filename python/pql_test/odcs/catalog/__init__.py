@@ -11,9 +11,9 @@ import yaml
 
 DEFAULT_CATALOG = "pql_assert_0_7"
 # `--pql-assert` choices -> bundled catalog. The default stays 0.7 until 0.8 is common.
-PQL_ASSERT_CATALOGS = {"0.7": "pql_assert_0_7", "0.8": "pql_assert_0_8"}
+PQL_ASSERT_CATALOGS = {"0.7": "pql_assert_0_7", "0.8": "pql_assert_0_8", "0.9": "pql_assert_0_9"}
 DEFAULT_PQL_ASSERT = "0.7"
-LATEST_PQL_ASSERT = "0.8"
+LATEST_PQL_ASSERT = "0.9"
 
 
 class CatalogError(Exception):
@@ -89,7 +89,7 @@ def load_signatures() -> Signatures:
 
 
 def catalog_for(pql_assert: str = DEFAULT_PQL_ASSERT) -> Catalog:
-    """The bundled catalog for a ``--pql-assert`` choice (``"0.7"`` or ``"0.8"``)."""
+    """The bundled catalog for a ``--pql-assert`` choice (``"0.7"``, ``"0.8"``, or ``"0.9"``)."""
     try:
         return load_catalog(PQL_ASSERT_CATALOGS[str(pql_assert)])
     except KeyError:

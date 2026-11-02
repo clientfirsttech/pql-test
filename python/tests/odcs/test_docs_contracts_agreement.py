@@ -29,9 +29,6 @@ DOCS = (Path(__file__).resolve().parent.parent.parent.parent / "docs" / "contrac
 # ("add a `logicalType` or a `pbiDataType`"), and a table cell may capitalise what a reason
 # string does not ("Regular expressions beyond..." vs "regular expressions beyond...").
 DOCS_PLAIN = DOCS.replace("`", "").lower()
-# Mentioned ahead of its release: PQL.Assert 0.9 is requested (docs/pql-assert-freshness-request.md),
-# so no classification can exist for it yet in the bundled 0.8.0 signatures.
-_NOT_YET_RELEASED = {"Tbl.LastRefreshShouldBeWithinHours"}
 _IDENT_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:\.[A-Z][A-Za-z0-9]*)*\b")
 
 
@@ -62,18 +59,16 @@ def _named_in(function: str, mentions: set[str]) -> bool:
 
 def test_every_function_docs_name_is_a_real_pql_assert_function():
     given = "every PQL.Assert function docs/contracts.md names in backticks"
-    should = (
-        "be a function the bundled PQL.Assert 0.8.0 library actually has (any classification), or a named 0.9 request"
-    )
+    should = "be a function the bundled PQL.Assert 0.9.0 library actually has (any classification)"
     all_functions = {name.removeprefix("PQL.Assert.") for name in load_signatures().functions}
 
-    unknown = [n for n in _doc_function_mentions() if n not in _NOT_YET_RELEASED and not _known(n, all_functions)]
+    unknown = [n for n in _doc_function_mentions() if not _known(n, all_functions)]
 
     assert unknown == [], f"{given}: {should}\nUnknown: {', '.join(sorted(unknown))}"
 
 
 def test_every_catalog_generated_function_is_named_in_docs():
-    given = "every function some catalog op (0.7 or 0.8) actually calls"
+    given = "every function some catalog op (0.7, 0.8, or 0.9) actually calls"
     should = "be named in docs/contracts.md somewhere (full or bare form)"
     catalog_functions = {
         spec.fn.removeprefix("PQL.Assert.")

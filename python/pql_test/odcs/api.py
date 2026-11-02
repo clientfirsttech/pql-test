@@ -59,7 +59,7 @@ def plan_contract(
     Args:
         source: YAML path, parsed dict, or a ``Contract``.
         closed_schema: also forbid columns the contract does not list.
-        pql_assert: PQL.Assert version to target, ``"0.7"`` (default) or ``"0.8"``.
+        pql_assert: PQL.Assert version to target, ``"0.7"`` (default), ``"0.8"``, or ``"0.9"``.
 
     Raises:
         CatalogError: *pql_assert* is not a bundled version.

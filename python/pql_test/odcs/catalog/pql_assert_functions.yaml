@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 #
-# Every function in PQL.Assert 0.8.0, with its parameter count and how a contract reaches it.
+# Every function in PQL.Assert 0.9.0, with its parameter count and how a contract reaches it.
 # python/tests/odcs/test_function_matrix.py keeps this file in step with the vendored library
 # and the catalogs: a function PQL.Assert adds fails that test until it is listed here.
 #
@@ -14,7 +14,7 @@
 #                     are discovery helpers, not assertions
 
 library: PQL.Assert
-version: "0.8.0"
+version: "0.9.0"
 functions:
   PQL.Assert.BP.CheckDAXExpressions: {params: 0, optional: 0, use: none}
   PQL.Assert.BP.CheckErrorPrevention: {params: 0, optional: 0, use: none}
@@ -133,6 +133,7 @@ functions:
   PQL.Assert.ShouldNotEqual: {params: 3, optional: 0, use: mapped}
   PQL.Assert.ShouldStartWith: {params: 3, optional: 0, use: dax}
   PQL.Assert.Tbl.ColumnDataTypeShouldBe: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Tbl.LastRefreshShouldBeWithinHours: {params: 3, optional: 0, use: mapped}
   PQL.Assert.Tbl.RowCountShouldBeAtMost: {params: 3, optional: 0, use: mapped}
   PQL.Assert.Tbl.RowRateShouldBeAtMost: {params: 4, optional: 0, use: mapped}
   PQL.Assert.Tbl.RowsShouldBeDistinct: {params: 2, optional: 0, use: mapped}

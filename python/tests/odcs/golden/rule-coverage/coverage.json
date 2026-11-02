@@ -345,7 +345,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "direct PQL.Assert calls need --pql-assert 0.8 (signatures from 0.8.0)",
+      "reason": "direct PQL.Assert calls need --pql-assert 0.9 (signatures from 0.9.0)",
       "source": "contract-dax"
     },
     {

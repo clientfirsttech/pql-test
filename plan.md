@@ -49,7 +49,6 @@
 
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
-  - adopt PQL.Assert 0.9.0 once it ships: a `pql_assert_0_9` catalog that maps `frequency` to `Tbl.LastRefreshShouldBeWithinHours` (requested in [docs/pql-assert-freshness-request.md](docs/pql-assert-freshness-request.md));
   - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
   - a PQL.Assert minimum-version warning in `contract run`.
 
@@ -82,6 +81,17 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-11-02 — Adopt PQL.Assert 0.9.0: native refresh-recency check (branch `dev-odcs`)
+
+- See [tasks/archive/2026-11-02-pql-assert-0-9.md](tasks/archive/2026-11-02-pql-assert-0-9.md).
+- Vendored fixture replaced: `python/tests/odcs/fixtures/pql-assert-0.9.0/` (0.9 is additive-only, so one copy covers all three catalogs); `Tbl.LastRefreshShouldBeWithinHours` classified `mapped` in `pql_assert_functions.yaml`.
+- New `pql_assert_0_9.yaml` catalog (`extends: pql_assert_0_8`) maps ODCS `frequency` to `Tbl.LastRefreshShouldBeWithinHours(testName, tableName, maxAgeHours)` instead of 0.8's inline `INFO.PARTITIONS()` expression; still reported **approximated**. `--pql-assert 0.7` and `0.8` output is unchanged. `--pql-assert 0.9` is now a valid choice on `generate`, `coverage`, `trace`, and `run`; the default stays `0.7`.
+- **Found while vendoring:** `engine: pql-test` direct calls are validated against the newest vendored PQL.Assert signatures, not a fixed version, so bumping the fixture to 0.9.0 silently raised the version a direct call needs from `--pql-assert 0.8` to `0.9` (the same thing happened, unnoticed in docs, when 0.7.1 → 0.8.0 shipped). Fixed the skip message to read the version dynamically (`pql_test/odcs/mapping/dax_rules.py`) instead of a hardcoded literal, and documented the behavior change in [docs/contracts.md](docs/contracts.md#pqlassert-09): a contract with a direct call that generated fine under `--pql-assert 0.8` now reports it skipped until it moves to `0.9`.
+- `docs/contracts.md` gets a `### PQL.Assert 0.9` section; `docs/pql-assert-freshness-request.md` and the R8 note in `docs/pql-assert-gap-plan.md` are marked fulfilled.
+- `tests/odcs/test_pql_assert_0_9.py` (new) plus updates across `test_function_matrix.py`, `test_library_conformance.py`, `test_docs_contracts_agreement.py`, `test_dax_rules.py`, `test_contract_run.py`, and a new `rule-coverage-0-9` golden case. Full suite: 1149 passed, 0 failed, 2 skipped (`pytest -m "not live"`; `test_properties.py` excluded, `hypothesis` not installed in this environment).
+- Version stays `0.2.0` (still unreleased per `aidd-custom/skills/pql-test-version-bump/SKILL.md`'s own rule: pyproject is already ahead of the latest tag `v0.1.13`, so this folds into that pending release).
+- **Deferred (needs the user):** deploy PQL.Assert 0.9.0 to the live SampleModel/Fabric workspace and validate `contract run --pql-assert 0.9` against it, matching how 0.8.0 was validated live (2026-10-27/28 entries below).
 
 ### 2026-10-29 — Contract gap detection: ODCS rule matrix, docs agreement, gap-check skill, examples (branch `dev-odcs`)
 

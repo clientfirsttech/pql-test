@@ -136,16 +136,18 @@ def deployed_library_version(conn) -> str | None:
 
 
 def _catalog_for_version(version: str | None) -> str:
-    """``"0.8"`` for a LibraryVersion() of 0.8 or later, else ``"0.7"``."""
+    """The newest catalog whose minimum version a LibraryVersion() report satisfies, else ``"0.7"``."""
     try:
         major, minor = (int(part) for part in (version or "").split(".")[:2])
     except ValueError:
         return "0.7"
+    if (major, minor) >= (0, 9):
+        return "0.9"
     return "0.8" if (major, minor) >= (0, 8) else "0.7"
 
 
 def detect_pql_assert(conn) -> str:
-    """``"0.8"`` when the model's PQL.Assert reports version 0.8 or later, else ``"0.7"``."""
+    """The newest catalog the model's reported PQL.Assert version supports, else ``"0.7"``."""
     return _catalog_for_version(deployed_library_version(conn))
 
 
@@ -236,7 +238,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     @click.option(
         "--pql-assert",
         "pql_assert",
-        type=click.Choice(["auto", "0.7", "0.8"]),
+        type=click.Choice(["auto", "0.7", "0.8", "0.9"]),
         default="auto",
         show_default=True,
         help="PQL.Assert version to generate for. auto asks the model (PQL.Assert.LibraryVersion).",

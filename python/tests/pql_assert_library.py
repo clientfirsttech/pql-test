@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-Query-scoped PQL.Assert 0.8.0 for live tests against a model that has an older library.
+Query-scoped PQL.Assert 0.9.0 for live tests against a model that has an older library.
 
-The released 0.8.0 package is vendored (MIT) under
-python/tests/odcs/fixtures/pql-assert-0.8.0/. A suite that calls 0.8-only
-functions can run on a model with an older PQL.Assert when those functions are defined in the query's own
+The released 0.9.0 package is vendored (MIT) under
+python/tests/odcs/fixtures/pql-assert-0.9.0/. A suite that calls a function the model
+lacks can run on a model with an older PQL.Assert when that function is defined in the query's own
 DEFINE block, the same way docs/pql-assert-gap-plan.md's live checks were run. Only
 functions the model lacks are defined: whether a query may redefine a model function is
 not known, so that is never relied on.
@@ -18,12 +18,12 @@ from pathlib import Path
 from pql_test.odcs.udf import UdfFunction, parse_functions
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-LIBRARY_DIR = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures" / "pql-assert-0.8.0" / "lib"
+LIBRARY_DIR = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures" / "pql-assert-0.9.0" / "lib"
 _CALL_RE = re.compile(r"\b(PQL\.Assert\.[\w.]+)\s*\(")
 
 
 def load_library(lib_dir: Path = LIBRARY_DIR) -> dict[str, UdfFunction]:
-    """Every function in the vendored PQL.Assert 0.8.0 package, by name."""
+    """Every function in the vendored PQL.Assert 0.9.0 package, by name."""
     functions = {}
     for tmdl in sorted(lib_dir.glob("*.tmdl")):
         functions.update((fn.name, fn) for fn in parse_functions(tmdl.read_text(encoding="utf-8-sig")))

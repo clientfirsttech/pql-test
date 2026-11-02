@@ -29,19 +29,23 @@ _CLOSED = click.option(
 _PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8"]),
+    type=click.Choice(["0.7", "0.8", "0.9"]),
     default="0.7",
     show_default=True,
-    help="PQL.Assert version to target. 0.8 maps more rules exactly but needs a model with PQL.Assert 0.8.0+.",
+    help=(
+        "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
+        "refresh check. Needs a model with that PQL.Assert version or later."
+    ),
 )
 _GENERATE_PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8", "auto"]),
+    type=click.Choice(["0.7", "0.8", "0.9", "auto"]),
     default="0.7",
     show_default=True,
     help=(
-        "PQL.Assert version to target. 0.8 maps more rules exactly but needs a model with PQL.Assert 0.8.0+. "
+        "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
+        "refresh check. Needs a model with that PQL.Assert version or later. "
         "auto reads the model folder's functions.tmdl (see `pql-test contract doctor`)."
     ),
 )

@@ -5,8 +5,7 @@ DEFINE
 	FUNCTION RuleCoverage.ContractDax.DEV.Tests = () =>
 		UNION (
 			PQL.Assert.ShouldEqual("ODCS rule-coverage orders.quality[0]: Order count is 0, not blank, for a year with no data", 0, CALCULATE(COUNTROWS('Orders'), FILTER(ALL('Orders'[order_date]), YEAR('Orders'[order_date]) = -1)) + 0),
-			PQL.Assert.ShouldEqualExactly("ODCS rule-coverage orders.quality[2]: Order status label is exactly Open", "Open", SELECTEDVALUE('Orders'[status], "Open")),
-			PQL.Assert.Col.MeanShouldBeInRange("ODCS rule-coverage orders.quality[3]: Quantity mean is in range", 'Orders'[quantity], 1, 50)
+			PQL.Assert.ShouldEqualExactly("ODCS rule-coverage orders.quality[2]: Order status label is exactly Open", "Open", SELECTEDVALUE('Orders'[status], "Open"))
 		)
 
 EVALUATE RuleCoverage.ContractDax.DEV.Tests()

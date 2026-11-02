@@ -19,7 +19,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from pql_test.odcs.catalog import load_signatures
+from pql_test.odcs.catalog import LATEST_PQL_ASSERT, load_signatures
 from pql_test.odcs.emit.dax import dax_literal
 from pql_test.odcs.ir import CONTRACT_DAX, CONTRACT_DAX_SUITE, DIRECT_CALL, Assertion, RuleOutcome, Status, Target
 from pql_test.odcs.mapping.context import MapContext, skipped
@@ -192,7 +192,7 @@ def _function_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
     if version_key(ctx.catalog.min_version) < version_key(signatures.version):
         return skipped(
             rule_id,
-            f"direct PQL.Assert calls need --pql-assert 0.8 (signatures from {signatures.version})",
+            f"direct PQL.Assert calls need --pql-assert {LATEST_PQL_ASSERT} (signatures from {signatures.version})",
             description,
         )
     if not isinstance(name, str):

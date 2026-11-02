@@ -241,6 +241,7 @@ function 'PQL.Assert.Col.MaxDateShouldBeWithinDays' =
 - This covers ODCS `slaProperties` freshness (`latency` in days).
 - **Live check:** `DateDim[Date]` is 238.78 days old, so a 30-day threshold fails.
 - **Follow-up (2026-10-29):** this checks data age only, which is ODCS `latency`. ODCS `frequency` (refresh recency) needs the partitions' refresh time. pql-test checks it with an inline `INFO.PARTITIONS()` expression on 0.8, and [pql-assert-freshness-request.md](pql-assert-freshness-request.md) asks PQL.Assert 0.9.0 for `Tbl.LastRefreshShouldBeWithinHours` and for docs that separate the two.
+- **Resolved (2026-11-02):** PQL.Assert 0.9.0 shipped `Tbl.LastRefreshShouldBeWithinHours` as requested. `pql-test contract` adopts it with `--pql-assert 0.9` (see [contracts.md](contracts.md#pqlassert-09)); `--pql-assert 0.8`'s inline expression is unchanged.
 
 ## Summary of 0.8.0
 

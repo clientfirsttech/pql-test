@@ -52,7 +52,10 @@ class TestExitCode:
 
 
 class TestDetectPqlAssert:
-    @pytest.mark.parametrize("reported, expected", [("0.8.0", "0.8"), ("0.10.2", "0.8"), ("1.0.0", "0.8"), ("0.7.9", "0.7")])
+    @pytest.mark.parametrize(
+        "reported, expected",
+        [("0.9.0", "0.9"), ("0.8.0", "0.8"), ("0.10.2", "0.9"), ("1.0.0", "0.9"), ("0.7.9", "0.7")],
+    )
     def test_version_reported_by_the_model_picks_the_catalog(self, monkeypatch, reported, expected):
         given = f"a model whose PQL.Assert.LibraryVersion() returns {reported}"
         should = f"select the {expected} catalog"

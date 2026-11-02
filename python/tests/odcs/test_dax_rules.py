@@ -21,16 +21,16 @@ def _rule(implementation, **extra) -> dict:
     return {"type": "custom", "engine": "pql-test", "implementation": implementation, **extra}
 
 
-def _plan(*rules, version: str = "0.8"):
+def _plan(*rules, version: str = "0.9"):
     schema = [schema_object("T", [prop("a")], quality=list(rules))]
     return plan_contract(contract_dict(schema=schema), pql_assert=version)
 
 
-def _outcome(rule, version: str = "0.8"):
+def _outcome(rule, version: str = "0.9"):
     return _plan(rule, version=version).outcomes[-1]
 
 
-def _dax(*rules, version: str = "0.8") -> str:
+def _dax(*rules, version: str = "0.9") -> str:
     return "".join(f.content for f in render(_plan(*rules, version=version), env="DEV"))
 
 
@@ -241,13 +241,14 @@ class TestFunctionForm:
 
         assert (outcome.status, reason in outcome.reason) == (Status.SKIPPED, True), f"{given}: {should}"
 
-    def test_direct_calls_need_0_8(self):
-        given = "a direct call under the 0.7 catalog"
-        should = "be skipped, naming --pql-assert 0.8"
+    @pytest.mark.parametrize("version", ["0.7", "0.8"])
+    def test_direct_calls_need_the_latest_catalog(self, version):
+        given = f"a direct call under the {version} catalog"
+        should = "be skipped, naming --pql-assert 0.9"
 
-        outcome = _outcome(_rule({"function": "PQL.Assert.Col.ShouldBePositive", "args": ["'T'[a]"]}), version="0.7")
+        outcome = _outcome(_rule({"function": "PQL.Assert.Col.ShouldBePositive", "args": ["'T'[a]"]}), version=version)
 
-        assert "--pql-assert 0.8" in outcome.reason, f"{given}: {should}"
+        assert "--pql-assert 0.9" in outcome.reason, f"{given}: {should}"
 
 
 class TestReporting:
