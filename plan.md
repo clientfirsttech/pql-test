@@ -7,7 +7,6 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address the A01, A04, and A06 findings from the 2026-08-30 AIDD review (A07's token-expiry check is already implemented, see Completed Work). Started 2026-11-03 on `dev-odcs`.
 
 ## Open Items
 
@@ -62,6 +61,8 @@
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
+- **Security audit leftovers (2026-11-03)** — run the federated-credential workflow example in [CONTRIBUTING.md](CONTRIBUTING.md#federated-credentials-workload-identity) end to end in CI; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
+
 - **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
 
 - **Expand deprecated features documentation** — Add "Deprecated Features" section to README documenting `<workspace>.<model>` dot notation deprecation and migration guide to Fabric-style `<workspace>.Workspace/<model>.SemanticModel` syntax. Link from CLI deprecation warnings. Estimated 1 hour.
@@ -77,6 +78,14 @@
 - **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
 
 ## Completed Work
+
+### 2026-11-03 — Security audit: OWASP A01, A04, A06 (branch `dev-odcs`)
+
+- See [tasks/archive/2026-11-03-security-audit.md](tasks/archive/2026-11-03-security-audit.md) and [docs/security-threat-model.md](docs/security-threat-model.md).
+- `pip-audit` (requirements and project dependencies) and `bandit -ll` found nothing. Dependabot covers pip and GitHub Actions; every workflow sets `permissions:`.
+- **Fixed:** the XMLA connection string quoted catalog, role, and user values but not the client secret, token, client ID, or server, so a secret containing `;Roles=Admin` added a `Roles=` key. All values now go through `_conn_value` (`python/pql_test/runner/xmla.py`), with tests.
+- **Fixed:** `.github/copilot-setup-steps.yml` used an unpinned `actions/checkout@v4`.
+- **Documented:** federated-credential subject claims with a GitHub Actions example (not yet run end to end), and managed-identity least privilege, in CONTRIBUTING.md; the threat model's statuses, duplicates, and compliance table are current.
 
 ### 2026-11-03 — Plan cleanup: two Active Work items were already done
 

@@ -101,3 +101,29 @@ def test_plain_values_are_not_quoted():
     """Ordinary names keep the exact form ADOMD.NET has always received."""
     conn = ResolvedXmlaConnection(server="localhost:1234", catalog="Sample Model", roles="Reader,Writer")
     assert _build_connection_string(conn) == "Provider=MSOLAP;Data Source=localhost:1234;Initial Catalog=Sample Model;Roles=Reader,Writer;"
+
+
+def test_client_secret_with_semicolon_cannot_add_connection_keys():
+    """A secret holding ``;`` stays one quoted value instead of adding or overriding keys."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog="OLS_Model",
+        tenant_id="t",
+        client_id="c",
+        client_secret='pa;ss"word;Roles=Admin',
+    )
+    cs = _build_connection_string(conn)
+    assert 'Password="pa;ss""word;Roles=Admin";' in cs
+    assert ";Roles=Admin;" not in cs.replace('"pa;ss""word;Roles=Admin"', "")
+
+
+def test_plain_secret_and_token_stay_unquoted():
+    """Ordinary Entra secrets and JWTs are unchanged, so existing connections keep working."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog="OLS_Model",
+        tenant_id="t",
+        client_id="c",
+        client_secret="Ab1~x.y_z-9",
+    )
+    assert "Password=Ab1~x.y_z-9;" in _build_connection_string(conn)
