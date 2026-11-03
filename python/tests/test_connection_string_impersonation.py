@@ -17,6 +17,10 @@ segment regardless of which auth path is taken.
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from pql_test.runner import ResolvedXmlaConnection, _build_connection_string
 
 
@@ -127,3 +131,22 @@ def test_plain_secret_and_token_stay_unquoted():
         client_secret="Ab1~x.y_z-9",
     )
     assert "Password=Ab1~x.y_z-9;" in _build_connection_string(conn)
+
+
+@pytest.mark.parametrize(
+    "field", ["server", "client_id", "tenant_id", "client_secret", "access_token"]
+)
+def test_every_credential_value_stays_one_connection_value(field):
+    """No credential value can add a key: the injected ``Roles=Admin`` never becomes its own segment."""
+    values = {
+        "server": "powerbi://api.powerbi.com/v1.0/myorg/WS",
+        "client_id": "c",
+        "tenant_id": "t",
+        "client_secret": "s",
+        "access_token": None,
+    }
+    values[field] = "x;Roles=Admin"
+    cs = _build_connection_string(ResolvedXmlaConnection(catalog="M", **values))
+    outside_quotes = re.sub(r'"(?:[^"]|"")*"', "", cs)
+    assert "Roles=" not in outside_quotes
+    assert "x;Roles=Admin" in cs

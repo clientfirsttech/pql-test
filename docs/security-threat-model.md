@@ -25,7 +25,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Medium | OAuth2 PKCE flow prevents token interception; redirect URI validation | ✅ Mitigated (azure-identity) |
 | **T - Tampering** | Low | Token stored in OS credential manager (keyring); MSAL cache encrypted | ✅ Mitigated |
-| **R - Repudiation** | Low | No audit logging of auth attempts | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Low | Auth attempts are logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | Medium | AuthenticationRecord in keyring could leak account info | ⚠️ **Accepted Risk** — keyring protects at OS level |
 | **D - Denial of Service** | Low | Browser popup could be blocked; user can retry | ✅ Mitigated |
 | **E - Elevation of Privilege** | Low | User authenticates with own permissions only | ✅ Mitigated |
@@ -55,7 +55,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Medium | Service principal validated by Azure AD; secret proves identity | ✅ Mitigated (Azure AD) |
 | **T - Tampering** | Medium | Secret stored in keyring; could be extracted with OS-level access | ⚠️ **Accepted Risk** — keyring best practice |
-| **R - Repudiation** | Medium | No audit logging of which user/process used SPN credentials | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Medium | Service principal sign-ins are audit-logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | **High** | Secret in plaintext if keyring compromised; no rotation tracking | ⚠️ **Gap** — Recommend secret rotation policy |
 | **D - Denial of Service** | Low | Invalid secret causes auth failure; user can update | ✅ Mitigated |
 | **E - Elevation of Privilege** | **High** | SPN permissions control privilege; over-permissioned SPN risks all datasets | ⚠️ **Gap** — Document least-privilege SPN setup |
@@ -87,7 +87,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Low | Certificate proves identity cryptographically; Azure AD validates signature | ✅ Mitigated (Azure AD PKI) |
 | **T - Tampering** | Low | Certificate tampering detectable via signature validation | ✅ Mitigated |
-| **R - Repudiation** | Medium | No audit logging of certificate-based auth | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Medium | Certificate-based sign-ins are audit-logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | Medium | Certificate file readable by any process with filesystem access | ⚠️ **Accepted Risk** — User controls file permissions |
 | **D - Denial of Service** | Low | Invalid/expired cert causes auth failure; user can replace | ✅ Mitigated |
 | **E - Elevation of Privilege** | **High** | SPN permissions control privilege; certificate theft = full SPN access | ⚠️ **Gap** — Recommend HSM/Azure Key Vault for certs |

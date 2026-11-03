@@ -1441,7 +1441,8 @@ def auth() -> None:
 )
 @click.option(
     "--federated-token",
-    help="Federated credential token for workload identity",
+    envvar="PQL_FEDERATED_TOKEN",
+    help="Federated credential token for workload identity (or set PQL_FEDERATED_TOKEN, which keeps it off the command line)",
 )
 @click.option(
     "--identity",

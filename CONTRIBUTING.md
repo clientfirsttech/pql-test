@@ -448,7 +448,7 @@ pql-test auth login `
 
 ### Federated credentials (workload identity)
 
-A federated credential lets a CI job exchange its own short-lived OIDC token for an Entra token, so no client secret is stored anywhere. `pql-test auth login --client-id <id> --tenant-id <tenant> --federated-token <token>` takes that token.
+A federated credential lets a CI job exchange its own short-lived OIDC token for an Entra token, so no client secret is stored anywhere. `pql-test auth login --client-id <id> --tenant-id <tenant>` reads that token from the `PQL_FEDERATED_TOKEN` environment variable (or `--federated-token`, which puts it on the command line where other processes can see it, so prefer the variable).
 
 Create the federated credential on the app registration (**Certificates & secrets** → **Federated credentials**) with the narrowest subject that still works:
 
@@ -478,7 +478,7 @@ steps:
   - name: Sign in and test
     shell: pwsh
     run: |
-      pql-test auth login --client-id ${{ vars.PQL_CLIENT_ID }} --tenant-id ${{ vars.PQL_TENANT_ID }} --federated-token $env:PQL_FEDERATED_TOKEN
+      pql-test auth login --client-id ${{ vars.PQL_CLIENT_ID }} --tenant-id ${{ vars.PQL_TENANT_ID }}
       pql-test run-tests "<workspace>.Workspace/<model>.SemanticModel"
 ```
 
