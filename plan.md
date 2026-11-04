@@ -69,6 +69,20 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
+## Completed Work
+
+### 2026-11-04 — Counsel review of the AGPL-3.0 relicensing dropped
+
+Decided: AGPL-3.0-only stands as is, with no counsel review. Removed the "LAST EPIC" and the review gate on the 0.2.0 release.
+
+### 2026-11-04 — By-name service path no longer raises on auth failures (branch `dev-odcs`)
+
+`resolve_service_xmla_connection_by_name` now catches credential and token failures, warns on stderr, and returns None, so `run-tests`, `retrieve-tests`, and `retrieve-test` print one clean error instead of a traceback (their message no longer blames missing flags). Two tests added. Added the manual `federated-smoke.yml` workflow for the federated-credential example.
+
+### 2026-11-03 — Security audit: OWASP A01, A04, A06 (branch `dev-odcs`)
+
+- See [tasks/archive/2026-11-03-security-audit.md](tasks/archive/2026-11-03-security-audit.md) and [docs/security-threat-model.md](docs/security-threat-model.md).
+- `pip-audit` (requirements and project dependencies) and `bandit -ll` found nothing. Dependabot covers pip and GitHub Actions; every workflow sets `permissions:`.
 - **Fixed:** the XMLA connection string quoted catalog, role, and user values but not the client secret, token, client ID, or server, so a secret containing `;Roles=Admin` added a `Roles=` key. All values now go through `_conn_value` (`python/pql_test/runner/xmla.py`), with tests.
 - **Fixed:** `.github/copilot-setup-steps.yml` used an unpinned `actions/checkout@v4`.
 - **Documented:** federated-credential subject claims with a GitHub Actions example (not yet run end to end), and managed-identity least privilege, in CONTRIBUTING.md; the threat model's statuses, duplicates, and compliance table are current.
