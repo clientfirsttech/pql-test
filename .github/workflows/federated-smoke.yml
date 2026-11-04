@@ -3,7 +3,8 @@
 # asks GitHub for an OIDC token, `pql-test auth login` exchanges it for an Entra token,
 # and `run-tests` connects with that.
 #
-# One-time setup before the first run (maintainer, in Entra and GitHub):
+# One-time setup before the first run: run `scripts/setup-federated-smoke.ps1` (see its
+# help; add -DryRun first), which does everything below. Or do it by hand:
 #   1. App registration: add a federated credential with
 #        issuer   https://token.actions.githubusercontent.com
 #        subject  repo:<owner>/<repo>:environment:federated-smoke
@@ -34,6 +35,20 @@ jobs:
     runs-on: windows-latest   # pyadomd (ADOMD.NET) requires Windows + .NET
     environment: federated-smoke
     steps:
+      - name: Check the Environment variables
+        shell: bash
+        env:
+          PQL_CLIENT_ID: ${{ vars.PQL_CLIENT_ID }}
+          PQL_TENANT_ID: ${{ vars.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID: ${{ vars.PQL_WORKSPACE_ID }}
+        run: |
+          for v in PQL_CLIENT_ID PQL_TENANT_ID PQL_WORKSPACE_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Environment variable $v is empty. Run the setup script in scripts/ or set it on the Environment (see this file's header)."
+              exit 1
+            fi
+          done
+
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
