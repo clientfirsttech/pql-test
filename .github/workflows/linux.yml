@@ -55,9 +55,9 @@ jobs:
           pql-test contract coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
           python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"
           pql-test contract generate $F/marvel.odcs.yaml $M --env DEV --dry-run | grep -q "EVALUATE Marvel.Schema.DEV.Tests()"
-          # doctor reads SampleModel's PQL.Assert 0.8.0 from its TMDL; with no XMLA here the live checks only warn.
+          # doctor reads SampleModel's PQL.Assert 0.9.0 from its TMDL; with no XMLA here the live checks only warn.
           pql-test contract doctor $M --format json > /tmp/doctor.json
-          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.8', r"
+          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.9', r"
           # Exit code 1 is the contract: every-row has rules the 0.7 catalog skips.
           if pql-test contract coverage $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
             echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
