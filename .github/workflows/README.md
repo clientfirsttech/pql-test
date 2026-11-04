@@ -12,6 +12,7 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 - `security.yml` — Stage 0: gitleaks on the full history, bandit, pip-audit, and the offline dead-link check
 - `pytest.yml` — The full pytest suite on Windows with ADOMD.NET (Stage 3a)
 - `federated-smoke.yml` — Manual end-to-end check of the federated-credential (OIDC) sign-in from CONTRIBUTING.md; needs the Entra federated credential and the `federated-smoke` Environment
+- `cla.yml` — CLA Assistant: asks outside contributors to sign [CLA.md](../../CLA.md) on their pull request; needs the `cla-signatures` branch and a `PERSONAL_ACCESS_TOKEN` secret (see its header)
 - `linux.yml` — Stage 3c, pql-test on ubuntu without pyadomd (Python 3.10 and 3.13): the contract and platform tests, a smoke test of the file-based commands (`contract lint|coverage|generate|trace|doctor`, `retrieve-tests`), and a check that `run-tests`, `code-coverage`, and `contract run` stop with one Windows-only message
 
 ## Agentic Workflows

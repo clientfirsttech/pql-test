@@ -1,0 +1,50 @@
+# CLA Assistant: asks every outside contributor to sign CLA.md once, on their pull request,
+# and sets a status check that stays red until they do. Make "CLA Assistant" a required
+# check on `main` (branch protection) once the repository is public.
+#
+# Maintainer setup (once):
+#   1. Create the branch `cla-signatures` (it holds signatures/cla.json; it is not protected,
+#      so the bot can commit to it while `main` stays protected).
+#   2. Create a fine-grained personal access token limited to this repository with
+#      Contents: read and write, and store it as the Actions secret PERSONAL_ACCESS_TOKEN.
+#      The bot needs it to commit signatures; GITHUB_TOKEN cannot do that across the pull
+#      request context.
+#
+# Security: pull_request_target runs with this repository's secrets, so this job must never
+# check out or run code from the pull request. It does neither: the action only reads the
+# pull request's author and comments.
+
+name: CLA Assistant
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CLA Assistant
+        if: >-
+          github.event_name == 'pull_request_target' ||
+          github.event.comment.body == 'recheck' ||
+          github.event.comment.body == 'I have read the CLA Document and I hereby sign the CLA'
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08  # v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        with:
+          path-to-document: https://github.com/clientfirsttech/pql-test/blob/main/CLA.md
+          path-to-signatures: signatures/cla.json
+          branch: cla-signatures
+          # Maintainers and bots do not sign: the Company's own work needs no license grant.
+          allowlist: kerski-cft,dependabot[bot],github-actions[bot]
+          lock-pullrequest-aftermerge: false

@@ -47,6 +47,7 @@ pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
   (after the shebang line, when there is one).
 - **Sign off every commit** with the [Developer Certificate of Origin](https://developercertificate.org/):
   `git commit -s`. The sign-off certifies that you have the right to submit the change under AGPL-3.0-only.
+- **Sign the [Contributor License Agreement](CLA.md) once** (outside contributors; a bot comments on your first pull request and you reply with the sentence it gives). It is the Apache Individual CLA adapted to Client First Technologies: you keep your copyright and license your contributions to the Company, which lets it also offer pql-test under other licenses. The DCO sign-off above is still required.
 - **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, LGPL, or GPL-3.0 licensed packages.
 - **Keep the contract file commands free of XMLA.** `pql-test contract lint|coverage|generate|trace`
   only read and write files, so they run on Linux CI. Import ADOMD.NET-dependent code lazily, inside
