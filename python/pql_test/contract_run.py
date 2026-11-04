@@ -16,6 +16,7 @@ registered in the live model, which skips suites that were just generated.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -120,6 +121,9 @@ def print_trace(report) -> None:
     click.echo(banner(line))
 
 
+_VERSION_TEXT = re.compile(r"\d+(\.\d+){1,3}[0-9A-Za-z.+-]{0,16}")
+
+
 def deployed_library_version(conn) -> str | None:
     """The connected model's ``PQL.Assert.LibraryVersion()``, or ``None`` when that call fails.
 
@@ -130,9 +134,12 @@ def deployed_library_version(conn) -> str | None:
         return None
     try:
         rows = _execute_dax_query(conn, "EVALUATE { PQL.Assert.LibraryVersion() }")
-        return str(next(iter(rows[0].values())))
+        version = str(next(iter(rows[0].values())))
     except Exception:  # noqa: BLE001 - any failure means "no LibraryVersion()"
         return None
+    # The model supplies this text and it is echoed into logs (CI annotations included), so
+    # accept only a version-shaped string; anything else is treated as "no usable version".
+    return version if _VERSION_TEXT.fullmatch(version) else None
 
 
 def _catalog_for_version(version: str | None) -> str:

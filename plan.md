@@ -27,7 +27,7 @@
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
   2. Open a PR from `dev-odcs` to `dev` (opened 2026-11-03; earlier dev-odcs PRs #43 and #45 also went to `dev`), then promote `dev` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.
-  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions. DCO sign-off alone does not allow relicensing contributions.
+  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement before accepting outside contributions; DCO sign-off alone does not allow relicensing. Chosen 2026-11-04: the Apache Individual CLA, adapted in [CLA.md](CLA.md), signed through CLA Assistant ([cla.yml](.github/workflows/cla.yml)). Maintainer steps left: create the `cla-signatures` branch; add the `PERSONAL_ACCESS_TOKEN` secret (fine-grained, Contents read/write on this repo); make "CLA Assistant" a required check on `main` once public; decide whether a Corporate CLA is needed (section 4 of the CLA refers to one); confirm the allowlist in `cla.yml` (`kerski-cft`, bots).
   4. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
 
 - **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
@@ -46,7 +46,7 @@
 
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
-  - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
+  - the datacontract-cli side of the integration (a datacontract-cli engine or wrapper that calls `pql-test contract run` and reads its `--output` JSON). It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code. pql-test's half is done: the output is a versioned, tested schema.
 
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
@@ -60,7 +60,7 @@
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
-- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
+- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; the same for the certificate path ([certificate-smoke.yml](.github/workflows/certificate-smoke.yml), Environment `certificate-smoke`); add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
 
 - **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
 
@@ -69,6 +69,14 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-04 — Published JSON schema for `contract run` output (branch `dev-odcs`)
+
+`contract run --output` and `contract trace --format json` now carry `schemaVersion: 1` and are described by `python/pql_test/odcs/contract-run-result.schema.json` (packaged). `tests/odcs/test_run_result_schema.py` validates real output against it and checks the schema agrees with the code. Documented in docs/contracts.md, "Reading the results from another tool".
+
+### 2026-11-04 — Certificate expiry warning in `pql-test auth status` (branch `dev-odcs`)
+
+`auth status` reads the stored service-principal certificate's expiry (PEM or PFX, public part only, via `cryptography`, already a dependency of msal) and warns at 30 days or fewer, or once expired. JSON output adds `certificateExpiresAt` and `certificateDaysRemaining`. See `python/pql_test/auth/cert_expiry.py`.
 
 ### 2026-11-04 — PQL.Assert minimum-version warning in `contract run` (branch `dev-odcs`)
 

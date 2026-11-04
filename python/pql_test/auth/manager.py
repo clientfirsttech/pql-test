@@ -16,10 +16,11 @@ try:
 except ImportError:
     TokenCredential = None  # type: ignore
 
+from pql_test.auth.cert_expiry import certificate_expiry
 from pql_test.auth.cloud_config import CloudConfig
 from pql_test.auth.exceptions import TokenAcquisitionError
 from pql_test.auth.factory import CredentialFactory
-from pql_test.auth.models import AuthStatus, CredentialConfig
+from pql_test.auth.models import AuthMethod, AuthStatus, CredentialConfig
 from pql_test.auth.store import CredentialStore
 
 # Configure audit logger for authentication events
@@ -233,6 +234,10 @@ class AuthenticationManager:
             # Don't raise—this is a status check, not a critical operation
             pass
 
+        certificate_expires_at = None
+        if config.method == AuthMethod.SERVICE_PRINCIPAL_CERT and config.certificate_path:
+            certificate_expires_at = certificate_expiry(config.certificate_path, config.certificate_password)
+
         return AuthStatus(
             authenticated=True,
             method=config.method,
@@ -242,4 +247,5 @@ class AuthenticationManager:
             environment=config.environment,
             token_expires_at=token_expires_at,
             token_is_valid=token_is_valid,
+            certificate_expires_at=certificate_expires_at,
         )
