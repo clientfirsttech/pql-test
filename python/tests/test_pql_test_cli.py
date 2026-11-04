@@ -75,7 +75,9 @@ def run_cli(
         text=True,
         encoding="utf-8",
         cwd=cwd,
-        timeout=60 if live else 30,
+        # A live call can include a cold ADOMD.NET load, a token request, and a workspace lookup;
+        # 60 s timed out on the first live test in CI and locally (the next ones, warm, were fast).
+        timeout=180 if live else 30,
         env=env,
     )
     return result.stdout, result.stderr, result.returncode
