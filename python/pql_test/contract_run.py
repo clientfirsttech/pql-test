@@ -146,6 +146,36 @@ def _catalog_for_version(version: str | None) -> str:
     return "0.8" if (major, minor) >= (0, 8) else "0.7"
 
 
+def _version_key(catalog: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in catalog.split("."))
+
+
+def pql_assert_version_warning(deployed_version: str | None, selected: str) -> str | None:
+    """Why the deployed PQL.Assert is too old for this run, or None when it is current enough.
+
+    Two cases: the chosen ``--pql-assert`` is newer than the model supports (the suites call
+    functions the model lacks, so they error), or the model supports an older catalog than the
+    newest one pql-test knows (rules that need the newer functions are approximated or skipped).
+    """
+    from pql_test.odcs.catalog import LATEST_PQL_ASSERT
+
+    deployed = _catalog_for_version(deployed_version)
+    reported = deployed_version or "0.7.x or older (no PQL.Assert.LibraryVersion())"
+    if _version_key(selected) > _version_key(deployed):
+        return (
+            f"--pql-assert {selected} needs PQL.Assert {selected} or later, but the deployed model has "
+            f"{reported}. The generated suites call functions the model lacks and will error: update "
+            f"PQL.Assert from DAX Lib and publish the model, or use --pql-assert {deployed}."
+        )
+    if _version_key(deployed) < _version_key(LATEST_PQL_ASSERT):
+        return (
+            f"the deployed model has PQL.Assert {reported}; pql-test supports up to {LATEST_PQL_ASSERT}. "
+            f"Rules that need newer functions are approximated or skipped: update PQL.Assert from DAX Lib "
+            "and publish the model (see `pql-test contract coverage --pql-assert`)."
+        )
+    return None
+
+
 def detect_pql_assert(conn) -> str:
     """The newest catalog the model's reported PQL.Assert version supports, else ``"0.7"``."""
     return _catalog_for_version(deployed_library_version(conn))
@@ -340,10 +370,16 @@ def make_run_command(hooks: RunHooks) -> click.Command:
                 "--tenant-id, --workspace-id, --dataset-id (and --client-id, --client-secret).",
                 err=True,
             )
+        deployed_version = deployed_library_version(conn)
         if pql_assert == "auto":
-            pql_assert = detect_pql_assert(conn)
+            pql_assert = _catalog_for_version(deployed_version)
             source = "detected from the model" if conn else "no XMLA connection to ask the model"
             click.echo(f"PQL.Assert {pql_assert} catalog selected ({source}; override with --pql-assert).")
+        # Only a connected model can be too old; with no connection the suites are not run anyway.
+        version_warning = pql_assert_version_warning(deployed_version, pql_assert) if conn else None
+        if version_warning:
+            pre_warnings.append(f"PQL.Assert: {version_warning}")
+            click.echo(f"Warning: PQL.Assert: {version_warning}", err=True)
 
         plan = plan_contract(contract, closed_schema=closed_schema, pql_assert=pql_assert)
         try:

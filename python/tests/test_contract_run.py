@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from pql_test.contract_run import detect_pql_assert, exit_code
+from pql_test.contract_run import detect_pql_assert, exit_code, pql_assert_version_warning
 from pql_test.contract_run import xmla_unavailable as real_xmla_unavailable
 from pql_test.runner import TestResult
 
@@ -79,6 +79,28 @@ class TestDetectPqlAssert:
         should = "select the 0.7 catalog without querying"
 
         assert detect_pql_assert(None) == "0.7", f"{given}: {should}"
+
+
+class TestPqlAssertVersionWarning:
+    @pytest.mark.parametrize(
+        "deployed, selected, mentions",
+        [
+            ("0.9.0", "0.9", None),
+            ("1.0.0", "0.9", None),
+            ("0.8.0", "0.8", "supports up to 0.9"),
+            (None, "0.7", "supports up to 0.9"),
+            ("0.8.0", "0.9", "--pql-assert 0.9 needs"),
+            (None, "0.8", "use --pql-assert 0.7"),
+        ],
+    )
+    def test_warns_only_when_the_deployed_library_is_too_old(self, deployed, selected, mentions):
+        given = f"a model reporting {deployed} and --pql-assert {selected}"
+        should = "warn exactly when the model is older than the choice or than the newest supported catalog"
+
+        warning = pql_assert_version_warning(deployed, selected)
+
+        assert (warning is None) == (mentions is None), f"{given}: {should}"
+        assert mentions is None or mentions in warning, f"{given}: {should}"
 
 
 class TestContractGroup:
@@ -158,6 +180,44 @@ class TestContractRunCommand:
 
         text = "".join(t.source for t in ran)
         assert expected in text, f"{given}: {should}\n{result.output}"
+
+    @pytest.mark.parametrize(
+        "args, reported, warned",
+        [([], "0.9.0", False), ([], "0.8.0", True), (["--pql-assert", "0.9"], "0.8.0", True)],
+    )
+    def test_warns_when_the_deployed_pql_assert_is_too_old(self, tmp_path, monkeypatch, args, reported, warned):
+        given = f"contract run {args or 'with auto'} on a model reporting PQL.Assert {reported}"
+        should = "warn on stderr and in the CI pre-warnings only when the model is too old"
+        from types import SimpleNamespace
+
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        contract = tmp_path / "c.odcs.yaml"
+        contract.write_text(
+            "apiVersion: v3.1.0\nkind: DataContract\nid: c\nversion: '1'\nstatus: active\nschema:\n  - name: T\n    properties:\n      - name: a\n        logicalType: integer\n        required: true\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: SimpleNamespace(server="s", catalog="c"))
+        monkeypatch.setattr("pql_test.contract_run.run_tests", lambda *_a, **_k: [])
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", lambda *_a: [{"[Value]": reported}])
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "run", str(contract), str(model), "--env", "DEV", *args])
+
+        assert ("Warning: PQL.Assert:" in result.output) == warned, f"{given}: {should}\n{result.output}"
+
+    def test_no_version_warning_without_a_connection(self, tmp_path, monkeypatch):
+        given = "contract run with no XMLA connection"
+        should = "not warn about the deployed PQL.Assert, since there is no model to ask"
+        model = tmp_path / "Sample.SemanticModel"
+        (model / "definition").mkdir(parents=True)
+        shutil.copy(FIXTURES / "marvel.odcs.yaml", tmp_path / "marvel.odcs.yaml")
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "run", str(tmp_path / "marvel.odcs.yaml"), str(model), "--env", "DEV"])
+
+        assert "Warning: PQL.Assert:" not in result.output, f"{given}: {should}"
 
     def test_invalid_contract_exits_1(self, tmp_path):
         given = "a contract with an unsupported apiVersion"

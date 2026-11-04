@@ -47,7 +47,6 @@
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
   - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
-  - a PQL.Assert minimum-version warning in `contract run`.
 
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
@@ -70,6 +69,10 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-04 — PQL.Assert minimum-version warning in `contract run` (branch `dev-odcs`)
+
+`contract run` now warns when the connected model's PQL.Assert is older than the newest catalog (0.9), or older than an explicit `--pql-assert`. Non-blocking; shown on stderr and in the CI pre-warnings. See `pql_assert_version_warning` in `contract_run.py`.
 
 ### 2026-11-04 — Counsel review of the AGPL-3.0 relicensing dropped
 
