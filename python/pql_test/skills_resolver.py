@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Skill file resolution for pql-test.
 
 Resolves skill directories from local workspace overrides (skills/) or falls back

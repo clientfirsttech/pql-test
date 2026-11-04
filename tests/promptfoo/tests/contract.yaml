@@ -1,0 +1,49 @@
+# Mode B LLM evaluations for the contract skill (`pql-test contract`).
+
+- description: Generate tests from a data contract
+  vars:
+    skill: contract
+    task: I have an ODCS data contract orders.odcs.yaml for my PBIP model in ./SalesModel. How do I turn it into DAX tests for the DEV environment?
+  assert:
+    - type: contains
+      value: pql-test contract generate orders.odcs.yaml ./SalesModel --env DEV
+    - type: llm-rubric
+      value: |
+        The response should use `pql-test contract generate ... --env DEV` and mention
+        that it writes *.Tests.dax files into the model's DAXQueries/ folder. It should not
+        tell the user to install a separate package or extra.
+
+- description: Which rules are enforced
+  vars:
+    skill: contract
+    task: Before generating anything, how can I see which rules in orders.odcs.yaml will actually be tested and which won't?
+  assert:
+    - type: contains
+      value: pql-test contract coverage orders.odcs.yaml
+    - type: llm-rubric
+      value: |
+        The response should recommend `pql-test contract coverage` and explain that every
+        rule is listed as mapped, approximated, or skipped with a reason.
+
+- description: Strict CI on unmappable rules
+  vars:
+    skill: contract
+    task: In CI I want the build to fail if any rule in my contract cannot be turned into a DAX test. What flag do I use?
+  assert:
+    - type: contains
+      value: --fail-on-skipped
+    - type: llm-rubric
+      value: |
+        The response should use --fail-on-skipped and should NOT invent flags such as
+        --strict or --fail-on-unmapped.
+
+- description: Service paths are not supported yet (llm-graded)
+  vars:
+    skill: contract
+    task: Can I run pql-test contract run against "Sales.Workspace/SalesModel.SemanticModel" directly?
+  assert:
+    - type: llm-rubric
+      value: |
+        The response must say that the <workspace>.Workspace/<model>.SemanticModel form is
+        not accepted yet, and suggest a PBIP folder (with PQL_* service credentials for the
+        workspace) or local/<name> for the model open in Power BI Desktop instead.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 XMLA query execution via ADOMD.NET - connection strings and DAX execution.
 
@@ -44,24 +45,36 @@ def _build_connection_string(conn: ResolvedXmlaConnection) -> str:
       2. EffectiveUserName= (AAD UPN).  AS applies whatever roles the
          user is a member of.
     """
-    catalog_part = f";Initial Catalog={conn.catalog}" if conn.catalog else ""
-    parts: list[str] = [f"Provider=MSOLAP;Data Source={conn.server}{catalog_part};"]
+    catalog_part = f";Initial Catalog={_conn_value(conn.catalog)}" if conn.catalog else ""
+    parts: list[str] = [f"Provider=MSOLAP;Data Source={_conn_value(conn.server)}{catalog_part};"]
 
     if conn.access_token:
-        parts.append(f"Password={conn.access_token};")
+        parts.append(f"Password={_conn_value(conn.access_token)};")
     elif conn.client_id and conn.client_secret and conn.tenant_id:
         parts.append(
-            f"User ID=app:{conn.client_id}@{conn.tenant_id};"
-            f"Password={conn.client_secret};"
+            f"User ID={_conn_value(f'app:{conn.client_id}@{conn.tenant_id}')};"
+            f"Password={_conn_value(conn.client_secret)};"
             "Integrated Security=ClaimsToken;"
         )
 
     if conn.roles:
-        parts.append(f"Roles={conn.roles};")
+        parts.append(f"Roles={_conn_value(conn.roles)};")
     elif conn.effective_user_name:
-        parts.append(f"EffectiveUserName={conn.effective_user_name};")
+        parts.append(f"EffectiveUserName={_conn_value(conn.effective_user_name)};")
 
     return "".join(parts)
+
+
+def _conn_value(value: str) -> str:
+    """A connection-string value that cannot add or override keys.
+
+    Catalog, role, and user names come from the model (annotations) and the workspace, and
+    the secret is user-supplied, so a value such as ``x;Data Source=evil`` must stay one value: per the OLE DB connection
+    string rules it is wrapped in double quotes, with embedded double quotes doubled.
+    """
+    if any(c in value for c in (";", '"', "'")) or value != value.strip():
+        return '"' + value.replace('"', '""') + '"'
+    return value
 
 
 def _get_col(row: dict[str, object], key: str) -> str:

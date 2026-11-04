@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Data models for PQL Test Runner.
 
@@ -16,7 +17,7 @@ This module contains all dataclasses and enums used throughout the runner packag
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Optional
 
@@ -219,9 +220,9 @@ class XmlaConnectionOptions:
     dataset_id: Optional[str] = None
     dataset_name: Optional[str] = None
     client_id: Optional[str] = None
-    client_secret: Optional[str] = None
+    client_secret: Optional[str] = field(default=None, repr=False)  # never shown in repr()
     environment: Environment = Environment.PUBLIC
-    access_token: Optional[str] = None
+    access_token: Optional[str] = field(default=None, repr=False)  # never shown in repr()
 
 
 @dataclass
@@ -232,12 +233,12 @@ class ResolvedXmlaConnection:
     catalog: str
     tenant_id: Optional[str] = None
     client_id: Optional[str] = None
-    client_secret: Optional[str] = None
-    access_token: Optional[str] = None
+    client_secret: Optional[str] = field(default=None, repr=False)  # never shown in repr()
+    access_token: Optional[str] = field(default=None, repr=False)  # never shown in repr()
     effective_user_name: Optional[str] = None
     """AAD UPN passed as EffectiveUserName; used for service-endpoint RLS simulation."""
     roles: Optional[str] = None
-    """Semi-colon-separated role name(s) passed as Roles=; used for local-AS RLS simulation."""
+    """Role name passed as Roles= (quoted if it holds ;); used for local-AS RLS simulation."""
 
 
 @dataclass

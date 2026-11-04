@@ -1,0 +1,93 @@
+# PQL.Assert 0.8 contract for examples/SampleModel: one rule per 0.8 catalog op.
+# Each rule says whether it must pass or fail, and the SampleModel data fact behind that
+# (from the live checks in docs/pql-assert-gap-plan.md, 2026-10-25). python/tests/
+# test_contract_live.py pins the same outcomes; "executes" rules have no recorded fact,
+# so they only have to run.
+apiVersion: v3.1.0
+kind: DataContract
+id: marvel-0-8
+name: Marvel PQL.Assert 0.8
+version: 1.0.0
+status: draft
+dataProduct: marvel-08
+schema:
+  - name: MarvelSource
+    properties:
+      - name: Year
+        logicalType: integer
+        quality:
+          - id: source_year_null_pct_at_most_5        # pass: 815 of 16,376 rows are null (4.98%)
+            metric: nullValues
+            mustBeLessOrEqualTo: 5
+            unit: percent
+          - id: source_year_nulls_at_most_815         # pass: exactly 815 null rows
+            metric: nullValues
+            mustBeLessOrEqualTo: 815
+          - id: source_year_nulls_below_815           # fail: 815 null rows is not < 815
+            metric: nullValues
+            mustBeLessThan: 815
+      - name: EYE
+        logicalType: string
+        quality:
+          - id: source_eye_ends_with_eyes             # fail: 4 distinct values do not (e.g. "Black Eyeballs")
+            metric: invalidValues
+            mustBe: 0
+            arguments:
+              pattern: "Eyes$"
+          - id: source_eye_starts_with_lowercase      # executes: no recorded fact
+            metric: invalidValues
+            mustBe: 0
+            arguments:
+              pattern: "^blue"
+          - id: source_eye_contains_eye               # executes: no recorded fact
+            metric: invalidValues
+            mustBe: 0
+            arguments:
+              pattern: "Eye"
+  - name: DateDim
+    properties:
+      - name: DateID
+        logicalType: integer
+        primaryKey: true                              # pass: ShouldBePrimaryKey passes
+        required: true                                # pass: 0 null rows
+      - name: Year
+        logicalType: integer
+        unique: true                                  # fail: many dates share a year
+        quality:
+          - id: date_year_duplicates_at_most_5        # fail: 950 duplicate values
+            metric: duplicateValues
+            mustBeLessOrEqualTo: 5
+          - id: date_year_duplicates_at_most_1000     # pass: 950 duplicate values
+            metric: duplicateValues
+            mustBeLessOrEqualTo: 1000
+      - name: Date
+        logicalType: date
+    quality:
+      - id: date_dim_rows_not_0_to_10                 # pass: 1,039 rows
+        metric: rowCount
+        mustNotBeBetween: [0, 10]
+      - id: date_dim_rows_not_1000_to_1100            # fail: 1,039 rows
+        metric: rowCount
+        mustNotBeBetween: [1000, 1100]
+  - name: marvel_fact
+    customProperties:
+      - property: pbiTable
+        value: MarvelFact
+    properties:
+      - name: DateID
+        logicalType: integer
+      - name: EyeID
+        logicalType: integer
+      - name: AlignmentID
+        logicalType: integer
+    quality:
+      - id: fact_date_eye_alignment_distinct          # fail: 16,376 rows over few date/eye/alignment combinations
+        metric: duplicateValues
+        mustBe: 0
+        arguments:
+          properties: [DateID, EyeID, AlignmentID]
+slaProperties:
+  - property: latency                                 # fail: newest DateDim[Date] was 238 days old on 2026-10-25
+    value: 30
+    unit: d
+    element: DateDim.Date

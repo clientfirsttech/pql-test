@@ -16,5 +16,5 @@
     - type: llm-rubric
       value: |
         The response must mention the four things check-prereqs verifies:
-        Python >= 3.9, pyadomd (ADOMD.NET), msal, and psutil. It should also
+        Python >= 3.10, pyadomd (ADOMD.NET), msal, and psutil. It should also
         note that psutil is what enables local/<model_name> discovery.

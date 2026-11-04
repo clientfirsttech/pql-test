@@ -35,4 +35,5 @@ tests:
   - file://tests/retrieve-test.yaml
   - file://tests/check-prereqs.yaml
   - file://tests/code-coverage.yaml
+  - file://tests/contract.yaml
   - file://tests/skill-command.yaml

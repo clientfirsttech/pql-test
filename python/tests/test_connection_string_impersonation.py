@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests that XMLA impersonation parameters compose with bearer-token auth.
 
 Symptom this guards against: ``pql-test run-tests`` against a service XMLA
@@ -16,6 +17,10 @@ segment regardless of which auth path is taken.
 
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from pql_test.runner import ResolvedXmlaConnection, _build_connection_string
 
 
@@ -25,11 +30,11 @@ def test_bearer_token_and_effective_user_name_compose():
         server="powerbi://api.powerbi.com/v1.0/myorg/WS",
         catalog="OLS_Model",
         access_token="bearer-abc",
-        effective_user_name="atlas.kerski@cftechnologiesllc.com",
+        effective_user_name="test.user@contoso.com",
     )
     cs = _build_connection_string(conn)
     assert "Password=bearer-abc;" in cs
-    assert "EffectiveUserName=atlas.kerski@cftechnologiesllc.com;" in cs
+    assert "EffectiveUserName=test.user@contoso.com;" in cs
 
 
 def test_bearer_token_and_roles_compose():
@@ -80,3 +85,68 @@ def test_roles_takes_priority_when_both_set_with_bearer_token():
     cs = _build_connection_string(conn)
     assert "Roles=West;" in cs
     assert "EffectiveUserName" not in cs
+
+
+def test_values_cannot_add_or_override_keys():
+    """A role, user, or catalog holding ';' or quotes stays one quoted value (no injected keys)."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog='Model";Data Source=evil',
+        access_token="bearer-abc",
+        roles="Reader;Data Source=evil",
+    )
+    cs = _build_connection_string(conn)
+    assert 'Initial Catalog="Model"";Data Source=evil";' in cs
+    assert 'Roles="Reader;Data Source=evil";' in cs
+    assert cs.startswith("Provider=MSOLAP;Data Source=powerbi://api.powerbi.com/v1.0/myorg/WS;")
+
+
+def test_plain_values_are_not_quoted():
+    """Ordinary names keep the exact form ADOMD.NET has always received."""
+    conn = ResolvedXmlaConnection(server="localhost:1234", catalog="Sample Model", roles="Reader,Writer")
+    assert _build_connection_string(conn) == "Provider=MSOLAP;Data Source=localhost:1234;Initial Catalog=Sample Model;Roles=Reader,Writer;"
+
+
+def test_client_secret_with_semicolon_cannot_add_connection_keys():
+    """A secret holding ``;`` stays one quoted value instead of adding or overriding keys."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog="OLS_Model",
+        tenant_id="t",
+        client_id="c",
+        client_secret='pa;ss"word;Roles=Admin',
+    )
+    cs = _build_connection_string(conn)
+    assert 'Password="pa;ss""word;Roles=Admin";' in cs
+    assert ";Roles=Admin;" not in cs.replace('"pa;ss""word;Roles=Admin"', "")
+
+
+def test_plain_secret_and_token_stay_unquoted():
+    """Ordinary Entra secrets and JWTs are unchanged, so existing connections keep working."""
+    conn = ResolvedXmlaConnection(
+        server="powerbi://api.powerbi.com/v1.0/myorg/WS",
+        catalog="OLS_Model",
+        tenant_id="t",
+        client_id="c",
+        client_secret="Ab1~x.y_z-9",
+    )
+    assert "Password=Ab1~x.y_z-9;" in _build_connection_string(conn)
+
+
+@pytest.mark.parametrize(
+    "field", ["server", "client_id", "tenant_id", "client_secret", "access_token"]
+)
+def test_every_credential_value_stays_one_connection_value(field):
+    """No credential value can add a key: the injected ``Roles=Admin`` never becomes its own segment."""
+    values = {
+        "server": "powerbi://api.powerbi.com/v1.0/myorg/WS",
+        "client_id": "c",
+        "tenant_id": "t",
+        "client_secret": "s",
+        "access_token": None,
+    }
+    values[field] = "x;Roles=Admin"
+    cs = _build_connection_string(ResolvedXmlaConnection(catalog="M", **values))
+    outside_quotes = re.sub(r'"(?:[^"]|"")*"', "", cs)
+    assert "Roles=" not in outside_quotes
+    assert "x;Roles=Admin" in cs

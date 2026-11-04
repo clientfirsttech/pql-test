@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Local Power BI Desktop detection and connection resolution.
 
@@ -250,6 +251,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
 
     # Portable LISTEN status — psutil < 6 exposed CONN_LISTEN; psutil 6+ uses
     # the plain string "LISTEN".  Accept both so the code works on any version.
+    # The "0.0.0.0" checks below compare a listening address; nothing binds (bandit B104).
     _listen_status: object = getattr(psutil_mod, "CONN_LISTEN", "LISTEN")
 
     # Pre-build a pid → listen_port map using the global net_connections call.
@@ -264,7 +266,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
             if (
                 (_c_status == _listen_status or _c_status == "LISTEN")
                 and _c.laddr
-                and _c.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")
+                and _c.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")  # nosec B104
                 and getattr(_c, "pid", None) is not None
             ):
                 _global_listen_ports[_c.pid] = _c.laddr.port
@@ -298,7 +300,7 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
                     if (
                         (conn_status == _listen_status or conn_status == "LISTEN")
                         and conn.laddr
-                        and conn.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")
+                        and conn.laddr.ip in ("0.0.0.0", "::", "127.0.0.1")  # nosec B104
                     ):
                         port = conn.laddr.port
                         break

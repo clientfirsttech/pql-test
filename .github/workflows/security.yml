@@ -1,0 +1,63 @@
+# Stage 0 of ci.yml: secrets, Python security flaws, vulnerable dependencies, and dead links.
+#
+# Runs the same checks as .pre-commit-config.yaml, plus gitleaks on the whole history,
+# pip-audit on the resolved dependencies, and the offline documentation link check.
+# No secrets: nothing here connects anywhere but GitHub, PyPI, and the gitleaks release.
+
+name: security
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  # From gitleaks_8.30.1_checksums.txt on the v8.30.1 release.
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  security:
+    name: Secrets, bandit, pip-audit, links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history, for gitleaks)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install gitleaks (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$tarball" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  ${tarball}" | sha256sum --check
+          tar -xzf "$tarball" gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+      - name: gitleaks on the full history
+        # .gitleaksignore holds the reviewed, allowlisted findings.
+        run: gitleaks git . --log-opts="--all" --redact --no-banner
+
+      - name: Install the scanners (pinned)
+        run: pip install "bandit[toml]==1.9.4" "pip-audit==2.10.1" "uv==0.10.9"
+
+      - name: bandit (medium severity and up)
+        run: bandit -c python/pyproject.toml -r python/pql_test --severity-level medium
+
+      - name: pip-audit on pql-test's locked runtime dependencies
+        # Audits exactly what uv.lock resolves for this Python (3.12), not the runner's own
+        # packages.
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-workspace > locked-requirements.txt
+          pip-audit -r locked-requirements.txt --no-deps --disable-pip --progress-spinner off
+
+      - name: Dead links in the documentation (offline)
+        run: python .github/scripts/check_links.py

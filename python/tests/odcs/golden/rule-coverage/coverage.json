@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "generator": "pql-test GOLDEN",
+  "catalog": {
+    "library": "PQL.Assert",
+    "minVersion": "0.7.1"
+  },
+  "contract": {
+    "id": "rule-coverage",
+    "name": "Rule Coverage",
+    "apiVersion": "3.2.0",
+    "source": "rule-coverage.odcs.yaml"
+  },
+  "summary": {
+    "total": 44,
+    "mapped": 16,
+    "approximated": 7,
+    "skipped": 21
+  },
+  "rules": [
+    {
+      "ruleId": "orders.exists",
+      "status": "mapped",
+      "description": "orders exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.columns",
+      "status": "mapped",
+      "description": "orders has columns order_id, customer_id, quantity, amount, discount, code, is_active, ship_time, status, priority, region, loaded_at, order_date",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.order_id.primaryKey",
+      "status": "approximated",
+      "description": "orders.order_id is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
+    },
+    {
+      "ruleId": "orders.order_id.type",
+      "status": "mapped",
+      "description": "orders.order_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.type",
+      "status": "mapped",
+      "description": "orders.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.customer_id.relationships[0]",
+      "status": "skipped",
+      "description": "orders.customer_id relationship to customers.customer_id",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+    },
+    {
+      "ruleId": "orders.quantity.type",
+      "status": "mapped",
+      "description": "orders.quantity is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.quantity.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.quantity logicalTypeOptions ['exclusiveMaximum', 'exclusiveMinimum']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "exclusiveMinimum, exclusiveMaximum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
+    },
+    {
+      "ruleId": "orders.amount.type",
+      "status": "mapped",
+      "description": "orders.amount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.amount.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.amount logicalTypeOptions ['maximum', 'minimum', 'multipleOf']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "minimum, maximum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost); multipleOf has no PQL.Assert check"
+    },
+    {
+      "ruleId": "orders.discount.type",
+      "status": "mapped",
+      "description": "orders.discount is number (Number or Currency in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.discount.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.discount logicalTypeOptions ['exclusiveMinimum']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "exclusiveMinimum checks are planned (Col.ShouldBeInRange / MinShouldBeAtLeast / MaxShouldBeAtMost)"
+    },
+    {
+      "ruleId": "orders.code.type",
+      "status": "mapped",
+      "description": "orders.code is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.code.logicalTypeOptions",
+      "status": "skipped",
+      "description": "orders.code logicalTypeOptions ['minLength', 'pattern']",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "minLength checks are planned (Col.TextLengthShouldBeInRange); pattern checks are planned for a later release (ShouldMatch per gap plan C3 / R7)"
+    },
+    {
+      "ruleId": "orders.is_active.type",
+      "status": "mapped",
+      "description": "orders.is_active is boolean (True/False in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.ship_time.type",
+      "status": "approximated",
+      "description": "orders.ship_time is time (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.status.type",
+      "status": "mapped",
+      "description": "orders.status is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.status.enum",
+      "status": "skipped",
+      "description": "orders.status is one of open, closed",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "enum (allowed values, ODCS 3.2) is planned (Col.ValuesShouldBeInSet)"
+    },
+    {
+      "ruleId": "orders.status.quality[0]",
+      "status": "skipped",
+      "description": "orders.status invalidValues mustBeLessOrEqualTo 5",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.status.quality[1]",
+      "status": "skipped",
+      "description": "orders.status missingValues mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.priority.type",
+      "status": "mapped",
+      "description": "orders.priority is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.priority.quality[0]",
+      "status": "skipped",
+      "description": "orders.priority invalidValues mustBe 0",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.priority.quality[1]",
+      "status": "skipped",
+      "description": "orders.priority invalidValues mustBeLessThan 10",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "invalidValues is planned (Col.ValuesShouldBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.priority.quality[2]",
+      "status": "skipped",
+      "description": "orders.priority missingValues mustBeLessOrEqualTo 2",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.region.type",
+      "status": "mapped",
+      "description": "orders.region is string (Text in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "orders.region.quality[0]",
+      "status": "skipped",
+      "description": "orders.region missingValues mustBeLessOrEqualTo 10",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "missingValues is planned (Col.NullOrBlankRateShouldBeAtMost, Col.ValuesShouldNotBeInSet, fallback R5)"
+    },
+    {
+      "ruleId": "orders.loaded_at.type",
+      "status": "approximated",
+      "description": "orders.loaded_at is timestamp (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.order_date.type",
+      "status": "approximated",
+      "description": "orders.order_date is date (Date in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.quality[0]",
+      "status": "mapped",
+      "description": "Order count is 0, not blank, for a year with no data",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldEqual"
+      ],
+      "severity": "error",
+      "reason": null,
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[1]",
+      "status": "approximated",
+      "description": "Average quantity stays between 1 and 50",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldBeBetween"
+      ],
+      "severity": "warning",
+      "reason": "PQL.Assert 0.7 compares a BLANK result as 0 (or as an empty string), so a BLANK can pass; --pql-assert 0.8 fails it",
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[2]",
+      "status": "approximated",
+      "description": "Order status label is exactly Open",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.ShouldEqualExactly"
+      ],
+      "severity": "error",
+      "reason": "PQL.Assert 0.7 compares a BLANK result as 0 (or as an empty string), so a BLANK can pass; --pql-assert 0.8 fails it",
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[3]",
+      "status": "skipped",
+      "description": "Quantity mean is in range",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "direct PQL.Assert calls need --pql-assert 0.9 (signatures from 0.9.0)",
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "orders.quality[4]",
+      "status": "skipped",
+      "description": "A query is not an expression",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "implementation.expression has EVALUATE (the DAX must be an expression, not a query)",
+      "source": "contract-dax"
+    },
+    {
+      "ruleId": "customers.exists",
+      "status": "mapped",
+      "description": "customers exists",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.columns",
+      "status": "mapped",
+      "description": "customers has columns customer_id",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ShouldHaveColumns"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.customer_id.primaryKey",
+      "status": "approximated",
+      "description": "customers.customer_id is a primary key (distinct)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.ShouldBeDistinct"
+      ],
+      "severity": "error",
+      "reason": "Col.ShouldBeDistinct compares DISTINCTCOUNT (counts BLANK as a value) with COUNTA (ignores blanks): a blank fails an otherwise distinct column, and one blank plus one duplicate still passes (PQL.Assert gap plan C4)"
+    },
+    {
+      "ruleId": "customers.customer_id.type",
+      "status": "mapped",
+      "description": "customers.customer_id is integer (Integer in the model)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Tbl.ColumnDataTypeShouldBe"
+      ],
+      "severity": "error",
+      "reason": null
+    },
+    {
+      "ruleId": "customers.relationships[0]",
+      "status": "skipped",
+      "description": "customers relationship to orders.nope",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+    },
+    {
+      "ruleId": "slaProperties[0]",
+      "status": "skipped",
+      "description": "SLA latency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    },
+    {
+      "ruleId": "slaProperties[1]",
+      "status": "skipped",
+      "description": "SLA latency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    },
+    {
+      "ruleId": "slaProperties[2]",
+      "status": "skipped",
+      "description": "SLA latency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    },
+    {
+      "ruleId": "slaProperties[3]",
+      "status": "skipped",
+      "description": "SLA frequency",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    },
+    {
+      "ruleId": "slaProperties[4]",
+      "status": "skipped",
+      "description": "SLA timeOfAvailability",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    },
+    {
+      "ruleId": "slaProperties[5]",
+      "status": "skipped",
+      "description": "SLA retention",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "SLA and freshness checks need --pql-assert 0.8 (gap plan R8)"
+    }
+  ]
+}

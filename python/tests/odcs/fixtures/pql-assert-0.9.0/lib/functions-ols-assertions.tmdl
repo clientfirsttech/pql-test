@@ -1,0 +1,64 @@
+createOrReplace
+	/// Object Level Security (OLS) Assertions - PQL.Assert.OLS namespace
+	/// Publisher: PQL (Power Query Lint)
+	/// These functions test metadata visibility to verify OLS is properly configured.
+	/// Use with "View as" role context in Power BI Desktop to validate security settings.
+	/// Asserts that a table is hidden from metadata (OLS metadataPermission = none).
+	/// Use this when a role should NOT have access to view or query a table.
+	function 'PQL.Assert.OLS.TableShouldBeHidden' =
+			(testName : STRING, tableName : STRING) =>
+				VAR _Tables = INFO.VIEW.TABLES()
+				VAR _IsVisible = COUNTROWS(FILTER(_Tables, [Name] = tableName)) > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Table '" & tableName & "' should be HIDDEN from metadata",
+					"Actual", IF(_IsVisible, "VISIBLE (OLS not working)", "HIDDEN (OLS working)"),
+					"Passed", NOT _IsVisible
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.9.0
+
+	/// Asserts that a table is visible in metadata (OLS allows access).
+	/// Use this when a role SHOULD have access to view or query a table.
+	function 'PQL.Assert.OLS.TableShouldBeVisible' =
+			(testName : STRING, tableName : STRING) =>
+				VAR _Tables = INFO.VIEW.TABLES()
+				VAR _IsVisible = COUNTROWS(FILTER(_Tables, [Name] = tableName)) > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Table '" & tableName & "' should be VISIBLE in metadata",
+					"Actual", IF(_IsVisible, "VISIBLE (correct)", "HIDDEN (unexpected)"),
+					"Passed", _IsVisible
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.9.0
+
+	/// Asserts that a column is hidden from metadata (OLS columnPermission = none).
+	/// Use this when a role should NOT have access to view or query a column.
+	function 'PQL.Assert.OLS.ColumnShouldBeHidden' =
+			(testName : STRING, tableName : STRING, columnName : STRING) =>
+				VAR _Columns = INFO.VIEW.COLUMNS()
+				VAR _IsVisible = COUNTROWS(FILTER(_Columns, [Table] = tableName && [Name] = columnName)) > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column '" & tableName & "[" & columnName & "]' should be HIDDEN from metadata",
+					"Actual", IF(_IsVisible, "VISIBLE (OLS not working)", "HIDDEN (OLS working)"),
+					"Passed", NOT _IsVisible
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.9.0
+
+	/// Asserts that a column is visible in metadata (OLS allows access).
+	/// Use this when a role SHOULD have access to view or query a column.
+	function 'PQL.Assert.OLS.ColumnShouldBeVisible' =
+			(testName : STRING, tableName : STRING, columnName : STRING) =>
+				VAR _Columns = INFO.VIEW.COLUMNS()
+				VAR _IsVisible = COUNTROWS(FILTER(_Columns, [Table] = tableName && [Name] = columnName)) > 0
+				RETURN ROW(
+					"TestName", testName,
+					"Expected", "Column '" & tableName & "[" & columnName & "]' should be VISIBLE in metadata",
+					"Actual", IF(_IsVisible, "VISIBLE (correct)", "HIDDEN (unexpected)"),
+					"Passed", _IsVisible
+				)
+		annotation DAXLIB_PackageId = PQL.Assert
+		annotation DAXLIB_PackageVersion = 0.9.0

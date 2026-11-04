@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       - name: Find PBIP SemanticModel directories
         id: find-models
@@ -110,9 +110,12 @@ jobs:
           PYEOF
 
       - name: Show discovered models
+        env:
+          MODELS: ${{ steps.find-models.outputs.models }}
+          MODEL_COUNT: ${{ steps.find-models.outputs.model_count }}
         run: |
-          echo "Models to test: ${{ steps.find-models.outputs.models }}"
-          echo "Total: ${{ steps.find-models.outputs.model_count }}"
+          echo "Models to test: $MODELS"
+          echo "Total: $MODEL_COUNT"
 
   # ---------------------------------------------------------------------------
   # Stage 2: run pql-test against each discovered model (matrix)
@@ -133,13 +136,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
       # -----------------------------------------------------------------------
       # Python environment
       # -----------------------------------------------------------------------
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -194,8 +197,10 @@ jobs:
       - name: Compute result filename
         id: result-name
         shell: bash
+        env:
+          MODEL: ${{ matrix.model }}
         run: |
-          SAFE=$(echo "${{ matrix.model }}" | tr '/\\. ' '----')
+          SAFE=$(echo "$MODEL" | tr '/\\. ' '----')
           echo "filename=dax-results-${SAFE}.json" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
@@ -209,18 +214,31 @@ jobs:
       - name: Run DAX tests for ${{ matrix.model }}
         id: run-tests
         shell: bash
+        # Inputs reach the script as environment variables, never as ${{ }} in the
+        # script text, so a crafted value cannot inject shell commands.
+        env:
+          MODEL: ${{ matrix.model }}
+          RESULT_FILE: ${{ steps.result-name.outputs.filename }}
+          TEST_NAME: ${{ inputs.test_name }}
+          VERBOSE: ${{ inputs.verbose }}
+          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
+          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
+          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
+          # Use the secret if set; fall back to the input (or default Public)
+          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
         run: |
-          ARGS=("${{ matrix.model }}")
+          ARGS=("$MODEL")
           ARGS+=(--log-format github)
-          ARGS+=(--output "${{ steps.result-name.outputs.filename }}")
+          ARGS+=(--output "$RESULT_FILE")
 
           # Optional: single test suite (workflow_dispatch only)
-          if [ -n "${{ inputs.test_name }}" ]; then
-            ARGS+=(--test "${{ inputs.test_name }}")
+          if [ -n "$TEST_NAME" ]; then
+            ARGS+=(--test "$TEST_NAME")
           fi
 
           # Optional: verbose output (workflow_dispatch only)
-          if [ "${{ inputs.verbose }}" = "true" ]; then
+          if [ "$VERBOSE" = "true" ]; then
             ARGS+=(--verbose)
           fi
 
@@ -238,12 +256,12 @@ jobs:
           # (fewer failures, more failures, different pass count, missing
           # results file) gates CI so the baseline can't silently shift.
           # Every other model propagates pql-test's exit code verbatim.
-          case "${{ matrix.model }}" in
+          case "$MODEL" in
             *SampleModel.SemanticModel*)
               python - <<'PYEOF'
-          import json, pathlib, sys
+          import json, os, pathlib, sys
           expected_passed, expected_failed = 47, 15
-          results = pathlib.Path("${{ steps.result-name.outputs.filename }}")
+          results = pathlib.Path(os.environ["RESULT_FILE"])
           if not results.exists():
               print("::error::SampleModel results file missing — cannot verify baseline.")
               sys.exit(1)
@@ -270,20 +288,13 @@ jobs:
               exit $rc
               ;;
           esac
-        env:
-          PQL_TENANT_ID:     ${{ secrets.PQL_TENANT_ID }}
-          PQL_WORKSPACE_ID:  ${{ vars.PQL_WORKSPACE_ID }}
-          PQL_CLIENT_ID:     ${{ secrets.PQL_CLIENT_ID }}
-          PQL_CLIENT_SECRET: ${{ secrets.PQL_CLIENT_SECRET }}
-          # Use the secret if set; fall back to the input (or default Public)
-          PQL_ENVIRONMENT:   ${{ secrets.PQL_ENVIRONMENT || inputs.environment || 'Public' }}
 
       # -----------------------------------------------------------------------
       # Upload the JSON results file so they are available as pipeline artifacts
       # -----------------------------------------------------------------------
       - name: Upload test results
         if: always() && steps.result-name.outputs.filename != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: ${{ steps.result-name.outputs.filename }}
           path: ${{ steps.result-name.outputs.filename }}
@@ -295,6 +306,9 @@ jobs:
       - name: Summarise results
         if: always() && steps.result-name.outputs.filename != ''
         shell: python
+        env:
+          MODEL: ${{ matrix.model }}
+          RESULT_FILE: ${{ steps.result-name.outputs.filename }}
         run: |
           import json, pathlib, sys, os
 
@@ -303,7 +317,7 @@ jobs:
           # step on Windows runners, where stdout defaults to cp1252.
           sys.stdout.reconfigure(encoding="utf-8")
 
-          results_path = r"${{ steps.result-name.outputs.filename }}"
+          results_path = os.environ.get("RESULT_FILE", "")
           if not results_path:
               print("No result filename set – earlier steps may have been skipped.")
               sys.exit(0)
@@ -319,7 +333,7 @@ jobs:
           skipped = data.get("skipped", 0)
           total   = data.get("total",   0)
 
-          print(f"\nModel : ${{ matrix.model }}")
+          print(f"\nModel : {os.environ['MODEL']}")
           print(f"Passed : {passed}/{total}")
           print(f"Failed : {failed}")
           print(f"Skipped: {skipped}")

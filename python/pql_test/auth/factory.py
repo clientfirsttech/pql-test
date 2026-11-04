@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Credential factory for creating azure.identity credential objects.
 """

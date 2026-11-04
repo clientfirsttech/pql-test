@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Every function in PQL.Assert 0.9.0, with its parameter count and how a contract reaches it.
+# python/tests/odcs/test_function_matrix.py keeps this file in step with the vendored library
+# and the catalogs: a function PQL.Assert adds fails that test until it is listed here.
+#
+#   params    number of parameters; optional  how many of them are optional (trailing)
+#   use       mapped  an ODCS rule generates it (a catalog op other than dax.* calls it)
+#             dax     only a `type: custom`, `engine: pql-test` rule calls it (a dax.* op,
+#                     or a direct call)
+#                     (implementation: {function, args}; pql-test supplies testName)
+#             none    out of scope: model best practices (BP.*) take no testName and check
+#                     the model's design, not its data; RetrieveTests* and LibraryVersion
+#                     are discovery helpers, not assertions
+
+library: PQL.Assert
+version: "0.9.0"
+functions:
+  PQL.Assert.BP.CheckDAXExpressions: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.CheckErrorPrevention: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.CheckFormatting: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.CheckMaintenance: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.CheckPerformance: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldAvoidBiDirectionalOnHighCardinalityColumn: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldAvoidFloatingPointDataTypes: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldHaveObjectDescriptions: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldHaveSameDataTypeInRelationships: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldHideFactTableColumns: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldMarkPrimaryKeys: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldMarkRowLabels: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldNotSummarizeNumericColumns: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldProvideFormatStringForMeasures: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldRemoveAutoDateTable: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldRemoveUnnecessaryColumns: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldRemoveUnnecessaryMeasures: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldSetIsAvailableInMdxFalseOnNonAttributeColumns: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldUseFullyQualifiedColumnReferences: {params: 0, optional: 0, use: none}
+  PQL.Assert.BP.ShouldUseTreatAsInsteadOfIntersect: {params: 0, optional: 0, use: none}
+  PQL.Assert.Col.BlankRateShouldBeAtMost: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.BlankRateShouldBeAtMostV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.ComboShouldBeDistinct: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.DistinctCountShouldBeAtLeast: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.DistinctCountShouldBeAtMost: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.DuplicateCountShouldBeAtMost: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.IsAvailableInMDX: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.MaxDateShouldBeWithinDays: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.MaxDateShouldBeWithinHours: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.MaxShouldBeAtMost: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.MeanShouldBeInRange: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.MinShouldBeAtLeast: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.NonNullValuesShouldBeDistinct: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Col.NullCountShouldBeAtMost: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Col.NullOrBlankRateShouldBeAtMost: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.NullOrBlankRateShouldBeAtMostV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.NullRateShouldBeAtMost: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Col.NullRateShouldBeAtMostV2: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Col.PctileShouldBeInRange: {params: 5, optional: 0, use: dax}
+  PQL.Assert.Col.PopulatedRateShouldBeAtLeast: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.PopulatedRateShouldBeAtLeastV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfEvensAtLeast: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfEvensAtLeastV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfOddsAtLeast: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfOddsAtLeastV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfZerosAtMost: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShareOfZerosAtMostV2: {params: 4, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeDistinct: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Col.ShouldBeInRange: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Col.ShouldBeMonotonicDecreasing: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeMonotonicIncreasing: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeMonotonicNonDecreasing: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeNonNegative: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeNonZero: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeNull: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBeNullOrBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldBePositive: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Col.ShouldBePrimaryKey: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Col.ShouldBeUniqueWithin: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldContainString: {params: 4, optional: 1, use: mapped}
+  PQL.Assert.Col.ShouldEndWith: {params: 4, optional: 1, use: mapped}
+  PQL.Assert.Col.ShouldExist: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldNotBeBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldNotBeNull: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldNotBeNullOrBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldNotContainDuplicates: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ShouldNotContainString: {params: 4, optional: 1, use: dax}
+  PQL.Assert.Col.ShouldNotEndWith: {params: 4, optional: 1, use: dax}
+  PQL.Assert.Col.ShouldNotStartWith: {params: 4, optional: 1, use: dax}
+  PQL.Assert.Col.ShouldStartWith: {params: 4, optional: 1, use: mapped}
+  PQL.Assert.Col.StdDevShouldBeAtMost: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Col.TextCaseShouldBeLower: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.TextCaseShouldBeUpper: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.TextLengthShouldBeInRange: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Col.TextShouldBeTrimmed: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.TextShouldHaveNoLeadingOrTrailingSpaces: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Col.ValuesShouldBeInSet: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Col.ValuesShouldNotBeInSet: {params: 4, optional: 0, use: dax}
+  PQL.Assert.LibraryVersion: {params: 0, optional: 0, use: none}
+  PQL.Assert.OLS.ColumnShouldBeHidden: {params: 3, optional: 0, use: dax}
+  PQL.Assert.OLS.ColumnShouldBeVisible: {params: 3, optional: 0, use: dax}
+  PQL.Assert.OLS.TableShouldBeHidden: {params: 2, optional: 0, use: dax}
+  PQL.Assert.OLS.TableShouldBeVisible: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Partitions.ShouldBe: {params: 5, optional: 2, use: dax}
+  PQL.Assert.Partitions.ShouldBeAtLeast: {params: 5, optional: 2, use: dax}
+  PQL.Assert.Partitions.ShouldExist: {params: 4, optional: 2, use: dax}
+  PQL.Assert.Perspective.ShouldContain: {params: 5, optional: 0, use: dax}
+  PQL.Assert.Perspective.ShouldExist: {params: 2, optional: 0, use: dax}
+  PQL.Assert.Perspective.ShouldMatchSchema: {params: 5, optional: 0, use: dax}
+  PQL.Assert.Relationship.ShouldExist: {params: 8, optional: 3, use: mapped}
+  PQL.Assert.RetrieveTests: {params: 0, optional: 0, use: none}
+  PQL.Assert.RetrieveTestsByEnvironment: {params: 1, optional: 1, use: none}
+  PQL.Assert.RetrieveTestsByEnvironmentV2: {params: 1, optional: 1, use: none}
+  PQL.Assert.RetrieveTestsV2: {params: 0, optional: 0, use: none}
+  PQL.Assert.ShouldBeBetween: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.ShouldBeBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldBeFalse: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldBeGreaterOrEqual: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldBeGreaterThan: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldBeLessOrEqual: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldBeLessThan: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldBeNull: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldBeNullOrBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldBeTrue: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldContainString: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldEndWith: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldEqual: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldEqualExactly: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldMatch: {params: 3, optional: 0, use: dax}
+  PQL.Assert.ShouldNotBeBetween: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.ShouldNotBeBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldNotBeNull: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldNotBeNullOrBlank: {params: 2, optional: 0, use: dax}
+  PQL.Assert.ShouldNotEqual: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.ShouldStartWith: {params: 3, optional: 0, use: dax}
+  PQL.Assert.Tbl.ColumnDataTypeShouldBe: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Tbl.LastRefreshShouldBeWithinHours: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Tbl.RowCountShouldBeAtMost: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Tbl.RowRateShouldBeAtMost: {params: 4, optional: 0, use: mapped}
+  PQL.Assert.Tbl.RowsShouldBeDistinct: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldExist: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldHaveColumns: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldHaveMoreRowsThan: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldHaveRowCount: {params: 3, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldHaveRows: {params: 2, optional: 0, use: mapped}
+  PQL.Assert.Tbl.ShouldNotHaveExtraColumns: {params: 3, optional: 0, use: mapped}

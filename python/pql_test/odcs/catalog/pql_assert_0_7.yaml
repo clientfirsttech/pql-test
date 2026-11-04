@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# PQL.Assert functions targeted by `pql-test contract`, keyed by IR op.
+#
+# Function names and argument order follow PQL.Assert 0.7.1's lib/functions.tmdl
+# on DAX Lib. This file is the only place they appear in the contract code: when
+# PQL.Assert adds, renames, or reorders a function, only this file changes.
+# Known 0.7.1 gaps (and the additive 0.8.0 fixes) are in docs/pql-assert-gap-plan.md.
+#
+# Each `args` entry names where the argument value comes from (rendered by
+# pql_test.odcs.emit.dax):
+#   testName    the generated test name                      -> DAX string
+#   tableName   the target table name                        -> DAX string
+#   tableRef    the target table                             -> 'Table'
+#   columnRef   the target column                            -> 'Table'[Column]
+#   columnList  the assertion's `columns`, comma-joined      -> DAX string
+#   columnName  the target column name                       -> DAX string
+#   dataType    the assertion's `types`: one model type name  -> DAX string;
+#               several -> the column's type when it is one of them, else the first
+#   rowCount    the target table's row count                 -> COUNTROWS('Table')
+#   expression  the assertion's `expression`: DAX from the contract (engine: pql-test), unchanged
+#   <other>     the assertion argument of that name          -> DAX literal
+
+library: PQL.Assert
+min_version: "0.7.1"
+
+ops:
+  tbl.exists:
+    fn: PQL.Assert.Tbl.ShouldExist
+    args: [testName, tableName]
+  tbl.has_columns:
+    fn: PQL.Assert.Tbl.ShouldHaveColumns
+    args: [testName, tableName, columnList]
+  tbl.no_extra_columns:
+    fn: PQL.Assert.Tbl.ShouldNotHaveExtraColumns
+    args: [testName, tableName, columnList]
+  tbl.column_type:
+    # Compares with INFO.VIEW.COLUMNS()[DataType] (same in PQL.Assert 0.4.0 to 0.8.0).
+    fn: PQL.Assert.Tbl.ColumnDataTypeShouldBe
+    args: [testName, tableName, columnName, dataType]
+  tbl.has_rows:
+    fn: PQL.Assert.Tbl.ShouldHaveRows
+    args: [testName, tableRef]
+  tbl.row_count:
+    fn: PQL.Assert.Tbl.ShouldHaveRowCount
+    args: [testName, tableRef, count]           # table before count
+  tbl.more_rows_than:
+    fn: PQL.Assert.Tbl.ShouldHaveMoreRowsThan
+    args: [testName, threshold, tableRef]       # threshold before table
+  tbl.rows_gt:
+    fn: PQL.Assert.ShouldBeGreaterThan
+    args: [testName, threshold, rowCount]
+  tbl.rows_ge:
+    fn: PQL.Assert.ShouldBeGreaterOrEqual
+    args: [testName, threshold, rowCount]
+  tbl.rows_lt:
+    fn: PQL.Assert.ShouldBeLessThan
+    args: [testName, threshold, rowCount]
+  tbl.rows_le:
+    fn: PQL.Assert.ShouldBeLessOrEqual
+    args: [testName, threshold, rowCount]
+  tbl.rows_ne:
+    fn: PQL.Assert.ShouldNotEqual
+    args: [testName, threshold, rowCount]
+  tbl.rows_between:
+    fn: PQL.Assert.ShouldBeBetween
+    args: [testName, lower, upper, rowCount]
+  col.null_rate_at_most:
+    # maxPct is a percentage (0-100). This catalog only emits 0. Col.ShouldNotBeNull is
+    # not used: in 0.7.1 it passes when any value is non-null (gap plan C1).
+    fn: PQL.Assert.Col.NullRateShouldBeAtMost
+    args: [testName, columnRef, maxPct]
+  col.distinct:
+    fn: PQL.Assert.Col.ShouldBeDistinct
+    args: [testName, columnRef]
+  # `type: custom`, `engine: pql-test` rules: a contract-supplied DAX expression compared
+  # with the rule's comparator. These scalar assertions predate 0.7.1 (they are in 0.4.0).
+  dax.equal:
+    fn: PQL.Assert.ShouldEqual
+    args: [testName, expected, expression]
+  dax.equal_exactly:
+    # Text: DAX `=` ignores case, the contract's value does not.
+    fn: PQL.Assert.ShouldEqualExactly
+    args: [testName, expected, expression]
+  dax.not_equal:
+    fn: PQL.Assert.ShouldNotEqual
+    args: [testName, expected, expression]
+  dax.gt:
+    fn: PQL.Assert.ShouldBeGreaterThan
+    args: [testName, threshold, expression]
+  dax.ge:
+    fn: PQL.Assert.ShouldBeGreaterOrEqual
+    args: [testName, threshold, expression]
+  dax.lt:
+    fn: PQL.Assert.ShouldBeLessThan
+    args: [testName, threshold, expression]
+  dax.le:
+    fn: PQL.Assert.ShouldBeLessOrEqual
+    args: [testName, threshold, expression]
+  dax.between:
+    fn: PQL.Assert.ShouldBeBetween
+    args: [testName, lower, upper, expression]

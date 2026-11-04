@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Mode A skill content assertions.
 
 Verifies each SKILL.md documents the actual CLI surface so LLMs never receive
@@ -268,8 +269,8 @@ def test_check_prereqs_lists_all_dependencies():
 
 def test_check_prereqs_documents_python_version_floor():
     content = _skill_content("check-prereqs")
-    assert re.search(r"3\.9|>=\s*3\.9", content), (
-        "check-prereqs must state Python >= 3.9 minimum"
+    assert re.search(r">=\s*3\.10\b", content), (
+        "check-prereqs must state Python >= 3.10 minimum"
     )
 
 
@@ -367,4 +368,44 @@ def test_skill_only_uses_real_command_names(skill_name: str):
     assert not invented, (
         f"{skill_name} SKILL.md references non-existent commands: {invented}. "
         f"Real commands: {sorted(real_commands)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# contract skill
+# ---------------------------------------------------------------------------
+
+
+def _contract_group():
+    from pql_test import cli as cli_module
+
+    return cli_module.cli.commands["contract"]
+
+
+def test_contract_skill_documents_every_subcommand_and_flag():
+    """Every `pql-test contract` subcommand and long flag must appear in the skill."""
+    group = _contract_group()
+    content = _skill_content("contract")
+    missing = []
+    for name, command in group.commands.items():
+        if f"pql-test contract {name}" not in content:
+            missing.append(f"pql-test contract {name}")
+        missing.extend(
+            opt for p in command.params for opt in p.opts if opt.startswith("--") and opt not in content
+        )
+    assert not missing, f"contract SKILL.md is missing: {sorted(set(missing))}"
+
+
+def test_contract_skill_only_references_real_subcommands():
+    """`pql-test contract <word>` references must be real subcommands."""
+    group = _contract_group()
+    referenced = set(re.findall(r"pql-test contract\s+([a-z][a-z-]+)", _skill_body("contract")))
+    invented = referenced - set(group.commands)
+    assert not invented, f"contract SKILL.md references non-existent subcommands: {invented}"
+
+
+def test_contract_skill_describes_the_merged_commands():
+    content = _skill_content("contract")
+    assert ("local/<name>" in content, "pql-odcs" in content, "pql-test[contracts]" in content) == (True, False, False), (
+        "contract skill must document local/<name> and not send anyone to the removed pql-odcs package or extra"
     )

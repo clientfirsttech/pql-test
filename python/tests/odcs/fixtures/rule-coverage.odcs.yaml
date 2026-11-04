@@ -1,0 +1,155 @@
+# Exercises every mapping added for PQL.Assert 0.8 rule coverage: value bounds, text
+# length, allowed values, missing and invalid values, relationships, latency vs
+# frequency, and `engine: pql-test` DAX rules. Rendered for 0.7 (mostly skipped)
+# and 0.8 (mapped) by test_golden.py.
+apiVersion: v3.2.0
+kind: DataContract
+id: rule-coverage
+name: Rule Coverage
+version: 0.1.0
+status: draft
+dataProduct: rule-coverage
+schema:
+  - name: orders
+    physicalType: table
+    customProperties:
+      - property: pbiTable
+        value: Orders
+    properties:
+      - name: order_id
+        logicalType: integer
+        primaryKey: true
+      - name: customer_id
+        logicalType: integer
+        relationships:
+          - to: customers.customer_id
+      - name: quantity
+        logicalType: integer
+        logicalTypeOptions:
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1000
+      - name: amount
+        logicalType: number
+        logicalTypeOptions:
+          minimum: 0
+          maximum: 100000
+          multipleOf: 0.01
+      - name: discount
+        logicalType: number
+        logicalTypeOptions:
+          exclusiveMinimum: 0
+      - name: code
+        logicalType: string
+        logicalTypeOptions:
+          minLength: 2
+          pattern: "^OR"
+      - name: is_active
+        logicalType: boolean
+      - name: ship_time
+        logicalType: time
+      - name: status
+        logicalType: string
+        enum:
+          - value: open
+          - value: closed
+        quality:
+          - metric: invalidValues
+            mustBeLessOrEqualTo: 5
+            unit: percent
+            arguments:
+              validValues: [open, closed]
+          - metric: missingValues
+            mustBe: 0
+      - name: priority
+        logicalType: integer
+        quality:
+          - metric: invalidValues
+            mustBe: 0
+            arguments:
+              validValues: [1, 2, 3]
+          - metric: invalidValues
+            mustBeLessThan: 10
+            arguments:
+              validValues: [1, 2, 3]
+          - metric: missingValues
+            mustBeLessOrEqualTo: 2
+            unit: percent
+      - name: region
+        logicalType: string
+        quality:
+          - metric: missingValues
+            mustBeLessOrEqualTo: 10
+            arguments:
+              missingValues: [null, "N/A", ""]
+      - name: loaded_at
+        logicalType: timestamp
+      - name: order_date
+        logicalType: date
+    quality:
+      - type: custom
+        engine: pql-test
+        description: Order count is 0, not blank, for a year with no data
+        implementation:
+          expression: CALCULATE(COUNTROWS('Orders'), FILTER(ALL('Orders'[order_date]), YEAR('Orders'[order_date]) = -1)) + 0
+          mustBe: 0
+      - type: custom
+        engine: pql-test
+        description: Average quantity stays between 1 and 50
+        severity: warning
+        implementation:
+          expression: AVERAGE('Orders'[quantity]) // per order line
+          mustBeBetween: [1, 50]
+      - type: custom
+        engine: pql-test
+        description: Order status label is exactly Open
+        implementation:
+          expression: SELECTEDVALUE('Orders'[status], "Open")
+          mustBe: Open
+      - type: custom
+        engine: pql-test
+        description: Quantity mean is in range
+        implementation:
+          function: PQL.Assert.Col.MeanShouldBeInRange
+          args: ["'Orders'[quantity]", 1, 50]
+      - type: custom
+        engine: pql-test
+        description: A query is not an expression
+        implementation:
+          expression: EVALUATE ROW("x", 1)
+          mustBe: 1
+  - name: customers
+    physicalType: table
+    customProperties:
+      - property: pbiTable
+        value: Customer
+    properties:
+      - name: customer_id
+        logicalType: integer
+        primaryKey: true
+    relationships:
+      - from: customers.customer_id
+        to: orders.nope
+slaProperties:
+  - property: latency
+    value: 3
+    unit: h
+    element: orders.loaded_at
+  - property: latency
+    value: 2
+    unit: d
+    element: orders.loaded_at, orders.order_date
+  - property: latency
+    value: 1
+    unit: d
+    element: orders
+  - property: frequency
+    value: 1
+    unit: d
+    element: orders
+  - property: timeOfAvailability
+    value: "09:00"
+    element: orders
+  - property: retention
+    value: 3
+    unit: y
+    element: orders

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Unit tests for [python/pql_test/runner/pbi_rest.py](../pql_test/runner/pbi_rest.py).
 
@@ -36,7 +37,10 @@ def _fake_response(payload: dict) -> MagicMock:
 
 class TestResolvePbiWorkspaceAndDatasetNames:
     def test_returns_both_names_from_rest_calls(self):
-        def fake_urlopen(req):
+        timeouts: list = []
+
+        def fake_urlopen(req, timeout=None):
+            timeouts.append(timeout)
             url = req.full_url
             if "/datasets/" in url:
                 return _fake_response({"name": "My Dataset"})
@@ -50,11 +54,16 @@ class TestResolvePbiWorkspaceAndDatasetNames:
             )
         assert ws == "My Workspace"
         assert ds == "My Dataset"
+        # Every REST call has a timeout, so a stalled connection cannot hang the CLI.
+        assert timeouts and all(t for t in timeouts)
 
     def test_sends_bearer_token_header(self):
         seen_headers: dict = {}
 
-        def fake_urlopen(req):
+        timeouts: list = []
+
+        def fake_urlopen(req, timeout=None):
+            timeouts.append(timeout)
             seen_headers.update(dict(req.header_items()))
             if "/datasets/" in req.full_url:
                 return _fake_response({"name": "D"})
@@ -72,7 +81,10 @@ class TestResolvePbiWorkspaceAndDatasetNames:
     def test_uses_custom_api_prefix_for_sovereign_cloud(self):
         seen_urls: list[str] = []
 
-        def fake_urlopen(req):
+        timeouts: list = []
+
+        def fake_urlopen(req, timeout=None):
+            timeouts.append(timeout)
             seen_urls.append(req.full_url)
             return _fake_response({"name": "x"})
 

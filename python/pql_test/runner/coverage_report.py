@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Text/JSON presentation for direct test-UDF coverage reports.
 

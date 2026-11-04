@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for the ``pql-test auth`` CLI subcommands — branch coverage.
 
@@ -51,7 +52,7 @@ class TestAuthLoginRouting:
             ["auth", "login", "--federated-token", "tok"],
         )
         assert result.exit_code == 1
-        assert "Federated credential requires --user" in result.output
+        assert "Federated credential requires --client-id and --tenant-id" in result.output
 
     def test_certificate_without_user_or_tenant_errors_and_exits_1(self, runner, tmp_path):
         cert = tmp_path / "cert.pem"
@@ -61,7 +62,7 @@ class TestAuthLoginRouting:
             ["auth", "login", "--certificate", str(cert)],
         )
         assert result.exit_code == 1
-        assert "Certificate auth requires --user" in result.output
+        assert "Certificate auth requires --client-id and --tenant-id" in result.output
 
     def test_spn_secret_without_tenant_errors_and_exits_1(self, runner):
         result = runner.invoke(
@@ -125,6 +126,24 @@ class TestAuthLoginRouting:
         assert saved is not None
         assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
         assert saved.federated_token == "eyJraWQ.fake"
+
+    def test_federated_token_is_read_from_environment(self, runner):
+        fake_credential = MagicMock(spec=["get_token"])
+        fake_credential.get_token.return_value = MagicMock(token="tok")
+        with patch(
+            "pql_test.auth.factory.CredentialFactory.create",
+            return_value=fake_credential,
+        ):
+            result = runner.invoke(
+                cli_module.cli,
+                ["auth", "login", "-u", "fed-client-id", "--tenant", "fed-tenant"],
+                env={"PQL_FEDERATED_TOKEN": "eyJraWQ.from-env"},
+            )
+        assert result.exit_code == 0, result.output
+        saved = AuthenticationManager()._store.load()
+        assert saved is not None
+        assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
+        assert saved.federated_token == "eyJraWQ.from-env"
 
     def test_certificate_happy_path_saves_credential(self, runner, tmp_path):
         cert = tmp_path / "cert.pem"

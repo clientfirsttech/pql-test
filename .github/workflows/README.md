@@ -4,20 +4,26 @@ This directory contains both traditional GitHub Actions workflows and GitHub Age
 
 ## Traditional Workflows
 
-- `ci.yml` — Master CI pipeline: validate-plugin → promptfoo-eval → run-tests-remote
+- `ci.yml` — Master CI pipeline: validate-plugin → promptfoo-eval → pytest (Windows), run-tests-remote (Windows), and linux (ubuntu) in parallel
 - `validate-plugin.yml` — Validates plugin.json structure and skill frontmatter
 - `promptfoo-eval.yml` — Evaluates Copilot CLI skills via GitHub Models
 - `run-tests-remote.yml` — Runs DAX tests against remote Power BI/Fabric workspace
+- `release.yml` — Publishes pql-test to PyPI on `vX.Y.Z` tags (Trusted Publishing is bound to this file name; do not rename)
+- `security.yml` — Stage 0: gitleaks on the full history, bandit, pip-audit, and the offline dead-link check
+- `pytest.yml` — The full pytest suite on Windows with ADOMD.NET (Stage 3a)
+- `federated-smoke.yml` — Manual end-to-end check of the federated-credential (OIDC) sign-in from CONTRIBUTING.md; needs the Entra federated credential and the `federated-smoke` Environment
+- `linux.yml` — Stage 3c, pql-test on ubuntu without pyadomd (Python 3.10 and 3.13): the contract and platform tests, a smoke test of the file-based commands (`contract lint|coverage|generate|trace|doctor`, `retrieve-tests`), and a check that `run-tests`, `code-coverage`, and `contract run` stop with one Windows-only message
 
 ## Agentic Workflows
 
-### `issue-review-agent.yml`
+### `issue-review-agent.md` (compiled to `issue-review-agent.lock.yml`)
 
-**Purpose**: Automatically analyzes GitHub issues and generates code fixes via PR.
+**Purpose**: Analyzes one GitHub issue and generates a code fix via PR.
 
 **Triggers**:
-- Automatically when an issue is opened (`issues.opened`)
-- Manually via workflow_dispatch with issue number input
+- Manually only: Actions > Issue Review and Fix Agent > Run workflow, with the issue number. Running a workflow needs write access to the repository.
+- No issue event (opened, labeled) starts it: issue text is untrusted, so a maintainer chooses which issues it reads. Review its pull requests as you would an outside contribution.
+- After editing the `.md`, run `gh aw compile issue-review-agent`; the lock file fails at runtime if it is stale.
 
 **How It Works**:
 
@@ -83,7 +89,7 @@ If no changes are needed:
 **Repository Context**:
 
 The agent understands this is the **pql-test** repository and follows:
-- Python >= 3.9 with PEP 8 style
+- Python >= 3.10 with PEP 8 style
 - Click framework for CLI
 - Type annotations and Google-style docstrings
 - Conventional commits

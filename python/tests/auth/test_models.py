@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 Tests for pql_test.auth.models — Data models for authentication configuration.
 """

@@ -1,0 +1,37 @@
+# Must-fail contract for examples/SampleModel: each rule tagged expect-fail
+# below (and listed in python/tests/test_contract_live.py) must fail against the sample model.
+apiVersion: v3.1.0
+kind: DataContract
+id: marvel-must-fail
+name: Marvel Must Fail
+version: 1.0.0
+status: draft
+dataProduct: marvel-fail
+schema:
+  - name: marvel_fact
+    customProperties:
+      - property: pbiTable
+        value: MarvelFact
+    properties:
+      - name: Name
+        logicalType: string
+    quality:
+      - id: marvel_fact_exactly_one_row      # expect-fail: MarvelFact has many rows
+        metric: rowCount
+        mustBe: 1
+  - name: DateDim
+    properties:
+      - name: Year                            # expect-fail: many dates share a year
+        logicalType: integer
+        unique: true
+    quality:
+      - id: date_dim_fewer_than_one_row      # expect-fail: DateDim is not empty
+        metric: rowCount
+        mustBeLessThan: 1
+  - name: ghost                               # expect-fail: no such table or columns
+    customProperties:
+      - property: pbiTable
+        value: NoSuchTable
+    properties:
+      - name: Missing
+        logicalType: string

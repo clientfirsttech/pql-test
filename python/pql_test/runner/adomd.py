@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """
 ADOMD.NET assembly loading and auto-install.
 
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import glob
 import os
+import shutil
 import sys
 from typing import Optional
 
@@ -144,6 +146,26 @@ def _adomd_auto_install_cache_dir() -> Optional[str]:
     )
 
 
+# SHA-512 of microsoft.analysisservices.adomdclient 19.114.0 (the nupkg), matching the
+# packageHash in NuGet's catalog entry (checked 2026-10-28). Bump it with the version.
+ADOMD_NUPKG_SHA512 = (
+    "4f564865082d7007b2590802e680a7ecd5e4991d758c6f589925a4a50b02e758"
+    "b3d3730ee0c8606419a297160e7312d37c79cfec8db90287caf0323e7c47a7fd"
+)
+
+
+# Written into the cache after a verified install: the SHA-512 the package was checked against.
+_MARKER = ".pql-test-verified"
+
+
+def _read_marker(cache_dir: str) -> Optional[str]:
+    try:
+        with open(os.path.join(cache_dir, _MARKER), encoding="ascii") as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
 def _auto_install_adomd_from_nuget() -> Optional[str]:
     """Download Microsoft.AnalysisServices.AdomdClient NuGet package.
 
@@ -154,9 +176,12 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
     standard "ADOMD.NET not loaded" path when it returns None.
 
     Opt-outs:
+    - not Windows — skip (the net472 assemblies only load on Windows)
     - PQL_TEST_HERMETIC=1 — skip (test mode)
     - PQL_TEST_NO_AUTO_INSTALL_ADOMD=1 — skip (user preference)
     """
+    if sys.platform != "win32":
+        return None
     if os.environ.get("PQL_TEST_HERMETIC") or os.environ.get(
         "PQL_TEST_NO_AUTO_INSTALL_ADOMD"
     ):
@@ -166,10 +191,9 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
     if cache_dir is None:
         return None
 
-    # Already cached from a prior run — fast path.
-    if os.path.isdir(cache_dir) and any(
-        f.lower().endswith(".dll") for f in os.listdir(cache_dir)
-    ):
+    # Already installed and verified by a prior run — fast path. A cache without the
+    # marker (an older, unverified install, or one cut short) is replaced below.
+    if _read_marker(cache_dir) == ADOMD_NUPKG_SHA512:
         return cache_dir
 
     pkg = "microsoft.analysisservices.adomdclient"
@@ -185,16 +209,31 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         file=sys.stderr,
     )
 
+    import hashlib
     import tempfile
     import urllib.request
     import zipfile
 
     tmp_path: Optional[str] = None
+    staging: Optional[str] = None
     try:
+        # A fixed https URL; the package is verified against a pinned hash before use.
+        with urllib.request.urlopen(nupkg_url, timeout=120) as response:  # nosec B310
+            package = response.read()
+        digest = hashlib.sha512(package).hexdigest()
+        if digest != ADOMD_NUPKG_SHA512:
+            raise RuntimeError(
+                f"{pkg} {version} from nuget.org does not match its pinned SHA-512 "
+                f"(got {digest[:16]}…); refusing to load it"
+            )
         with tempfile.NamedTemporaryFile(suffix=".nupkg", delete=False) as f:
             tmp_path = f.name
-        urllib.request.urlretrieve(nupkg_url, tmp_path)
-        os.makedirs(cache_dir, exist_ok=True)
+            f.write(package)
+        # Extract into a fresh folder next to the cache, and swap it in only when complete.
+        parent = os.path.dirname(os.path.abspath(cache_dir))
+        os.makedirs(parent, exist_ok=True)
+        staging = tempfile.mkdtemp(prefix=".adomd-", dir=parent)
+        root = os.path.realpath(staging)
         member_prefix = "lib/net472/"
         with zipfile.ZipFile(tmp_path) as z:
             for member in z.namelist():
@@ -207,10 +246,19 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
                 # messages.  Flattening would collide every culture's
                 # `*.resources.dll` to the same path.
                 rel = member[len(member_prefix):]
-                dest = os.path.join(cache_dir, *rel.split("/"))
+                dest = os.path.realpath(os.path.join(staging, *rel.split("/")))
+                if os.path.commonpath([root, dest]) != root:
+                    # Zip slip: a member like lib/net472/../../x.dll would land outside the cache.
+                    raise RuntimeError(f"{pkg} contains a path outside its folder: {member}")
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with z.open(member) as src, open(dest, "wb") as out:
                     out.write(src.read())
+        with open(os.path.join(staging, _MARKER), "w", encoding="ascii") as marker:
+            marker.write(ADOMD_NUPKG_SHA512)
+        if os.path.isdir(cache_dir):
+            shutil.rmtree(cache_dir)
+        os.replace(staging, cache_dir)
+        staging = None
         print(
             f"ADOMD.NET assemblies installed to {cache_dir}.  Subsequent runs "
             "use the cached install.",
@@ -227,6 +275,8 @@ def _auto_install_adomd_from_nuget() -> Optional[str]:
         )
         return None
     finally:
+        if staging and os.path.isdir(staging):
+            shutil.rmtree(staging, ignore_errors=True)
         if tmp_path:
             try:
                 os.unlink(tmp_path)

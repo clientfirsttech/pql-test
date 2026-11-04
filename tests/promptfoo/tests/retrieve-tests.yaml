@@ -17,8 +17,8 @@
       value: |
         The response must state that pql-test retrieve-tests returns JSON by default,
         so no additional flag is needed for piping into jq. The response should NOT
-        require adding `--json` or similar (that flag does not exist — `--human` is
-        the opt-in for text output).
+        require adding `--json` or similar (that flag does not exist — `--format text`
+        is the opt-in for text output).
 
 - description: Filter to a single environment
   vars:
@@ -34,7 +34,7 @@
     task: List test suites in a human-readable format so I can eyeball them in my terminal.
   assert:
     - type: contains
-      value: --human
+      value: --format text
 
 - description: Local Desktop model by name
   vars:

@@ -7,23 +7,60 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Refactor runner.py monolith into focused module package** — CRITICAL for maintainability (promoted from backlog 2026-08-30). File is 1,947 lines mixing 9+ responsibilities, causing high regression risk and slow code review velocity. Split into `runner/` package with 9 focused modules (~150-350 lines each). See [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md). Estimated 2-3 days.
-- **Implement token validation in auth/manager.py** — TODO at line 123 needs implementation for OWASP A07 (Authentication Failures). Validate JWT expiry without making service calls. Estimated 4 hours.
-- **Security audit and OWASP Top 10 compliance** — Run `pip-audit`, threat-model authentication flows (5 methods), validate RLS/OLS role assignment security, add audit logging for auth attempts. Address A01, A04, A06, A07 findings from 2026-08-30 AIDD review. Estimated 1 day.
 
 ## Open Items
 
+- **Before the repository goes public (2026-10-28).** gitleaks found no committed credential (196 commits, all branches). See [tasks/archive/2026-10-28-open-source-security.md](tasks/archive/2026-10-28-open-source-security.md). In order:
+  1. ~~Decide on identifying data gitleaks cannot detect.~~ Decided 2026-10-29: no history rewrite. The test-identity emails (`atlas.kerski@`, `jkerski@`, `lbarker@`), the SharePoint URL, `pqlint-demos`, the `C:\Users\giorg` path, the `.pbix` test models, and the commit author emails all stay; they belong to test models and test accounts.
+  2. ~~Re-scan with the pull request refs.~~ Done 2026-10-29 on a mirror clone: all branches, tags, and 31 pull request refs (228 commits), every stored file version (1,715 blobs), and the two zip archives among them. No real secret. The only plain-text hit is the public client ID already in `.gitleaksignore`. The deleted `pq-lint-copilot-remove-pqlint-references.zip` (commit `321a102`) holds pqlint lint-rule test fixtures with fake secrets (an Entra-format `PfY8Q~…` value, a 32-hex API key, a GUID token); gitleaks does not open archives by default, so CI does not flag them.
+  3. ~~Review old GitHub Actions run logs and artifacts.~~ Scanned 2026-10-29: all 185 artifacts and the 124 of 349 run logs the API still serves (the other 222 return HTTP 500, 4 return 404). gitleaks (archives opened) found nothing, and no value from the local `.env` files appears in them. Optional: delete runs older than the log retention before launch, so nothing unscanned can surface.
+  4. Repository settings, applied 2026-10-29 (private repo):
+     - done: Dependabot alerts and security updates; a read-only default `GITHUB_TOKEN`, and Actions can no longer approve pull requests;
+     - done: `main` protected: a pull request with 1 approving review (Code Owners for owned files, stale approvals dismissed, conversations resolved), the Stage 0, 3a, and 3c checks passing, no force-push or deletion. Admins can bypass. `.github/CODEOWNERS` covers `.github/`, the license files, and the security-check config;
+     - **at launch** (needs a public repository, or a GitHub Secret Protection license while private): secret scanning and push protection; private vulnerability reporting (SECURITY.md links to it; the link 404s until then); "Require approval for all outside collaborators" for fork pull request workflows.
+  5. After launch, GitHub Environments are free: add a `pypi` environment with required reviewers to `release.yml`'s publish job, and set it in the PyPI trusted publisher (the header of `release.yml` explains).
+  6. ~~Decide what the issue-review agent may do with outsider-written issues.~~ Decided 2026-10-29: manual only (`workflow_dispatch` with an issue number; the `issues: labeled` trigger is removed). The issue text it reads is still untrusted, so review its pull requests as outside contributions.
+  7. ~~Decide whether to raise `requires-python` to `>=3.10`.~~ Done 2026-10-29 (0.2.0): `requires-python = ">=3.10"`, the dependency floors no longer need Python markers, the Linux CI matrix runs 3.10 and 3.13, and the vision, README, skills, and doctor checks say 3.10.
+  8. Every maintainer runs `pip install pre-commit && pre-commit install` once per clone, and confirms they are fine with the author and maintainer details in `python/pyproject.toml`.
+  9. ~~The old, expired client secret in `python/tests/.env`.~~ Done 2026-10-29: the file is deleted (its app's secret had expired: AADSTS7000222), and the live tests now fall back to `python/.env`, with `python/tests/.env` an optional override. Rotation checklist: `secret-rotation.local.md` (git-ignored).
+
+- **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
+  1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
+  2. Open a PR from `dev-odcs` to `dev` (opened 2026-11-03; earlier dev-odcs PRs #43 and #45 also went to `dev`), then promote `dev` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.
+  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions. DCO sign-off alone does not allow relicensing contributions.
+  4. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
+
+- **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
+
 - **Local-machine service smoke validation** — `python/tests/.env` is not configured on the maintainer's machine. CI's [run-tests-remote.yml](.github/workflows/run-tests-remote.yml) exercises the service path on every push, so the gap is informational only.
 
-- **PyPI initial release — manual steps remain** — code/config side is ready ([python/pyproject.toml](python/pyproject.toml), [.github/workflows/release.yml](.github/workflows/release.yml), MIT [LICENSE.txt](LICENSE.txt) synced to `python/`, release checklist in [CONTRIBUTING.md](CONTRIBUTING.md)).  Maintainer still has to: (1) `cd python && python -m build && twine check --strict dist/*` locally to confirm a clean build, (2) create accounts on https://test.pypi.org and https://pypi.org if they don't exist, (3) register trusted publishers on both for `pql-test` with workflow name `release.yml` and environments `testpypi` / `pypi`, (4) create matching GitHub Environments in repo settings, (5) `git tag v0.1.0 && git push --tags` to fire the release workflow.  See the "Releasing a new version" section in [CONTRIBUTING.md](CONTRIBUTING.md).
+- **PyPI initial release — manual steps remain** — code/config side is ready ([python/pyproject.toml](python/pyproject.toml), [.github/workflows/release.yml](.github/workflows/release.yml), AGPL-3.0-only [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE) synced to `python/`, release checklist in [CONTRIBUTING.md](CONTRIBUTING.md)).  Maintainer still has to: (1) `cd python && python -m build && twine check --strict dist/*` locally to confirm a clean build, (2) create accounts on https://test.pypi.org and https://pypi.org if they don't exist, (3) register trusted publishers on both for `pql-test` with workflow name `release.yml` and environments `testpypi` / `pypi`, (4) create matching GitHub Environments in repo settings, (5) `git tag v0.1.0 && git push --tags` to fire the release workflow.  See the "Releasing a new version" section in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Backlog
 
-- **~~Split `python/pql_test/runner.py` into a focused module package~~** — PROMOTED TO ACTIVE WORK (2026-08-30). See above and [tasks/runner-refactor-epic.md](tasks/runner-refactor-epic.md).
+- **Contract commands: open decisions** — turn on "Require review from Code Owners" in branch protection (CODEOWNERS uses `@kerski-cft` for the license files).
+
+  Decided 2026-10-25/26 (still in force): ODCS v3.2.x is supported; model names come only from the contract's `customProperties` (`pbiTable` / `pbiColumn`); generated `.dax` files can be regenerated in CI or committed with a drift check ([docs/contracts.md](docs/contracts.md)); PQL.Assert gaps are tracked in [docs/pql-assert-gap-plan.md](docs/pql-assert-gap-plan.md).
+
+  Decided 2026-10-28: pql-odcs is merged into pql-test (`pql-test contract`), and the repository is AGPL-3.0-only. The design record is [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md) (superseded).
+
+- **Contract commands: next** — Contents:
+  - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
+  - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
+
+- **Contract commands: later** — Contents:
+  - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
+  - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`).
+
+- **Contract commands: optional** — Contents:
+  - a Bitol RFC for a Power BI / Fabric semantic model `servers` type.
+  - An upstream `datacontract export pql-assert` would need code under a license datacontract-cli accepts (MIT), so it is only possible as a separately licensed contribution.
 
 - **Restore interactive prompt for service-principal-with-certificate auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 to keep the first-run UX focused on the two most common paths (browser interactive, SPN with secret). The underlying support is still wired end-to-end: `AuthMethod.SERVICE_PRINCIPAL_CERT`, the factory in [python/pql_test/auth/factory.py](python/pql_test/auth/factory.py), and the `--certificate` / `-u` / `--tenant` flag combination in [cli.py:cmd_auth_login](python/pql_test/cli.py) all still work for power users. Re-expose in the prompt once we have a real user asking for it, or after the public launch when we want to broaden the documented auth surface.
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
+
+- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
 
 - **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
 
@@ -31,9 +68,111 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
-- **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
-
 ## Completed Work
+
+### 2026-11-04 — PQL.Assert minimum-version warning in `contract run` (branch `dev-odcs`)
+
+`contract run` now warns when the connected model's PQL.Assert is older than the newest catalog (0.9), or older than an explicit `--pql-assert`. Non-blocking; shown on stderr and in the CI pre-warnings. See `pql_assert_version_warning` in `contract_run.py`.
+
+### 2026-11-04 — Counsel review of the AGPL-3.0 relicensing dropped
+
+Decided: AGPL-3.0-only stands as is, with no counsel review. Removed the "LAST EPIC" and the review gate on the 0.2.0 release.
+
+### 2026-11-04 — By-name service path no longer raises on auth failures (branch `dev-odcs`)
+
+`resolve_service_xmla_connection_by_name` now catches credential and token failures, warns on stderr, and returns None, so `run-tests`, `retrieve-tests`, and `retrieve-test` print one clean error instead of a traceback (their message no longer blames missing flags). Two tests added. Added the manual `federated-smoke.yml` workflow for the federated-credential example.
+
+### 2026-11-03 — Security audit: OWASP A01, A04, A06 (branch `dev-odcs`)
+
+- See [tasks/archive/2026-11-03-security-audit.md](tasks/archive/2026-11-03-security-audit.md) and [docs/security-threat-model.md](docs/security-threat-model.md).
+- `pip-audit` (requirements and project dependencies) and `bandit -ll` found nothing. Dependabot covers pip and GitHub Actions; every workflow sets `permissions:`.
+- **Fixed:** the XMLA connection string quoted catalog, role, and user values but not the client secret, token, client ID, or server, so a secret containing `;Roles=Admin` added a `Roles=` key. All values now go through `_conn_value` (`python/pql_test/runner/xmla.py`), with tests.
+- **Fixed:** `.github/copilot-setup-steps.yml` used an unpinned `actions/checkout@v4`.
+- **Documented:** federated-credential subject claims with a GitHub Actions example (not yet run end to end), and managed-identity least privilege, in CONTRIBUTING.md; the threat model's statuses, duplicates, and compliance table are current.
+
+### 2026-11-03 — Plan cleanup: two Active Work items were already done
+
+- **Runner refactor** — `python/pql_test/runner/` is already a package of 15 focused modules (`xmla.py`, `adomd.py`, `resolver.py`, `discovery.py`, `execution.py`, `local_pbi.py`, `coverage*.py`, `cli_format.py`, and others); the monolith was removed 2026-09-02 and `tasks/runner-refactor-epic.md` no longer exists.
+- **Token validation (OWASP A07)** — `_decode_jwt_expiry()` in [python/pql_test/auth/manager.py](python/pql_test/auth/manager.py) reads the JWT `exp` claim without a service call, and the token-acquire path reports `token_expires_at` / `token_is_valid`. The "TODO at line 123" no longer exists.
+
+### 2026-11-02 — Adopt PQL.Assert 0.9.0: native refresh-recency check (branch `dev-odcs`)
+
+- See [tasks/archive/2026-11-02-pql-assert-0-9.md](tasks/archive/2026-11-02-pql-assert-0-9.md).
+- Vendored fixture replaced: `python/tests/odcs/fixtures/pql-assert-0.9.0/` (0.9 is additive-only, so one copy covers all three catalogs); `Tbl.LastRefreshShouldBeWithinHours` classified `mapped` in `pql_assert_functions.yaml`.
+- New `pql_assert_0_9.yaml` catalog (`extends: pql_assert_0_8`) maps ODCS `frequency` to `Tbl.LastRefreshShouldBeWithinHours(testName, tableName, maxAgeHours)` instead of 0.8's inline `INFO.PARTITIONS()` expression; still reported **approximated**. `--pql-assert 0.7` and `0.8` output is unchanged. `--pql-assert 0.9` is now a valid choice on `generate`, `coverage`, `trace`, and `run`; the default stays `0.7`.
+- **Found while vendoring:** `engine: pql-test` direct calls are validated against the newest vendored PQL.Assert signatures, not a fixed version, so bumping the fixture to 0.9.0 silently raised the version a direct call needs from `--pql-assert 0.8` to `0.9` (the same thing happened, unnoticed in docs, when 0.7.1 → 0.8.0 shipped). Fixed the skip message to read the version dynamically (`pql_test/odcs/mapping/dax_rules.py`) instead of a hardcoded literal, and documented the behavior change in [docs/contracts.md](docs/contracts.md#pqlassert-09): a contract with a direct call that generated fine under `--pql-assert 0.8` now reports it skipped until it moves to `0.9`.
+- `docs/contracts.md` gets a `### PQL.Assert 0.9` section; `docs/pql-assert-freshness-request.md` and the R8 note in `docs/pql-assert-gap-plan.md` are marked fulfilled.
+- `tests/odcs/test_pql_assert_0_9.py` (new) plus updates across `test_function_matrix.py`, `test_library_conformance.py`, `test_docs_contracts_agreement.py`, `test_dax_rules.py`, `test_contract_run.py`, and a new `rule-coverage-0-9` golden case. Full suite: 1149 passed, 0 failed, 2 skipped (`pytest -m "not live"`; `test_properties.py` excluded, `hypothesis` not installed in this environment).
+- Version stays `0.2.0` (still unreleased per `aidd-custom/skills/pql-test-version-bump/SKILL.md`'s own rule: pyproject is already ahead of the latest tag `v0.1.13`, so this folds into that pending release).
+- **Live validation (user deployed, 2026-11-02):** `examples/SampleModel.SemanticModel/definition/functions.tmdl` bumped to 0.9.0 and republished to the `pqlint-demos [Dev]` Fabric workspace; `contract doctor` confirms deployed and model-folder both report `--pql-assert 0.9` with no drift, and `contract run --pql-assert 0.9` against the live model passes every rule in `examples/contracts/freshness.odcs.yaml`, including the new `Tbl.LastRefreshShouldBeWithinHours`-backed refresh-age check.
+  - Caught a hardcoded `"0.8.0"` string literal in `PQL.Assert.LibraryVersion()`'s function body (the version bump script only touched `DAXLIB_PackageVersion` annotations) — the deployed model kept reporting 0.8.0 live until this was fixed and republished.
+  - Caught two gaps in `tests/test_contract_live.py` only visible once `-m live` actually ran against the republished model (the epic itself never exercises `-m live`): `EXPECTED_RULE_COVERAGE` still pinned outcomes for two `engine: pql-test` direct-call rules that now always skip under `--pql-assert 0.8` (direct calls need `LATEST_PQL_ASSERT`, now 0.9); and `_committed_catalog()` capped at `"0.8"` regardless of how new the committed version actually was. Full live suite now 19 passed; offline suite still 1149 passed, 0 failed, 2 skipped.
+
+### 2026-10-29 — Contract gap detection: ODCS rule matrix, docs agreement, gap-check skill, examples (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-29-contract-gap-detection.md](tasks/archive/2026-10-29-contract-gap-detection.md) and [docs/contracts.md](docs/contracts.md#how-we-keep-this-mapping-complete).
+- `test_odcs_rule_matrix.py` classifies every value in ODCS's closed vocabularies (`pql_test/odcs/catalog/odcs_rules.yaml`), mirroring the PQL.Assert function matrix; a new ODCS release's metric, quality type, `logicalType`, relationship type, or `logicalTypeOptions` key fails a test until classified and demonstrated in a fixture.
+- `test_docs_contracts_agreement.py` checks `docs/contracts.md`'s mapping tables against the catalogs, both directions, plus six skip reasons against what the mapper actually produces.
+- `aidd-custom/skills/pql-test-contract-gap-check/SKILL.md`, wired into `/aidd-review` step 9 alongside the docs check: checks for a new Bitol ODCS or PQL.Assert release and runs both matrices plus the docs-agreement test.
+- `examples/contracts/` (`starter.odcs.yaml`, `scenario-tests.odcs.yaml`, `freshness.odcs.yaml`): runnable, live-verified example contracts for learners, linked from `docs/contracts.md` and the contract skill in place of pointing at test fixtures.
+
+### 2026-10-29 — Contract rule coverage: value rules, DAX rules, latency vs frequency (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-29-contract-rule-coverage.md](tasks/archive/2026-10-29-contract-rule-coverage.md) and [docs/contracts.md](docs/contracts.md).
+- With `--pql-assert 0.8`: numeric bounds, text length, `enum`, `invalidValues` value lists, `missingValues`, and `relationships` map to PQL.Assert; `lint` checks relationships against the TMDL. 0.7 output is unchanged.
+- `type: custom` rules with `engine: pql-test` carry DAX (an expression and a comparator, or a direct PQL.Assert call), run in their own `ContractDax` suite. `pql_assert_functions.yaml` classifies all 126 PQL.Assert 0.8.0 functions, and a test fails on an unclassified one.
+- Freshness: `latency` is data age (a timestamp column), `frequency` is refresh recency (`INFO.PARTITIONS()`, in its own `RefreshAge` suite). [docs/pql-assert-freshness-request.md](docs/pql-assert-freshness-request.md) asks PQL.Assert 0.9.0 for a refresh function and docs that separate the two.
+- Proven live against SampleModel (`rule-coverage-live.odcs.yaml`, 45 rules with pinned outcomes and failure text). Confirmed 2026-10-29: the standard service principal in `python/.env` reads `INFO.PARTITIONS()` fine (it already does, for `Partitions.*`), so `RefreshAge` runs cleanly end to end with the identity pql-test uses everywhere; no separate restricted-identity gap to chase.
+
+### 2026-10-28 — pql-odcs merged into pql-test; AGPL-3.0-only (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md).
+- One package and one CLI: `pql-test contract lint|coverage|generate|trace|run|doctor`, with the same MODEL_PATH forms everywhere (`local/<name>` included). The standalone `pql-odcs` CLI, its skill command, the plugin loader, and the `contracts` extra are gone.
+- The repository is AGPL-3.0-only; the license-boundary CI checks are replaced by a Linux stage for the file-based commands ([linux.yml](.github/workflows/linux.yml), ci.yml Stage 3c).
+
+### 2026-10-27 — pql-odcs adopts PQL.Assert 0.8.0 (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md](tasks/archive/2026-10-27-pql-odcs-pql-assert-0-8.md) and [docs/pql-assert-gap-plan.md](docs/pql-assert-gap-plan.md).
+- A second catalog, `pql_assert_0_8.yaml`, extends the 0.7 one. `--pql-assert 0.7|0.8` on `generate`, `coverage`, and `trace` picks it; the default stays 0.7 and its golden files are unchanged.
+- With 0.8: exact `required`, `primaryKey`, `unique`, and `duplicateValues`; null and duplicate ceilings; percent null rates; multi-column keys (R3); `mustNotBeBetween` (R2); simple anchored patterns (R7); `latency` freshness (R8, approximated).
+- `pql-test contract run` defaults to `--pql-assert auto`: it queries `PQL.Assert.LibraryVersion()` and falls back to 0.7. The connection is now resolved before generating.
+- Still open: run the 0.8 output against a model with PQL.Assert 0.8.0 (the gap plan's unrun variants), and the v0.2 items that need no 0.8 function (types, relationships, ranges, text length, value lists, `missingValues`, the query-scoped XMLA target, the datacontract-cli adapter).
+
+### 2026-10-25 — pql-odcs v0.1: ODCS data contracts → PQL.Assert suites (branch `dev-odcs`)
+
+- See [tasks/archive/2026-10-25-pql-odcs-v0.1.md](tasks/archive/2026-10-25-pql-odcs-v0.1.md) and [docs/pql-odcs-implementation-plan.md](docs/pql-odcs-implementation-plan.md).
+- **pql-odcs** is a new MIT package under `packages/pql-odcs/`. It:
+  - loads ODCS v3.0.x, v3.1.x, and v3.2.x contracts and validates them against the bundled Bitol schemas;
+  - resolves model names from `pbiTable`/`pbiColumn` customProperties on the contract, else the logical name;
+  - maps each rule through a PQL.Assert 0.7.1 catalog (data only);
+  - writes `<Prefix>.<Suite>.<ENV>[WARN].Tests.dax` suites;
+  - reports every rule as mapped, approximated, or skipped (`coverage`);
+  - joins pql-test results back to rule ids (`trace`);
+  - checks names against the model's TMDL (`lint --model`);
+  - ships as the standalone `pql-odcs` CLI.
+- **pql-test 0.2.0** loads plugins from the `pql_test.commands` entry point and adds `pql-test contract run`. It installs the plugin through the optional `contracts` extra. Generated suites run from their own DEFINE FUNCTION text, so they don't depend on the model's registered tests.
+- **License boundary**:
+  - the `LICENSE.txt` scope note, `LICENSES.md`, CODEOWNERS, and the DCO guidance;
+  - SPDX headers on every `python/` and pql-odcs `.py` file;
+  - CI checks: SPDX, import-linter, wheel contents, and dependency licenses.
+- **CI and release**:
+  - `pql-odcs.yml` runs Linux, macOS, and Windows on Python 3.9 and 3.13, plus a standalone install and a plugin install;
+  - `release-pql-odcs.yml` publishes on `pql-odcs-v*` tags;
+  - `pytest.yml` now installs the `contracts` extra.
+- **Testing**:
+  - the live `contract run` against SampleModel in Fabric passed: the good contract passes every mapped rule, and the must-fail contract fails exactly the 5 planted rules;
+  - pql-odcs: 136 tests at 95% coverage, including golden files and hypothesis tests, passing on Python 3.9 and 3.12;
+  - pql-test suite green.
+- **Review**: an AIDD review found and fixed these issues:
+  - cross-contract suite overwrite and deletion;
+  - trace now joins on the `ODCS <id> <ruleId>:` prefix;
+  - header injection through the contract id;
+  - duplicate rule ids;
+  - NaN/inf thresholds;
+  - malformed sidecar crash (the sidecar was later removed, 2026-10-26);
+  - release could publish from a non-tag ref;
+  - `contract run` now emits `--log-format` annotations and writes the per-rule trace into `--output`;
+  - `primaryKey`/`unique`/`duplicateValues`, and `required` on string columns, are now reported as approximated, with the DAX semantics as the reason (gap plan C4/C5).
 
 ### 2026-10-22 — certifi floor for PYSEC-2026-4320, bump to 0.1.20
 

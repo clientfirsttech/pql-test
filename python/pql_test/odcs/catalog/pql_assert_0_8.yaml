@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# PQL.Assert 0.8.0 additions. Every 0.7 op is inherited unchanged; this file only
+# adds ops, so a model on 0.8.0 keeps every 0.7.1 function. Selected with
+# `--pql-assert 0.8`. Function names and signatures follow the released PQL.Assert
+# 0.8.0 package; python/tests/odcs/test_library_conformance.py checks them against a vendored copy.
+#
+# Extra argument sources beyond the 0.7 catalog:
+#   keyProjection    the assertion's `columns` as SELECTCOLUMNS over the table
+#   valueTable       the assertion's `values` as a table constructor   -> {"a", "b"}
+#   valueColumn      that table constructor's column                   -> [Value]
+#   filteredRows     the target table's rows matching the assertion's `values`,
+#                    `matchNull`, and `negate`                         -> FILTER('Table', ...)
+#   refreshAgeHours  hours since the target table's partitions last refreshed, from
+#                    INFO.PARTITIONS() and INFO.TABLES()               -> DAX expression
+
+library: PQL.Assert
+min_version: "0.8.0"
+extends: pql_assert_0_7
+
+ops:
+  col.null_count_at_most:
+    # True nulls only (ISBLANK); maxCount 0 is "no row is null" (gap plan C1 / R4).
+    fn: PQL.Assert.Col.NullCountShouldBeAtMost
+    args: [testName, tableRef, columnRef, maxCount]
+  col.null_pct_at_most:
+    # Correct row-based rate; maxPct is a percentage (0-100) (gap plan C2).
+    fn: PQL.Assert.Col.NullRateShouldBeAtMostV2
+    args: [testName, tableRef, columnRef, maxPct]
+  col.non_null_distinct:
+    # NULLs are ignored and "" counts as a value, as in ODCS unique / duplicateValues 0.
+    fn: PQL.Assert.Col.NonNullValuesShouldBeDistinct
+    args: [testName, columnRef]
+  col.primary_key:
+    fn: PQL.Assert.Col.ShouldBePrimaryKey
+    args: [testName, columnRef]
+  col.duplicates_at_most:
+    fn: PQL.Assert.Col.DuplicateCountShouldBeAtMost
+    args: [testName, columnRef, maxCount]
+  tbl.rows_not_between:
+    fn: PQL.Assert.ShouldNotBeBetween
+    args: [testName, lower, upper, rowCount]
+  tbl.rows_distinct:
+    fn: PQL.Assert.Tbl.RowsShouldBeDistinct
+    args: [testName, keyProjection]
+  # Pattern checks skip NULL rows. The mapper passes matchCase "Y" so the comparison is
+  # case-sensitive, like the ODCS regex (PQL.Assert's default is case-insensitive).
+  col.starts_with:
+    fn: PQL.Assert.Col.ShouldStartWith
+    args: [testName, columnRef, text, matchCase]
+  col.ends_with:
+    fn: PQL.Assert.Col.ShouldEndWith
+    args: [testName, columnRef, text, matchCase]
+  col.contains:
+    fn: PQL.Assert.Col.ShouldContainString
+    args: [testName, columnRef, text, matchCase]
+  col.max_date_within_days:
+    fn: PQL.Assert.Col.MaxDateShouldBeWithinDays
+    args: [testName, columnRef, maxAgeDays]
+  col.max_date_within_hours:
+    fn: PQL.Assert.Col.MaxDateShouldBeWithinHours
+    args: [testName, columnRef, maxAgeHours]
+  # logicalTypeOptions bounds. NULL rows are skipped; a column with no value fails (NO VALUES).
+  col.in_range:
+    fn: PQL.Assert.Col.ShouldBeInRange
+    args: [testName, columnRef, min, max]
+  col.min_at_least:
+    fn: PQL.Assert.Col.MinShouldBeAtLeast
+    args: [testName, columnRef, min]
+  col.max_at_most:
+    fn: PQL.Assert.Col.MaxShouldBeAtMost
+    args: [testName, columnRef, max]
+  col.positive:
+    fn: PQL.Assert.Col.ShouldBePositive
+    args: [testName, columnRef]
+  col.text_length_in_range:
+    fn: PQL.Assert.Col.TextLengthShouldBeInRange
+    args: [testName, columnRef, minLen, maxLen]
+  col.values_in_set:
+    # enum, and invalidValues with validValues and a zero ceiling. NULL rows are skipped.
+    fn: PQL.Assert.Col.ValuesShouldBeInSet
+    args: [testName, columnRef, valueTable, valueColumn]
+  # missingValues, and invalidValues thresholds: count or share of the matching rows.
+  tbl.matching_rows_at_most:
+    fn: PQL.Assert.Tbl.RowCountShouldBeAtMost
+    args: [testName, filteredRows, maxCount]
+  tbl.matching_rate_at_most:
+    fn: PQL.Assert.Tbl.RowRateShouldBeAtMost
+    args: [testName, filteredRows, tableRef, maxPct]
+  rel.exists:
+    fn: PQL.Assert.Relationship.ShouldExist
+    args: [testName, fromTable, fromColumn, toTable, toColumn]
+  tbl.refresh_age_at_most:
+    # ODCS frequency: hours since the table last refreshed. PQL.Assert 0.8 has no refresh
+    # function, so this compares an inline INFO.PARTITIONS() expression.
+    fn: PQL.Assert.ShouldBeLessOrEqual
+    args: [testName, maxAgeHours, refreshAgeHours]
+  dax.not_between:
+    fn: PQL.Assert.ShouldNotBeBetween
+    args: [testName, lower, upper, expression]

@@ -1,0 +1,6 @@
+# gitleaks findings reviewed and allowlisted. One fingerprint per line; say why above it.
+#
+# AUTH_DEFAULT_CLIENT_ID in a file deleted long ago: 5814bfb4-2705-4994-b8d6-39aabeb5eaeb is a
+# public client (application) ID, the kind every Azure CLI tool ships in its source. It
+# identifies the app; it is not a credential. Reviewed 2026-10-28.
+adf2f3fd6bc13065e14161c1fc5a5570b5ce11fd:src/pql_test/core/constants.py:generic-api-key:11

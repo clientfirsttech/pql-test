@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-only
 """Tests for filtering live test discovery by local model ownership.
 
 When ``retrieve_tests`` is called with both an XMLA connection **and** a

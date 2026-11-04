@@ -24,4 +24,4 @@
     task: Fetch the DataQuality.PROD.Tests suite in human-readable format so I can eyeball it.
   assert:
     - type: contains
-      value: --human
+      value: --format text
