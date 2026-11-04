@@ -233,26 +233,39 @@ def resolve_service_xmla_connection_by_name(
     and surfaced on ``opts.access_token``; this function passes it through
     to ADOMD via the existing MSOLAP ``Password=<bearer>;`` segment.
     """
-    # Resolve credentials from CLI flags / env vars / stored config.
-    opts = _resolve_authentication_with_stored_credentials(opts)
+    # A bad secret, an expired stored credential, or an unreachable login
+    # endpoint must not escape as a traceback: report it and return None so
+    # the caller prints its clean "no connection" error.  Unlike the GUID
+    # path there is deliberately no local fallback (see the "service" branch
+    # of ``resolve_xmla_connection``).
+    try:
+        # Resolve credentials from CLI flags / env vars / stored config.
+        opts = _resolve_authentication_with_stored_credentials(opts)
 
-    endpoints = get_api_endpoints(opts.environment)
+        endpoints = get_api_endpoints(opts.environment)
 
-    if opts.access_token:
-        # Pre-acquired bearer from a non-secret auth flow (interactive /
-        # cert / federated / managed identity).
-        token = opts.access_token
-    elif opts.tenant_id and opts.client_id and opts.client_secret:
-        # Legacy SPN-secret path — acquire via MSAL client-credentials.
-        token = _acquire_service_principal_token(
-            opts.tenant_id,
-            opts.client_id,
-            opts.client_secret,
-            login_url=endpoints.login_url,
-            resource_url=endpoints.resource_url,
+        if opts.access_token:
+            # Pre-acquired bearer from a non-secret auth flow (interactive /
+            # cert / federated / managed identity).
+            token = opts.access_token
+        elif opts.tenant_id and opts.client_id and opts.client_secret:
+            # Legacy SPN-secret path — acquire via MSAL client-credentials.
+            token = _acquire_service_principal_token(
+                opts.tenant_id,
+                opts.client_id,
+                opts.client_secret,
+                login_url=endpoints.login_url,
+                resource_url=endpoints.resource_url,
+            )
+        else:
+            # No usable credentials.
+            return None
+    except Exception as exc:  # noqa: BLE001 — report and return None, never a traceback
+        print(
+            f"Warning: could not authenticate to workspace '{workspace_name}' "
+            f"({type(exc).__name__}: {exc}).",
+            file=sys.stderr,
         )
-    else:
-        # No usable credentials.
         return None
 
     xmla_prefix = endpoints.api_prefix.replace("https://", "powerbi://")

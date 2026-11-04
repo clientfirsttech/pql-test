@@ -482,7 +482,7 @@ steps:
       pql-test run-tests "<workspace>.Workspace/<model>.SemanticModel"
 ```
 
-This example has not been run end to end in this repository's CI. The OIDC token expires within minutes, so sign in in the same job that runs the tests.
+[`federated-smoke.yml`](.github/workflows/federated-smoke.yml) runs this flow end to end on demand (`workflow_dispatch`), without any secret; its header lists the one-time Entra and GitHub Environment setup. It has not been run yet, because that setup is a maintainer step. The OIDC token expires within minutes, so sign in in the same job that runs the tests.
 
 ### Managed identity
 

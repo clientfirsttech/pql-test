@@ -2486,6 +2486,34 @@ class TestResolveServiceXmlaConnectionByName:
         conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
         assert conn is None
 
+    def test_token_failure_warns_and_returns_none(self, capsys):
+        """A failing token acquisition → warning on stderr, None, no traceback."""
+        opts = XmlaConnectionOptions(
+            tenant_id="t-1", client_id="c-1", client_secret="s-1",
+        )
+        with patch(
+            "pql_test.runner._acquire_service_principal_token",
+            side_effect=RuntimeError("AADSTS7000222 expired"),
+        ):
+            conn = resolve_service_xmla_connection_by_name("WS", "M", opts)
+        assert conn is None
+        err = capsys.readouterr().err
+        assert "could not authenticate to workspace 'WS'" in err
+        assert "RuntimeError" in err
+        assert "s-1" not in err
+
+    def test_stored_credential_failure_warns_and_returns_none(self, capsys):
+        """A failing stored-credential lookup → warning on stderr, None."""
+        with patch(
+            "pql_test.runner.resolver._resolve_authentication_with_stored_credentials",
+            side_effect=ValueError("stored credential unreadable"),
+        ):
+            conn = resolve_service_xmla_connection_by_name(
+                "WS", "M", XmlaConnectionOptions(),
+            )
+        assert conn is None
+        assert "stored credential unreadable" in capsys.readouterr().err
+
     def test_uses_correct_environment_endpoint(self):
         """USGov environment → USGov XMLA prefix."""
         opts = XmlaConnectionOptions(
