@@ -1,0 +1,86 @@
+# Manual end-to-end check of certificate sign-in for a service principal (CONTRIBUTING.md,
+# "Certificate-Based Authentication"). The job writes the private key from a secret to a
+# temporary file, signs in with `pql-test auth login --certificate`, shows `auth status`
+# (including the certificate expiry), runs the tests, and always deletes the file.
+#
+# One-time setup before the first run (maintainer, in Entra and GitHub):
+#   1. Make a certificate and a key. Upload the public part (.cer) to the app registration
+#      (Certificates & secrets > Certificates). The app needs Viewer (or Contributor) on the
+#      test workspace; the app that already runs run-tests-remote.yml works.
+#   2. GitHub: create the Environment `certificate-smoke` (add required reviewers) and set
+#      on it the secret PQL_CERT_PEM (an unencrypted PEM holding the private key and the
+#      certificate) and the variables PQL_TENANT_ID, PQL_CLIENT_ID, PQL_WORKSPACE_ID.
+#
+# It is manual (workflow_dispatch) on purpose, and the secret lives in an Environment with
+# reviewers, so a pull request cannot reach the private key.
+
+name: Certificate smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'PBIP semantic model to run (must exist in the workspace and pass)'
+        required: false
+        default: 'examples/RLS_Model.SemanticModel'
+
+permissions:
+  contents: read
+
+jobs:
+  certificate-smoke:
+    runs-on: windows-latest   # pyadomd (ADOMD.NET) requires Windows + .NET
+    environment: certificate-smoke
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install pql-test
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install ./python
+
+      - name: Install ADOMD.NET client libraries
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:USERPROFILE '.nuget' 'packages'
+          nuget install Microsoft.AnalysisServices.AdomdClient `
+            -Version 19.114.0 `
+            -OutputDirectory $outputDir `
+            -NonInteractive
+
+      - name: Sign in with the certificate
+        shell: bash
+        env:
+          PQL_CERT_PEM: ${{ secrets.PQL_CERT_PEM }}
+          PQL_CLIENT_ID: ${{ vars.PQL_CLIENT_ID }}
+          PQL_TENANT_ID: ${{ vars.PQL_TENANT_ID }}
+        run: |
+          set -euo pipefail
+          # The key goes to a file only for this job; it is deleted in the last step.
+          CERT_FILE="$RUNNER_TEMP/pql-test-ci.pem"
+          umask 077
+          printf '%s' "$PQL_CERT_PEM" > "$CERT_FILE"
+          echo "CERT_FILE=$CERT_FILE" >> "$GITHUB_ENV"
+          pql-test auth login --certificate "$CERT_FILE" --client-id "$PQL_CLIENT_ID" --tenant-id "$PQL_TENANT_ID"
+          pql-test auth status
+
+      - name: Run tests with the certificate sign-in
+        shell: bash
+        env:
+          MODEL: ${{ inputs.model }}
+          PQL_TENANT_ID: ${{ vars.PQL_TENANT_ID }}
+          PQL_WORKSPACE_ID: ${{ vars.PQL_WORKSPACE_ID }}
+        run: |
+          pql-test run-tests "$MODEL" --log-format github
+
+      - name: Delete the private key
+        if: always()
+        shell: bash
+        run: rm -f "${CERT_FILE:-}"
