@@ -446,6 +446,53 @@ pql-test auth login `
 - Use secrets longer than 90 days without rotation
 - Grant workspace Admin role (only needed for `EffectiveUserName`)
 
+### Federated credentials (workload identity)
+
+A federated credential lets a CI job exchange its own short-lived OIDC token for an Entra token, so no client secret is stored anywhere. `pql-test auth login --client-id <id> --tenant-id <tenant>` reads that token from the `PQL_FEDERATED_TOKEN` environment variable (or `--federated-token`, which puts it on the command line where other processes can see it, so prefer the variable).
+
+Create the federated credential on the app registration (**Certificates & secrets** → **Federated credentials**) with the narrowest subject that still works:
+
+| Subject | Verdict |
+|---------|---------|
+| `repo:<owner>/<repo>:environment:<environment>` | Good: only jobs that run in that GitHub Environment (add required reviewers to it) |
+| `repo:<owner>/<repo>:ref:refs/heads/main` | Acceptable: only that branch |
+| `repo:<owner>/<repo>:pull_request` | Avoid: any pull request in the repository can sign in, including a branch an attacker with write access creates |
+| `repo:<owner>/*` | Never: every repository in the organization |
+
+Keep the audience at the default `api://AzureADTokenExchange`, and give each environment (dev, staging, prod) its own app registration.
+
+In GitHub Actions the job needs `permissions: id-token: write`. Request the token inside the job, mask it, and pass it through the environment rather than writing it to a file:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+steps:
+  - name: Get OIDC token
+    uses: actions/github-script@<pinned commit SHA>
+    with:
+      script: |
+        const token = await core.getIDToken('api://AzureADTokenExchange');
+        core.setSecret(token);
+        core.exportVariable('PQL_FEDERATED_TOKEN', token);
+  - name: Sign in and test
+    shell: pwsh
+    run: |
+      pql-test auth login --client-id ${{ vars.PQL_CLIENT_ID }} --tenant-id ${{ vars.PQL_TENANT_ID }}
+      pql-test run-tests "<workspace>.Workspace/<model>.SemanticModel"
+```
+
+This example has not been run end to end in this repository's CI. The OIDC token expires within minutes, so sign in in the same job that runs the tests.
+
+### Managed identity
+
+Managed identity needs no stored credential, so the risk is what the identity can do and who can reach it.
+
+- Give the identity only what `run-tests` needs: add it (or a security group holding it) to the Fabric/Power BI workspace as **Viewer**, or **Contributor** if the job also refreshes. Do not make it a workspace Admin or give it tenant-wide roles.
+- Prefer a user-assigned identity per pipeline over a shared system-assigned one: it can be revoked on its own, and `--client-id` selects it.
+- Anything running on the same VM, container, or agent can request that identity's token from the metadata endpoint. Do not run untrusted code (pull request builds from forks) on an agent whose identity can read production models, and restrict outbound access to the metadata endpoint where the platform allows it.
+- Use Azure Activity Log and Entra sign-in logs to see what the identity did.
+
 ---
 
 ## Service smoke test (Power BI Premium / Fabric)

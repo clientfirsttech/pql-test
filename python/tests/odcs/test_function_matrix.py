@@ -14,7 +14,7 @@ from pathlib import Path
 from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog, load_signatures
 from pql_test.odcs.udf import parse_functions
 
-LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.8.0" / "lib"
+LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.9.0" / "lib"
 OUT_OF_SCOPE_PREFIXES = ("PQL.Assert.BP.", "PQL.Assert.RetrieveTests", "PQL.Assert.LibraryVersion")
 
 

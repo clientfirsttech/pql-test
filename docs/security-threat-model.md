@@ -25,7 +25,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Medium | OAuth2 PKCE flow prevents token interception; redirect URI validation | ✅ Mitigated (azure-identity) |
 | **T - Tampering** | Low | Token stored in OS credential manager (keyring); MSAL cache encrypted | ✅ Mitigated |
-| **R - Repudiation** | Low | No audit logging of auth attempts | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Low | Auth attempts are logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | Medium | AuthenticationRecord in keyring could leak account info | ⚠️ **Accepted Risk** — keyring protects at OS level |
 | **D - Denial of Service** | Low | Browser popup could be blocked; user can retry | ✅ Mitigated |
 | **E - Elevation of Privilege** | Low | User authenticates with own permissions only | ✅ Mitigated |
@@ -55,7 +55,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Medium | Service principal validated by Azure AD; secret proves identity | ✅ Mitigated (Azure AD) |
 | **T - Tampering** | Medium | Secret stored in keyring; could be extracted with OS-level access | ⚠️ **Accepted Risk** — keyring best practice |
-| **R - Repudiation** | Medium | No audit logging of which user/process used SPN credentials | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Medium | Service principal sign-ins are audit-logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | **High** | Secret in plaintext if keyring compromised; no rotation tracking | ⚠️ **Gap** — Recommend secret rotation policy |
 | **D - Denial of Service** | Low | Invalid secret causes auth failure; user can update | ✅ Mitigated |
 | **E - Elevation of Privilege** | **High** | SPN permissions control privilege; over-permissioned SPN risks all datasets | ⚠️ **Gap** — Document least-privilege SPN setup |
@@ -87,7 +87,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 |----------------|------|------------|--------|
 | **S - Spoofing** | Low | Certificate proves identity cryptographically; Azure AD validates signature | ✅ Mitigated (Azure AD PKI) |
 | **T - Tampering** | Low | Certificate tampering detectable via signature validation | ✅ Mitigated |
-| **R - Repudiation** | Medium | No audit logging of certificate-based auth | ⚠️ **Gap** — Add logging |
+| **R - Repudiation** | Medium | Certificate-based sign-ins are audit-logged | ✅ Mitigated (2026-08-31) — `pql_test.auth.audit` logger |
 | **I - Information Disclosure** | Medium | Certificate file readable by any process with filesystem access | ⚠️ **Accepted Risk** — User controls file permissions |
 | **D - Denial of Service** | Low | Invalid/expired cert causes auth failure; user can replace | ✅ Mitigated |
 | **E - Elevation of Privilege** | **High** | SPN permissions control privilege; certificate theft = full SPN access | ⚠️ **Gap** — Recommend HSM/Azure Key Vault for certs |
@@ -100,8 +100,6 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 1. ✅ **DONE** (2026-08-31) — Document certificate protection (file permissions, Azure Key Vault) in CONTRIBUTING.md
 2. ⚠️ **TODO** — Add certificate expiry warning in `pql-test auth status`
 3. ✅ **DONE** (2026-08-31) — Audit logging implemented for certificate-based auth
-4. ✅ **DONE** — Certificate content never logged (only path stored in keyring)
-3. ⚠️ **TODO** — Log certificate-based authentication attempts
 4. ✅ **DONE** — Certificate content never logged (only path stored in keyring)
 
 ---
@@ -123,17 +121,17 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 | **R - Repudiation** | Low | GitHub Actions/Azure Pipelines audit logs track token issuance | ✅ Mitigated (platform) |
 | **I - Information Disclosure** | Low | Token short-lived (1 hour); no persistent secrets | ✅ Mitigated |
 | **D - Denial of Service** | Low | Token issuance failure causes auth failure; retry logic possible | ✅ Mitigated |
-| **E - Elevation of Privilege** | Medium | Federated credential subject claim controls access; misconfiguration = unauthorized access | ⚠️ **Gap** — Document subject claim validation |
+| **E - Elevation of Privilege** | Medium | Federated credential subject claim controls access; misconfiguration = unauthorized access | ✅ Mitigated by guidance (2026-11-03): subject-claim table in CONTRIBUTING.md |
 
 **OWASP Mapping**:
-- **A04: Insecure Design** — No guidance on federated credential subject claim configuration
-- **A05: Security Misconfiguration** — Overly permissive subject claims (e.g., `repo:*/*`) risks unauthorized access
+- **A04: Insecure Design** — Subject-claim guidance now documented
+- **A05: Security Misconfiguration** — Overly permissive subject claims (e.g., `repo:owner/*`) risk unauthorized access; the guidance marks them "never"
 
 **Recommendations**:
-1. ⚠️ **TODO** — Document federated credential setup with restrictive subject claims
+1. ✅ **DONE** (2026-11-03) — Document federated credential setup with restrictive subject claims (CONTRIBUTING.md, "Federated credentials")
    - Good: `repo:owner/repo:environment:production`
    - Bad: `repo:owner/*` (too broad)
-2. ⚠️ **TODO** — Add GitHub Actions workflow example with federated auth
+2. ✅ **DONE** (2026-11-03) — GitHub Actions workflow example with federated auth (CONTRIBUTING.md). Not yet run end to end in this repository's CI.
 3. ✅ **DONE** — No long-lived secrets stored (federated token ephemeral)
 
 ---
@@ -154,15 +152,15 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 | **R - Repudiation** | Low | Azure Activity Log tracks managed identity usage | ✅ Mitigated (platform) |
 | **I - Information Disclosure** | Low | No secrets stored; token short-lived | ✅ Mitigated |
 | **D - Denial of Service** | Low | IMDS endpoint failure causes auth failure; Azure SLA applies | ✅ Mitigated (platform) |
-| **E - Elevation of Privilege** | **High** | Managed identity permissions control access; compromise of Azure resource = full identity access | ⚠️ **Gap** — Document least-privilege role assignment |
+| **E - Elevation of Privilege** | **High** | Managed identity permissions control access; compromise of Azure resource = full identity access | ✅ Mitigated by guidance (2026-11-03): least-privilege role and shared-agent warning in CONTRIBUTING.md |
 
 **OWASP Mapping**:
 - **A01: Broken Access Control** — Managed identity permissions must follow least-privilege principle
-- **A04: Insecure Design** — No guidance on managed identity role assignment
+- **A04: Insecure Design** — Role-assignment guidance now documented
 
 **Recommendations**:
-1. ⚠️ **TODO** — Document managed identity setup with Power BI Reader role
-2. ⚠️ **TODO** — Document IMDS endpoint hardening (network-level firewall rules)
+1. ✅ **DONE** (2026-11-03) — Document managed identity setup with least-privilege workspace role (Viewer, or Contributor to refresh)
+2. ✅ **DONE** (2026-11-03) — Document metadata-endpoint exposure on shared agents and restricting outbound access
 3. ✅ **DONE** — No credentials stored (managed identity is platform-provided)
 4. ⚠️ **TODO** — Add CI/CD example using managed identity on Azure DevOps agent
 
@@ -263,7 +261,7 @@ This document analyzes security threats for pql-test's 5 authentication methods,
    - **Impact**: Overly broad subject claims grant unauthorized access
    - **Recommendation**: Document subject claim best practices with examples
    - **Priority**: 🟠 MEDIUM
-   - **Status**: ⚠️ **TODO** — Pending GitHub Actions workflow example
+   - **Status**: ✅ **RESOLVED** (2026-11-03) — Subject-claim table and GitHub Actions example added to CONTRIBUTING.md
 
 ---
 
@@ -271,12 +269,12 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 
 | OWASP Top 10 2021 | Relevant Controls | Status |
 |-------------------|------------------|--------|
-| A01: Broken Access Control | RLS/OLS impersonation validation, SPN permissions | ⚠️ **Partial** — SPN docs done, RLS/OLS enforcement pending |
+| A01: Broken Access Control | RLS/OLS impersonation validation, SPN and managed-identity permissions; `generate` refuses to overwrite files it did not write | ✅ **Resolved** — least-privilege guidance for SPN, managed identity, and federated credentials; RLS/OLS runtime enforcement archived as out of scope (test files are code-reviewed) |
 | A02: Cryptographic Failures | Keyring storage, certificate protection | ✅ **Resolved** — Certificate guidance documented |
-| A03: Injection | Parameterized XMLA queries, no dynamic SQL | ✅ Mitigated |
-| A04: Insecure Design | Federated cred guidance, certificate guidance | ⚠️ **Partial** — Certificate done, federated pending |
-| A05: Security Misconfiguration | Subject claim validation, role assignment docs | ✅ **Resolved** — Role assignment docs complete |
-| A06: Vulnerable Components | pip-audit clean (2026-08-31) | ✅ Mitigated |
+| A03: Injection | Connection-string values quoted (catalog, roles, user, server, client ID, secret, token); contract suite names validated; `yaml` loaded with `SafeLoader` only | ✅ Mitigated — secret and token quoting added 2026-11-03 |
+| A04: Insecure Design | Federated cred guidance, certificate guidance, managed-identity guidance | ✅ **Resolved** — certificate expiry warning in `auth status` remains an enhancement |
+| A05: Security Misconfiguration | Subject claim validation, role assignment docs; workflows set `permissions:`; actions pinned to commit SHAs | ✅ **Resolved** |
+| A06: Vulnerable Components | `pip-audit` (requirements and project dependencies) clean 2026-11-03; Dependabot covers pip and GitHub Actions weekly; `bandit` (medium and above) clean | ✅ Mitigated |
 | A07: Identification/Auth Failures | Token validation, secret rotation | ✅ **Resolved** — Both implemented (2026-08-31) |
 | A08: Software/Data Integrity | MSAL cache integrity, PyPI package signing | ⚠️ **Assumed** |
 | A09: Logging/Monitoring Failures | Audit logging | ✅ **Resolved** — Implemented (2026-08-31) |
@@ -294,13 +292,18 @@ This document analyzes security threats for pql-test's 5 authentication methods,
 5. ✅ Document secret rotation policy (90-day recommendation)
 6. ✅ Document RLS/OLS security implications in README
 
+### Completed (2026-11-03)
+1. ✅ Re-ran `pip-audit` (requirements and project dependencies) and `bandit -ll`: no findings
+2. ✅ Quote the client secret, token, client ID, and server in the XMLA connection string, so a value containing `;` cannot add or override keys
+3. ✅ Federated-credential and managed-identity guidance in CONTRIBUTING.md
+4. ✅ Pin the last unpinned workflow action (`.github/copilot-setup-steps.yml`)
+
 ### Remaining Work
-1. **Priority 1** — Create GitHub Actions workflow example with federated auth
+1. **Priority 1** — Run the federated-credential workflow example end to end in CI
 2. **Priority 2** — Add certificate expiry warning in `pql-test auth status`
+3. **Priority 3** — Azure DevOps example using a managed identity
 
 ### Archived (Out of Scope)
 1. 🗄️ RLS/OLS impersonation validation (config-based allowlist) — Deemed out of scope; security implications documented in README, users responsible for test file review
-
-**Review Date**: 2027-02-28 (6 months)
 
 **Review Date**: 2027-02-28 (6 months)

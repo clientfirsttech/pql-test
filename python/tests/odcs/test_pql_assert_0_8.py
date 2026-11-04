@@ -54,9 +54,9 @@ class TestCatalogSelection:
         should = "fail with the supported choices"
 
         with pytest.raises(CatalogError) as exc:
-            catalog_for("0.9")
+            catalog_for("0.10")
 
-        assert "0.7, 0.8" in str(exc.value), f"{given}: {should}"
+        assert "0.7, 0.8, 0.9" in str(exc.value), f"{given}: {should}"
 
     def test_default_plan_targets_0_7(self):
         given = "plan_contract without pql_assert"
@@ -499,9 +499,9 @@ class TestCli:
         assert (data["catalog"]["minVersion"], data["summary"]["approximated"]) == ("0.8.0", 0), f"{given}: {should}"
 
     def test_unknown_version_is_a_usage_error(self, tmp_path):
-        given = "--pql-assert 0.9"
+        given = "--pql-assert 0.10"
         should = "exit 2"
 
-        result = self._run(tmp_path, "coverage", "--pql-assert", "0.9")
+        result = self._run(tmp_path, "coverage", "--pql-assert", "0.10")
 
         assert result.exit_code == 2, f"{given}: {should}"

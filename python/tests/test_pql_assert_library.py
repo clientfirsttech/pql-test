@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Offline tests for the query-scoped PQL.Assert 0.8.0 helper used by the live contract tests."""
+"""Offline tests for the query-scoped PQL.Assert 0.9.0 helper used by the live contract tests."""
 
 from __future__ import annotations
 
@@ -28,15 +28,17 @@ EVALUATE M.DataQuality.DEV.Tests()
 """
 
 
-def test_library_fixture_loads_0_8_0():
-    given = "the vendored PQL.Assert 0.8.0 package"
-    should = "load LibraryVersion() and the 0.8-only functions"
+def test_library_fixture_loads_0_9_0():
+    given = "the vendored PQL.Assert 0.9.0 package"
+    should = "load LibraryVersion() and the 0.8-only and 0.9-only functions"
 
     library = load_library()
 
-    assert {"PQL.Assert.LibraryVersion", "PQL.Assert.Col.NullCountShouldBeAtMost"} <= set(library), (
-        f"{given}: {should}"
-    )
+    assert {
+        "PQL.Assert.LibraryVersion",
+        "PQL.Assert.Col.NullCountShouldBeAtMost",
+        "PQL.Assert.Tbl.LastRefreshShouldBeWithinHours",
+    } <= set(library), f"{given}: {should}"
 
 
 def test_only_functions_the_model_lacks_are_defined():

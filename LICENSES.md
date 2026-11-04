@@ -8,7 +8,7 @@ These files carry their own license:
 | Path | License | Notes |
 |---|---|---|
 | `python/pql_test/odcs/schemas/*.json` | Apache-2.0 ([LICENSE-ODCS.txt](python/pql_test/odcs/schemas/LICENSE-ODCS.txt)) | Unmodified Bitol ODCS JSON schemas, shipped in the package and attributed in [NOTICE](NOTICE) |
-| `python/tests/odcs/fixtures/pql-assert-0.8.0/` | MIT ([LICENSE](python/tests/odcs/fixtures/pql-assert-0.8.0/LICENSE)) | Unmodified copy of PQL.Assert 0.8.0, used only by tests and not shipped |
+| `python/tests/odcs/fixtures/pql-assert-0.9.0/` | MIT ([LICENSE](python/tests/odcs/fixtures/pql-assert-0.9.0/LICENSE)) | Unmodified copy of PQL.Assert 0.9.0, used only by tests and not shipped |
 
 ## Earlier releases
 

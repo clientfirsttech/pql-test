@@ -13,9 +13,9 @@
   },
   "summary": {
     "total": 46,
-    "mapped": 31,
+    "mapped": 30,
     "approximated": 9,
-    "skipped": 6
+    "skipped": 7
   },
   "rules": [
     {
@@ -385,14 +385,12 @@
     },
     {
       "ruleId": "orders.quality[3]",
-      "status": "mapped",
+      "status": "skipped",
       "description": "Quantity mean is in range",
-      "assertions": 1,
-      "functions": [
-        "PQL.Assert.Col.MeanShouldBeInRange"
-      ],
-      "severity": "error",
-      "reason": null,
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "direct PQL.Assert calls need --pql-assert 0.9 (signatures from 0.9.0)",
       "source": "contract-dax"
     },
     {

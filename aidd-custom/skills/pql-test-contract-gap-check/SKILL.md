@@ -16,7 +16,7 @@ GapCheck() {
      - Bitol ODCS: https://github.com/bitol-io/open-data-contract-standard/releases
        (bundled schemas: python/pql_test/odcs/schemas/odcs-json-schema-v*.json)
      - PQL.Assert (DAX Lib): https://github.com/clientfirsttech/PQL.Assert/releases
-       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.8.0/)
+       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.9.0/)
      // If neither moved since the last gap check (see plan.md), skip to step 4.
 
   2. On a new ODCS release:

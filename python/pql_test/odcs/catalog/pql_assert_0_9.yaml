@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# PQL.Assert 0.9.0: one override. Every 0.8 op is inherited unchanged; this file only
+# replaces `tbl.refresh_age_at_most` with the native refresh-recency function PQL.Assert
+# 0.9.0 added, so a model on 0.9.0 keeps every 0.8.0 function too. Selected with
+# `--pql-assert 0.9`. Function name and signature follow the released PQL.Assert 0.9.0
+# package; python/tests/odcs/test_library_conformance.py checks them against a vendored copy.
+
+library: PQL.Assert
+min_version: "0.9.0"
+extends: pql_assert_0_8
+
+ops:
+  tbl.refresh_age_at_most:
+    # ODCS frequency: hours since the table last refreshed. PQL.Assert 0.9 reads this
+    # directly instead of the 0.8 inline INFO.PARTITIONS() expression, so a stale or
+    # unknown table reports "NEVER REFRESHED" / "TABLE NOT FOUND" instead of a bare number.
+    fn: PQL.Assert.Tbl.LastRefreshShouldBeWithinHours
+    args: [testName, tableName, maxAgeHours]

@@ -127,6 +127,24 @@ class TestAuthLoginRouting:
         assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
         assert saved.federated_token == "eyJraWQ.fake"
 
+    def test_federated_token_is_read_from_environment(self, runner):
+        fake_credential = MagicMock(spec=["get_token"])
+        fake_credential.get_token.return_value = MagicMock(token="tok")
+        with patch(
+            "pql_test.auth.factory.CredentialFactory.create",
+            return_value=fake_credential,
+        ):
+            result = runner.invoke(
+                cli_module.cli,
+                ["auth", "login", "-u", "fed-client-id", "--tenant", "fed-tenant"],
+                env={"PQL_FEDERATED_TOKEN": "eyJraWQ.from-env"},
+            )
+        assert result.exit_code == 0, result.output
+        saved = AuthenticationManager()._store.load()
+        assert saved is not None
+        assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
+        assert saved.federated_token == "eyJraWQ.from-env"
+
     def test_certificate_happy_path_saves_credential(self, runner, tmp_path):
         cert = tmp_path / "cert.pem"
         cert.write_text("-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n")

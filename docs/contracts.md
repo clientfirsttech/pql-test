@@ -48,7 +48,7 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 **Shared flags**:
 - `--closed-schema` also forbids columns the contract does not list.
 - `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
-- `--pql-assert 0.7|0.8` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08).
+- `--pql-assert 0.7|0.8|0.9` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08) and [PQL.Assert 0.9](#pqlassert-09).
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `run`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
 - `--force` overwrites suite files that pql-test did not generate (`generate`, and `run --write`).
@@ -191,6 +191,16 @@ Like most PQL.Assert 0.8 column checks, these fail with `NO VALUES` on a column 
 
 Upgrading note: suites generated with `--pql-assert 0.8` change when you regenerate. Rules that were skipped now produce checks, and a `latency` in hours now calls `Col.MaxDateShouldBeWithinHours` instead of a fractional-day `Col.MaxDateShouldBeWithinDays`. `--pql-assert 0.7` output is unchanged.
 
+### PQL.Assert 0.9
+
+PQL.Assert 0.9.0 gave ODCS `frequency` a native function; every other 0.8 mapping is unchanged. Pass `--pql-assert 0.9` to `generate`, `coverage`, and `trace`; the default stays `0.7`.
+
+| ODCS rule | PQL.Assert 0.9 call | Status |
+|---|---|---|
+| `slaProperties` `frequency` in days or hours, with table element(s) | `Tbl.LastRefreshShouldBeWithinHours(testName, tableName, maxAgeHours)`, in the `RefreshAge` suite | **approximated**: refresh recency, see [Freshness](#freshness-latency-vs-frequency); clearer `Actual` text than 0.8's inline expression (`TABLE NOT FOUND`, `NEVER REFRESHED`, or the age in hours) |
+
+Upgrading note: regenerating with `--pql-assert 0.9` changes only the `frequency` rows' rendered DAX (the native call instead of 0.8's inline `INFO.PARTITIONS()` expression); their status stays **approximated**. It also raises the version an [`engine: pql-test` direct call](#dax-rules-in-the-contract-engine-pql-test) needs: pql-test validates a direct call's function name and argument count against the newest vendored PQL.Assert signatures, so that form now needs `--pql-assert 0.9` instead of 0.8 — a contract with a direct call that generated fine under `--pql-assert 0.8` reports it **skipped** until you move to `0.9`. `--pql-assert 0.7` and `0.8` output is otherwise unchanged.
+
 These rules are reported as **skipped**, with the plan for each:
 
 | ODCS rule | Planned |
@@ -241,7 +251,7 @@ slaProperties:
 - **Permissions:** `frequency` reads `INFO.PARTITIONS()`, which may need more than read access to the model. Its rules run in their own `<Prefix>.RefreshAge.<ENV>.Tests` suite, so a permission error there leaves the other suites running.
 - Both are **approximated**: they compare with the time the test runs.
 
-PQL.Assert 0.8 has no refresh function, so `frequency` uses `ShouldBeLessOrEqual` on an inline expression. A dedicated `Tbl.LastRefreshShouldBeWithinHours`, with clearer failure messages, is requested for PQL.Assert 0.9 ([request](pql-assert-freshness-request.md)).
+PQL.Assert 0.8 has no refresh function, so `--pql-assert 0.8`'s `frequency` check uses `ShouldBeLessOrEqual` on an inline `INFO.PARTITIONS()` expression. PQL.Assert 0.9.0 added the dedicated `Tbl.LastRefreshShouldBeWithinHours` ([request](pql-assert-freshness-request.md), fulfilled); `--pql-assert 0.9` calls it directly, with the same approximated semantics but clearer `Actual` text (`TABLE NOT FOUND`, `NEVER REFRESHED`, or the age in hours).
 
 [`examples/contracts/freshness.odcs.yaml`](../examples/contracts/freshness.odcs.yaml) runs both against SampleModel (it has to point `latency` at a business date, with a comment explaining why: SampleModel has no load-timestamp column).
 
@@ -277,17 +287,17 @@ schema:
 | `mustBe` (text) | `ShouldEqualExactly` (DAX `=` ignores case; the contract's value does not) |
 | `mustNotBe` | `ShouldNotEqual` (approximated for text with letters: it ignores case) |
 | `mustBeGreaterThan`, `mustBeGreaterOrEqualTo`, `mustBeLessThan`, `mustBeLessOrEqualTo` | `ShouldBeGreaterThan`, `ShouldBeGreaterOrEqual`, `ShouldBeLessThan`, `ShouldBeLessOrEqual` |
-| `mustBeBetween`, `mustNotBeBetween` | `ShouldBeBetween`, `ShouldNotBeBetween` (0.8 only) |
+| `mustBeBetween`, `mustNotBeBetween` | `ShouldBeBetween`, `ShouldNotBeBetween` (0.8 or later) |
 
 With `--pql-assert 0.7`, a BLANK result passes the text `mustBe` and the number comparisons, because PQL.Assert 0.7 compared BLANK as an empty string or as 0. Those rules are **approximated** on 0.7; PQL.Assert 0.8 fails a BLANK.
 
-**Direct call.** `implementation.function` names any PQL.Assert assertion, and `implementation.args` lists its arguments after `testName`, which pql-test supplies. A text argument is DAX source, so a DAX string needs its own quotes (`'"AB"'`); numbers and true/false become DAX literals. pql-test checks the function name and argument count against PQL.Assert 0.8.0, so this form needs `--pql-assert 0.8`. The model best-practice checks (`BP.*`) and the discovery helpers cannot be called this way.
+**Direct call.** `implementation.function` names any PQL.Assert assertion, and `implementation.args` lists its arguments after `testName`, which pql-test supplies. A text argument is DAX source, so a DAX string needs its own quotes (`'"AB"'`); numbers and true/false become DAX literals. pql-test checks the function name and argument count against the newest vendored PQL.Assert release (currently 0.9.0), so this form needs `--pql-assert 0.9` (it needed `0.8` before PQL.Assert 0.9.0 shipped, and will need the next release's value once pql-test vendors it). The model best-practice checks (`BP.*`) and the discovery helpers cannot be called this way.
 
 **Rules for the DAX.** It is pasted into a generated suite's `UNION`, so it must be one expression. pql-test skips a rule, and `lint` reports it, when its DAX has `EVALUATE` or `DEFINE`, unbalanced brackets or quotes, an unterminated comment, a comma outside brackets, or a control character other than a line feed or tab (a carriage return could end a comment early). A final `//` comment is fine. Numbers must be finite.
 
 **Reporting.** These rules run in their own `<Prefix>.ContractDax.<ENV>.Tests` suite, so a wrong measure or column name in hand-written DAX cannot fail the translated rules. They keep status `mapped` (or `approximated`), with `"source": "contract-dax"` in the `coverage --format json` output and "(contract DAX)" in the text output, so a reviewer can tell DAX written in the contract from rules pql-test translated. `severity: warning` sends them to the `ContractDax.<ENV>WARN` suite.
 
-**What reaches each PQL.Assert function.** [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml) lists every PQL.Assert 0.8.0 function as `mapped` (an ODCS rule generates it), `dax` (only a DAX rule calls it, such as `ShouldEqual`), or `none` (best-practice checks and discovery helpers). A test fails when a new PQL.Assert release adds a function nobody has classified.
+**What reaches each PQL.Assert function.** [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml) lists every PQL.Assert 0.9.0 function as `mapped` (an ODCS rule generates it), `dax` (only a DAX rule calls it, such as `ShouldEqual`), or `none` (best-practice checks and discovery helpers). A test fails when a new PQL.Assert release adds a function nobody has classified.
 
 [`examples/contracts/scenario-tests.odcs.yaml`](../examples/contracts/scenario-tests.odcs.yaml) runs both forms against SampleModel: an expression over `[Number of Characters]`, a boolean expression compared with `mustBe: true`, and two direct calls (`ShouldStartWith` on a measure, which has no column to attach a `pattern` rule to; `Col.MeanShouldBeInRange`, a statistic ODCS has no metric for).
 
