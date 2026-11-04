@@ -411,6 +411,8 @@ Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password
 2. Select the `.cer` file → **Add**
 3. Certificate is now trusted for authentication
 
+To set up the CI smoke test ([certificate-smoke.yml](.github/workflows/certificate-smoke.yml)) in one go, run [scripts/setup-certificate-smoke.ps1](scripts/setup-certificate-smoke.ps1): it creates the certificate in memory, uploads the public half to the app registration, and creates the GitHub Environment with its secret and variables.
+
 #### C. Use Certificate with pql-test
 
 ```powershell

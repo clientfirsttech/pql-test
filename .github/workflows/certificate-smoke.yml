@@ -3,7 +3,8 @@
 # temporary file, signs in with `pql-test auth login --certificate`, shows `auth status`
 # (including the certificate expiry), runs the tests, and always deletes the file.
 #
-# One-time setup before the first run (maintainer, in Entra and GitHub):
+# One-time setup before the first run: run `scripts/setup-certificate-smoke.ps1` (see its
+# help; add -DryRun first), which does everything below. Or do it by hand:
 #   1. Make a certificate and a key. Upload the public part (.cer) to the app registration
 #      (Certificates & secrets > Certificates). The app needs Viewer (or Contributor) on the
 #      test workspace; the app that already runs run-tests-remote.yml works.
