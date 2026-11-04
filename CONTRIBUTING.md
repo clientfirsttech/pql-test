@@ -426,7 +426,7 @@ pql-test auth login `
   icacls "C:\secure\pql-test-ci.pfx" /inheritance:r /grant:r "$env:USERNAME:(R,W)"
   ```
 - **Production**: Use Azure Key Vault or HSM (Hardware Security Module)
-- **Rotation**: Renew certificates before expiry (2-year max recommended)
+- **Rotation**: Renew certificates before expiry (2-year max recommended). `pql-test auth status` shows the stored certificate's expiry date and warns on stderr when 30 days or fewer remain (or it has expired); `--format json` adds `certificateExpiresAt` and `certificateDaysRemaining`.
 
 ### Security Best Practices Summary
 

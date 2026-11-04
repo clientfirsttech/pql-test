@@ -81,6 +81,7 @@ from importlib.metadata import version as _pkg_version
 
 import click
 
+from pql_test.auth.cert_expiry import CERT_EXPIRY_WARNING_DAYS
 from pql_test.runner import (
     HAS_MSAL,
     HAS_PSUTIL,
@@ -1703,6 +1704,8 @@ def cmd_auth_status(output_format: str) -> None:
                     "tenantId": status.tenant_id,
                     "clientId": status.client_id,
                     "cloud": status.environment,
+                    "certificateExpiresAt": status.certificate_expires_at.isoformat() if status.certificate_expires_at else None,
+                    "certificateDaysRemaining": _certificate_days_remaining(status.certificate_expires_at),
                 },
                 indent=2,
             )
@@ -1723,6 +1726,21 @@ def cmd_auth_status(output_format: str) -> None:
     if status.client_id:
         click.echo(f"  Client ID: {status.client_id}")
     click.echo(f"  Environment: {status.environment}")
+    days = _certificate_days_remaining(status.certificate_expires_at)
+    if days is not None:
+        click.echo(f"  Certificate expires: {status.certificate_expires_at:%Y-%m-%d} ({days} day(s) left)")
+        if days <= CERT_EXPIRY_WARNING_DAYS:
+            what = "has expired" if days < 0 else f"expires in {days} day(s)"
+            click.echo(f"Warning: the service-principal certificate {what}. Renew it and run `pql-test auth login` again.", err=True)
+
+
+def _certificate_days_remaining(expires_at) -> int | None:
+    """Whole days until *expires_at* (negative once expired), or None when there is no certificate."""
+    if expires_at is None:
+        return None
+    from datetime import datetime, timezone
+
+    return (expires_at - datetime.now(timezone.utc)).days
 
 
 # ---------------------------------------------------------------------------

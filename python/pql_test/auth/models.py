@@ -122,6 +122,7 @@ class AuthStatus:
         environment: Cloud environment
         token_expires_at: Token expiration timestamp
         token_is_valid: Whether token is currently valid (not expired)
+        certificate_expires_at: Expiry of the service-principal certificate (certificate auth only)
     """
 
     authenticated: bool
@@ -132,3 +133,4 @@ class AuthStatus:
     environment: str = "Public"
     token_expires_at: Optional[datetime] = None
     token_is_valid: bool = False
+    certificate_expires_at: Optional[datetime] = None

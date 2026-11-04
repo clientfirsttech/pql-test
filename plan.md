@@ -60,7 +60,7 @@
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
-- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
+- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
 
 - **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
 
@@ -69,6 +69,10 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-04 — Certificate expiry warning in `pql-test auth status` (branch `dev-odcs`)
+
+`auth status` reads the stored service-principal certificate's expiry (PEM or PFX, public part only, via `cryptography`, already a dependency of msal) and warns at 30 days or fewer, or once expired. JSON output adds `certificateExpiresAt` and `certificateDaysRemaining`. See `python/pql_test/auth/cert_expiry.py`.
 
 ### 2026-11-04 — PQL.Assert minimum-version warning in `contract run` (branch `dev-odcs`)
 
