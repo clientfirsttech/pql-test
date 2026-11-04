@@ -178,14 +178,20 @@ class CredentialFactory:
             )
 
         elif config.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED:
-            if not all([config.tenant_id, config.client_id, config.federated_token]):
-                raise CredentialConfigError(
-                    "Federated credential requires tenant_id, client_id, and federated_token"
-                )
+            if not all([config.tenant_id, config.client_id]):
+                raise CredentialConfigError("Federated credential requires tenant_id and client_id")
 
-            # Note: azure-identity uses ClientAssertionCredential for federated tokens
+            # The token is short-lived and too long for Windows Credential Manager (2560 bytes),
+            # so it is never stored: it comes from the config (during login) or, on later
+            # commands, from PQL_FEDERATED_TOKEN in the environment.
             def token_provider() -> str:
-                return config.federated_token or ""
+                token = config.federated_token or os.environ.get("PQL_FEDERATED_TOKEN")
+                if not token:
+                    raise CredentialConfigError(
+                        "Federated credential requires PQL_FEDERATED_TOKEN in the environment "
+                        "(the token is short-lived and is not stored by `auth login`)"
+                    )
+                return token
 
             return ClientAssertionCredential(
                 tenant_id=config.tenant_id,

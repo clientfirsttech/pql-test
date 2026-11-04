@@ -485,7 +485,7 @@ steps:
       pql-test run-tests "<workspace>.Workspace/<model>.SemanticModel"
 ```
 
-[`federated-smoke.yml`](.github/workflows/federated-smoke.yml) runs this flow end to end on demand (`workflow_dispatch`), without any secret; its header lists the one-time Entra and GitHub Environment setup. It has not been run yet, because that setup is a maintainer step. The OIDC token expires within minutes, so sign in in the same job that runs the tests.
+[`federated-smoke.yml`](.github/workflows/federated-smoke.yml) runs this flow end to end on demand (`workflow_dispatch`), without any secret; its header lists the one-time Entra and GitHub Environment setup. It has not been run yet, because that setup is a maintainer step. The OIDC token expires within minutes, so sign in in the same job that runs the tests. `auth login` does not store the token (it is short-lived, and too long for Windows Credential Manager's 2,560-byte limit): later commands read `PQL_FEDERATED_TOKEN` from the environment, which the example exports for the whole job.
 
 ### Managed identity
 

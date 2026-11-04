@@ -63,6 +63,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from dataclasses import replace
 import sys
 from pathlib import Path
 
@@ -1650,8 +1651,10 @@ def cmd_auth_login(
         else:
             credential.get_token(scope)
 
-        # Save the configuration after successful authentication.
-        manager.save_credential(config)
+        # Save the configuration after successful authentication.  A federated token is
+        # short-lived and larger than Windows Credential Manager allows, so it is not saved;
+        # later commands read PQL_FEDERATED_TOKEN from the environment.
+        manager.save_credential(replace(config, federated_token=None))
 
         click.echo()
         click.echo(f"✅ Successfully authenticated to {environment} cloud")

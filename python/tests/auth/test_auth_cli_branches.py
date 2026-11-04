@@ -125,7 +125,7 @@ class TestAuthLoginRouting:
         saved = AuthenticationManager()._store.load()
         assert saved is not None
         assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
-        assert saved.federated_token == "eyJraWQ.fake"
+        assert saved.federated_token is None  # short-lived and too big for Windows Credential Manager
 
     def test_federated_token_is_read_from_environment(self, runner):
         fake_credential = MagicMock(spec=["get_token"])
@@ -143,7 +143,7 @@ class TestAuthLoginRouting:
         saved = AuthenticationManager()._store.load()
         assert saved is not None
         assert saved.method == AuthMethod.SERVICE_PRINCIPAL_FEDERATED
-        assert saved.federated_token == "eyJraWQ.from-env"
+        assert saved.federated_token is None
 
     def test_certificate_happy_path_saves_credential(self, runner, tmp_path):
         cert = tmp_path / "cert.pem"
