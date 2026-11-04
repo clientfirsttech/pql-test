@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-run-result.schema.json",
+  "$comment": "SPDX-License-Identifier: AGPL-3.0-only. Schema of `pql-test contract run --output FILE` (and `--format json`). The `contract` object is also the whole output of `pql-test contract trace --format json` (see $defs/contractReport). Compatible changes (new properties) keep schemaVersion; removing or retyping a property bumps it.",
+  "title": "pql-test contract run result",
+  "type": "object",
+  "required": ["model_path", "passed", "failed", "skipped", "total", "results", "contract"],
+  "properties": {
+    "model_path": { "type": "string" },
+    "passed": { "type": "integer", "minimum": 0 },
+    "failed": { "type": "integer", "minimum": 0 },
+    "skipped": { "type": "integer", "minimum": 0 },
+    "total": { "type": "integer", "minimum": 0 },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["test_name", "passed", "skipped"],
+        "properties": {
+          "test_name": { "type": "string" },
+          "suite_name": { "type": ["string", "null"] },
+          "passed": { "type": "boolean" },
+          "skipped": { "type": "boolean" },
+          "expected": {},
+          "actual": {},
+          "error": { "type": ["string", "null"] },
+          "duration_ms": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "contract": { "$ref": "#/$defs/contractReport" }
+  },
+  "$defs": {
+    "contractReport": {
+      "type": "object",
+      "required": ["schemaVersion", "contract", "summary", "rules", "unmatched"],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "contract": { "type": ["string", "null"], "description": "The contract's id." },
+        "summary": {
+          "type": "object",
+          "description": "Rule counts by status.",
+          "required": ["failed", "error", "not_executed", "passed", "skipped"],
+          "properties": {
+            "failed": { "type": "integer", "minimum": 0 },
+            "error": { "type": "integer", "minimum": 0 },
+            "not_executed": { "type": "integer", "minimum": 0 },
+            "passed": { "type": "integer", "minimum": 0 },
+            "skipped": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ruleId", "status", "severity", "description", "reason", "details"],
+            "properties": {
+              "ruleId": { "type": "string" },
+              "status": {
+                "enum": ["failed", "error", "not_executed", "passed", "skipped"],
+                "description": "failed: an assertion failed. error: a test could not run. not_executed: the suite did not run (no connection). passed. skipped: the rule maps to no DAX (see `contract coverage`)."
+              },
+              "severity": { "type": ["string", "null"], "description": "'warning' rules never fail the run." },
+              "description": { "type": "string" },
+              "reason": { "type": ["string", "null"] },
+              "details": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        },
+        "unmatched": {
+          "type": "array",
+          "description": "Results that did not come from this contract.",
+          "items": { "type": "object" }
+        }
+      }
+    }
+  }
+}

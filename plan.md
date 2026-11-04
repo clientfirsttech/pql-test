@@ -46,7 +46,7 @@
 
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
-  - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
+  - the datacontract-cli side of the integration (a datacontract-cli engine or wrapper that calls `pql-test contract run` and reads its `--output` JSON). It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code. pql-test's half is done: the output is a versioned, tested schema.
 
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
@@ -69,6 +69,10 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-04 — Published JSON schema for `contract run` output (branch `dev-odcs`)
+
+`contract run --output` and `contract trace --format json` now carry `schemaVersion: 1` and are described by `python/pql_test/odcs/contract-run-result.schema.json` (packaged). `tests/odcs/test_run_result_schema.py` validates real output against it and checks the schema agrees with the code. Documented in docs/contracts.md, "Reading the results from another tool".
 
 ### 2026-11-04 — Certificate expiry warning in `pql-test auth status` (branch `dev-odcs`)
 
