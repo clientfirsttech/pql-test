@@ -27,8 +27,8 @@
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
   2. Open a PR from `dev-odcs` to `dev` (opened 2026-11-03; earlier dev-odcs PRs #43 and #45 also went to `dev`), then promote `dev` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.
-  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions, and have counsel review its text. DCO sign-off alone does not allow relicensing contributions.
-  4. Release 0.2.0, the first AGPL-3.0-only release, after the counsel review below. v0.1.x stays BUSL-1.1.
+  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions. DCO sign-off alone does not allow relicensing contributions.
+  4. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
 
 - **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
 
@@ -69,23 +69,6 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
-- **LAST EPIC — counsel review of the AGPL-3.0 relicensing.** Have counsel review:
-  - [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and [LICENSES.md](LICENSES.md) (the AGPL-3.0-only choice, the BUSL-1.1 history note, and the two third-party exceptions);
-  - that the AGPL's system-library exception covers ADOMD.NET and `pyadomd`;
-  - the contributor license agreement chosen in Open Items step 3;
-  - a trademark notice for "pql-test" and "PQL.Assert", which no license covers.
-
-
-## Completed Work
-
-### 2026-11-04 — By-name service path no longer raises on auth failures (branch `dev-odcs`)
-
-`resolve_service_xmla_connection_by_name` now catches credential and token failures, warns on stderr, and returns None, so `run-tests`, `retrieve-tests`, and `retrieve-test` print one clean error instead of a traceback (their message no longer blames missing flags). Two tests added. Added the manual `federated-smoke.yml` workflow for the federated-credential example.
-
-### 2026-11-03 — Security audit: OWASP A01, A04, A06 (branch `dev-odcs`)
-
-- See [tasks/archive/2026-11-03-security-audit.md](tasks/archive/2026-11-03-security-audit.md) and [docs/security-threat-model.md](docs/security-threat-model.md).
-- `pip-audit` (requirements and project dependencies) and `bandit -ll` found nothing. Dependabot covers pip and GitHub Actions; every workflow sets `permissions:`.
 - **Fixed:** the XMLA connection string quoted catalog, role, and user values but not the client secret, token, client ID, or server, so a secret containing `;Roles=Admin` added a `Roles=` key. All values now go through `_conn_value` (`python/pql_test/runner/xmla.py`), with tests.
 - **Fixed:** `.github/copilot-setup-steps.yml` used an unpinned `actions/checkout@v4`.
 - **Documented:** federated-credential subject claims with a GitHub Actions example (not yet run end to end), and managed-identity least privilege, in CONTRIBUTING.md; the threat model's statuses, duplicates, and compliance table are current.
