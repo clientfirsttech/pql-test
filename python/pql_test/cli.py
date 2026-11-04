@@ -785,7 +785,7 @@ def cmd_retrieve_tests(
         )
         if conn is None:
             click.echo(
-                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
+                "Error: Could not establish a service connection. Supply --tenant-id, --client-id, and --client-secret (or run `pql-test auth login`); see any warning above.",
                 err=True,
             )
             sys.exit(1)
@@ -906,7 +906,7 @@ def cmd_retrieve_test(
         )
         if conn is None:
             click.echo(
-                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
+                "Error: Could not establish a service connection. Supply --tenant-id, --client-id, and --client-secret (or run `pql-test auth login`); see any warning above.",
                 err=True,
             )
             sys.exit(1)
@@ -1086,7 +1086,7 @@ def cmd_run_tests(
             click.echo(f"\nXMLA connection: {conn.server} / catalog: {conn.catalog}")
         else:
             click.echo(
-                "Error: Service connection requires --tenant-id, --client-id, and --client-secret.",
+                "Error: Could not establish a service connection. Supply --tenant-id, --client-id, and --client-secret (or run `pql-test auth login`); see any warning above.",
                 err=True,
             )
             sys.exit(1)

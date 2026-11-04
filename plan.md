@@ -27,8 +27,8 @@
 - **Maintainer steps after merging pql-odcs into pql-test under AGPL-3.0 (2026-10-28).** All code is committed on `dev-odcs` and passes locally: the full pytest suite, and the contract tests in a venv without pyadomd. See [tasks/archive/2026-10-28-merge-pql-odcs-agpl.md](tasks/archive/2026-10-28-merge-pql-odcs-agpl.md). In order:
   1. Update the `PQL_CLIENT_SECRET` repository secret (renewed locally in `python/.env` on 2026-10-28), and `python/tests/.env` if anything still reads it.
   2. Open a PR from `dev-odcs` to `dev` (opened 2026-11-03; earlier dev-odcs PRs #43 and #45 also went to `dev`), then promote `dev` to `main`. Its first CI run is also the first run of the new Linux stage (ci.yml Stage 3c, [linux.yml](.github/workflows/linux.yml)), which could not be run locally.
-  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions, and have counsel review its text. DCO sign-off alone does not allow relicensing contributions.
-  4. Release 0.2.0, the first AGPL-3.0-only release, after the counsel review below. v0.1.x stays BUSL-1.1.
+  3. Decided 2026-10-28: commercial (dual) licenses are possible, so adopt a contributor license agreement (for example through CLA Assistant) before accepting outside contributions. DCO sign-off alone does not allow relicensing contributions.
+  4. Release 0.2.0, the first AGPL-3.0-only release. v0.1.x stays BUSL-1.1.
 
 - **Earlier dev-odcs maintainer steps (2026-10-27/28)** — done: SampleModel upgraded to PQL.Assert 0.8.0 and published, its suites checked (all 15 failures pre-existing), `contract doctor` clean against the workspace, and `tests/test_contract_live.py` 14 passed over the service connection. See [tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md](tasks/archive/2026-10-27-pql-odcs-live-0-8-ci.md) and [tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md](tasks/archive/2026-10-27-pql-odcs-doctor-and-skill.md).
 
@@ -47,7 +47,6 @@
 - **Contract commands: next** — Contents:
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
   - a datacontract-cli integration that calls `pql-test contract run` and reads its `--output` JSON. It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code.
-  - a PQL.Assert minimum-version warning in `contract run`.
 
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
@@ -61,7 +60,7 @@
 
 - **Restore interactive prompt for managed-identity auth** — removed from `pql-test auth login`'s interactive menu on 2026-05-27 alongside the certificate path. Underlying support is intact: `AuthMethod.MANAGED_IDENTITY` (system- and user-assigned), the factory, and the `--identity` flag all still function. Most useful when pql-test is invoked from inside Azure VMs / containers / Azure DevOps agents where no secret needs to be stored at all. Re-expose in the prompt when we have a customer running pql-test from inside Azure infrastructure.
 
-- **Security audit leftovers (2026-11-03)** — run the federated-credential workflow example in [CONTRIBUTING.md](CONTRIBUTING.md#federated-credentials-workload-identity) end to end in CI; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
+- **Security audit leftovers (2026-11-03)** — the federated example now has a manual workflow, [federated-smoke.yml](.github/workflows/federated-smoke.yml); a maintainer still has to create the Entra federated credential and the `federated-smoke` Environment, then run it once; add a certificate expiry warning to `pql-test auth status`; add an Azure DevOps managed-identity example. See [docs/security-threat-model.md](docs/security-threat-model.md).
 
 - **Document type suppressions** — 42 `type: ignore` and `noqa` suppressions lack inline justification. Add comments explaining why each is necessary (e.g., .NET interop, TextIO protocol limitations). Estimated 2 hours.
 
@@ -69,15 +68,19 @@
 
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
-- **LAST EPIC — counsel review of the AGPL-3.0 relicensing.** Have counsel review:
-  - [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and [LICENSES.md](LICENSES.md) (the AGPL-3.0-only choice, the BUSL-1.1 history note, and the two third-party exceptions);
-  - that the AGPL's system-library exception covers ADOMD.NET and `pyadomd`;
-  - the contributor license agreement chosen in Open Items step 3;
-  - a trademark notice for "pql-test" and "PQL.Assert", which no license covers.
-
-- **Guard the by-name service-path branch against auth exceptions** — `resolve_xmla_connection`'s `ident.kind == "service"` branch (added 2026-10-01 for the canonical `<workspace>.Workspace/<model>.SemanticModel` path) calls `resolve_service_xmla_connection_by_name` without a try/except. A bad secret, dead workspace, or unreachable endpoint raises instead of returning a clean "no connection" error — the existing GUID-based service path (`_resolve_service_xmla_connection`) already wraps the same failure modes and falls back to local detection. `cmd_run_tests`'s own manual service branch has the identical gap, so this should cover both call sites together. Estimated 2 hours.
-
 ## Completed Work
+
+### 2026-11-04 — PQL.Assert minimum-version warning in `contract run` (branch `dev-odcs`)
+
+`contract run` now warns when the connected model's PQL.Assert is older than the newest catalog (0.9), or older than an explicit `--pql-assert`. Non-blocking; shown on stderr and in the CI pre-warnings. See `pql_assert_version_warning` in `contract_run.py`.
+
+### 2026-11-04 — Counsel review of the AGPL-3.0 relicensing dropped
+
+Decided: AGPL-3.0-only stands as is, with no counsel review. Removed the "LAST EPIC" and the review gate on the 0.2.0 release.
+
+### 2026-11-04 — By-name service path no longer raises on auth failures (branch `dev-odcs`)
+
+`resolve_service_xmla_connection_by_name` now catches credential and token failures, warns on stderr, and returns None, so `run-tests`, `retrieve-tests`, and `retrieve-test` print one clean error instead of a traceback (their message no longer blames missing flags). Two tests added. Added the manual `federated-smoke.yml` workflow for the federated-credential example.
 
 ### 2026-11-03 — Security audit: OWASP A01, A04, A06 (branch `dev-odcs`)
 
