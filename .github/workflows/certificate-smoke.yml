@@ -90,7 +90,8 @@ jobs:
         shell: bash
         env:
           MODEL: ${{ inputs.model }}
-          PQL_TENANT_ID: ${{ vars.PQL_TENANT_ID }}
+          # Do not set PQL_TENANT_ID / PQL_CLIENT_ID here: any of them makes the runner use
+          # environment credentials and skip the stored certificate sign-in.
           PQL_WORKSPACE_ID: ${{ vars.PQL_WORKSPACE_ID }}
         run: |
           pql-test run-tests "$MODEL" --log-format github

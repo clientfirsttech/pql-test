@@ -41,6 +41,8 @@ dependencies = [
     "msal>=1.24.0",
     "azure-identity>=1.19.0",
     "keyring>=25.0.0",
+    # `auth status` reads the certificate expiry. Imported directly; also a dependency of msal.
+    "cryptography>=42.0.0",
     "click>=8.1.0",
     "python-dotenv>=1.2.2",  # PYSEC-2026-2270
     "psutil>=5.9.0",

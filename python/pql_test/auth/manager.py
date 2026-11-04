@@ -16,10 +16,10 @@ try:
 except ImportError:
     TokenCredential = None  # type: ignore
 
+from pql_test.auth.cert_expiry import certificate_expiry
 from pql_test.auth.cloud_config import CloudConfig
 from pql_test.auth.exceptions import TokenAcquisitionError
 from pql_test.auth.factory import CredentialFactory
-from pql_test.auth.cert_expiry import certificate_expiry
 from pql_test.auth.models import AuthMethod, AuthStatus, CredentialConfig
 from pql_test.auth.store import CredentialStore
 
