@@ -636,3 +636,23 @@ class TestRunFormat:
         )
 
         assert (result.exit_code, "--format json and --log-format" in result.output) == (2, True), f"{given}: {should}"
+
+
+class TestDeployedVersionIsSanitised:
+    @pytest.mark.parametrize("reported", ["0.9.0\n::error::pwned", "\x1b[31m0.9", "<script>", "x" * 80, ""])
+    def test_a_version_that_is_not_version_shaped_is_ignored(self, monkeypatch, reported):
+        given = f"a model reporting {reported!r} as its PQL.Assert version"
+        should = "be treated as no usable version, so it is never echoed into the logs"
+        from pql_test.contract_run import deployed_library_version
+
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", lambda *_a: [{"[Value]": reported}])
+
+        assert deployed_library_version(object()) is None, f"{given}: {should}"
+
+    @pytest.mark.parametrize("reported", ["0.9.0", "0.10.2", "1.0.0-rc1"])
+    def test_a_real_version_is_kept(self, monkeypatch, reported):
+        from pql_test.contract_run import deployed_library_version
+
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", lambda *_a: [{"[Value]": reported}])
+
+        assert deployed_library_version(object()) == reported

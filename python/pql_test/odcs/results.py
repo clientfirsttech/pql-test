@@ -21,6 +21,8 @@ from pql_test.odcs.ir import ERROR, WARNING, Status
 
 # Rule status precedence when a rule has several assertions: worst first.
 STATUSES = ("failed", "error", "not_executed", "passed", "skipped")
+# Version of the JSON this report serializes to (see contract-run-result.schema.json).
+REPORT_SCHEMA_VERSION = 1
 _SUITE_RE = re.compile(r"^(?P<prefix>.+)\.(?P<suite>[A-Za-z]+)\.(?P<env>[A-Za-z0-9_]+)\.Tests$")
 
 
@@ -49,6 +51,7 @@ class TraceReport:
 
     def to_json(self) -> dict:
         return {
+            "schemaVersion": REPORT_SCHEMA_VERSION,
             "contract": self.contract_id,
             "summary": self.summary(),
             "rules": [

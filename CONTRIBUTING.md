@@ -47,6 +47,7 @@ pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
   (after the shebang line, when there is one).
 - **Sign off every commit** with the [Developer Certificate of Origin](https://developercertificate.org/):
   `git commit -s`. The sign-off certifies that you have the right to submit the change under AGPL-3.0-only.
+- **Sign the [Contributor License Agreement](CLA.md) once** (outside contributors; a bot comments on your first pull request and you reply with the sentence it gives). It is the Apache Individual CLA adapted to Client First Technologies: you keep your copyright and license your contributions to the Company, which lets it also offer pql-test under other licenses. The DCO sign-off above is still required.
 - **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, LGPL, or GPL-3.0 licensed packages.
 - **Keep the contract file commands free of XMLA.** `pql-test contract lint|coverage|generate|trace`
   only read and write files, so they run on Linux CI. Import ADOMD.NET-dependent code lazily, inside
@@ -410,6 +411,8 @@ Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password
 2. Select the `.cer` file → **Add**
 3. Certificate is now trusted for authentication
 
+To set up the CI smoke test ([certificate-smoke.yml](.github/workflows/certificate-smoke.yml)) in one go, run [scripts/setup-certificate-smoke.ps1](scripts/setup-certificate-smoke.ps1): it creates the certificate in memory, uploads the public half to the app registration, and creates the GitHub Environment with its secret and variables.
+
 #### C. Use Certificate with pql-test
 
 ```powershell
@@ -425,7 +428,7 @@ pql-test auth login `
   icacls "C:\secure\pql-test-ci.pfx" /inheritance:r /grant:r "$env:USERNAME:(R,W)"
   ```
 - **Production**: Use Azure Key Vault or HSM (Hardware Security Module)
-- **Rotation**: Renew certificates before expiry (2-year max recommended)
+- **Rotation**: Renew certificates before expiry (2-year max recommended). `pql-test auth status` shows the stored certificate's expiry date and warns on stderr when 30 days or fewer remain (or it has expired); `--format json` adds `certificateExpiresAt` and `certificateDaysRemaining`.
 
 ### Security Best Practices Summary
 
@@ -482,7 +485,7 @@ steps:
       pql-test run-tests "<workspace>.Workspace/<model>.SemanticModel"
 ```
 
-[`federated-smoke.yml`](.github/workflows/federated-smoke.yml) runs this flow end to end on demand (`workflow_dispatch`), without any secret; its header lists the one-time Entra and GitHub Environment setup. It has not been run yet, because that setup is a maintainer step. The OIDC token expires within minutes, so sign in in the same job that runs the tests.
+[`federated-smoke.yml`](.github/workflows/federated-smoke.yml) runs this flow end to end on demand (`workflow_dispatch`), without any secret; its header lists the one-time Entra and GitHub Environment setup. It has not been run yet, because that setup is a maintainer step. The OIDC token expires within minutes, so sign in in the same job that runs the tests. `auth login` does not store the token (it is short-lived, and too long for Windows Credential Manager's 2,560-byte limit): later commands read `PQL_FEDERATED_TOKEN` from the environment, which the example exports for the whole job.
 
 ### Managed identity
 

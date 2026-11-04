@@ -305,6 +305,20 @@ With `--pql-assert 0.7`, a BLANK result passes the text `mustBe` and the number 
 
 Two tests fail before a gap reaches a user: [`test_odcs_rule_matrix.py`](../python/tests/odcs/test_odcs_rule_matrix.py) classifies every value in ODCS's closed vocabularies (quality metrics, quality types, `logicalType`, relationship types, `logicalTypeOptions` keys) the way [`test_function_matrix.py`](../python/tests/odcs/test_function_matrix.py) already classifies every PQL.Assert function, and [`test_docs_contracts_agreement.py`](../python/tests/odcs/test_docs_contracts_agreement.py) checks this page's mapping tables against the catalogs. A new ODCS or PQL.Assert release, or a mapping change that forgets to update this page, fails one of them. `aidd-custom/skills/pql-test-contract-gap-check/SKILL.md` runs both as part of an AIDD review and before every release.
 
+## Reading the results from another tool
+
+`pql-test contract run CONTRACT MODEL_PATH --env ENV --output results.json` writes the run-tests JSON plus a `contract` object with one entry per contract rule. A tool such as datacontract-cli can call the command and read that file, with no Python import (pql-test is AGPL-3.0-only, so integrate command-line to command-line). `contract trace --format json` prints the same `contract` object on its own.
+
+The format is a published contract: [contract-run-result.schema.json](https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-run-result.schema.json) (JSON Schema 2020-12, also installed with the package). The `contract` object carries `schemaVersion` (currently `1`). New properties can appear without changing it, so ignore properties you do not know; removing or retyping a property bumps it. Tests fail if the output stops matching the schema.
+
+- Per rule, `status` is `passed`, `failed`, `error` (a test could not run), `not_executed` (the suite did not run, for example with no connection), or `skipped` (the rule maps to no DAX; see `contract coverage`). A rule with `severity: warning` never fails the run.
+- The exit code is the pass/fail signal: `0` when every blocking suite passed, `1` otherwise (a failed or errored blocking test, nothing executed, or no connection). Read the file for per-rule detail; do not parse the human-readable report.
+
+```bash
+pql-test contract run orders.odcs.yaml ./MyModel --env DEV --output results.json
+python -c "import json; r = json.load(open('results.json'))['contract']; print(r['summary'])"
+```
+
 ## Python API
 
 ```python

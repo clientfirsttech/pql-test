@@ -68,7 +68,6 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "os_name == 'nt'" },
     { name = "importlib-metadata", version = "9.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10.2'" },
-    { name = "importlib-metadata", version = "10.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_version < '0'" },
     { name = "packaging" },
     { name = "pyproject-hooks" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
@@ -1227,6 +1226,7 @@ dependencies = [
     { name = "azure-identity" },
     { name = "certifi" },
     { name = "click" },
+    { name = "cryptography" },
     { name = "jsonschema" },
     { name = "keyring" },
     { name = "msal" },
@@ -1254,6 +1254,7 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "certifi", specifier = ">=2026.10.19" },
     { name = "click", specifier = ">=8.1.0" },
+    { name = "cryptography", specifier = ">=42.0.0" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "jsonschema", specifier = ">=4.18" },
     { name = "keyring", specifier = ">=25.0.0" },
