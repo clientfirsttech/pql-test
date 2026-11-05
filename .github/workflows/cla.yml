@@ -46,5 +46,5 @@ jobs:
           path-to-signatures: signatures/cla.json
           branch: cla-signatures
           # Maintainers and bots do not sign: the Company's own work needs no license grant.
-          allowlist: kerski-cft,dependabot[bot],github-actions[bot]
+          allowlist: kerski-cft,kerski,dependabot[bot],github-actions[bot]
           lock-pullrequest-aftermerge: false
