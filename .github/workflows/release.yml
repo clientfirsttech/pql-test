@@ -16,12 +16,14 @@
 #
 # Same dance against test.pypi.org for the TestPyPI dry-run path.
 #
-# NOTE: we deliberately do NOT use a GitHub Environment here — they require
-# a paid plan on private repos, and trusted publishing works fine without
-# one (the OIDC claim matches on repo + workflow filename alone).  If you
-# later want a manual-approval gate on production releases, create a `pypi`
-# environment, add it back as `environment: name: pypi` on publish-pypi,
-# and set the Environment name in the PyPI publisher config to match.
+# publish-pypi runs in the `pypi` GitHub Environment.  In the repository
+# settings, give that Environment required reviewers and limit its deployment
+# refs to `v*` tags, so nothing reaches PyPI without a maintainer's approval.
+# A blank Environment name in the PyPI publisher accepts any Environment; set
+# it to `pypi` to also make PyPI refuse uploads from anywhere else.
+#
+# Real PyPI publishes only from a `v*` tag, on a tag push or on a manual run
+# dispatched from the tag; a manual run from a branch can only reach TestPyPI.
 #
 # Release cadence:
 #   * Bump version in python/pyproject.toml
@@ -67,10 +69,10 @@ jobs:
           python-version: '3.12'
 
       - name: Install build tooling
-        run: pip install --upgrade build twine
+        run: pip install build==1.6.1 twine==7.0.0
 
       - name: Verify tag matches pyproject version
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         working-directory: python
         run: |
@@ -123,13 +125,17 @@ jobs:
           skip-existing: true
 
   # ---------------------------------------------------------------------------
-  # Publish to real PyPI on tag pushes (and manual dispatch with target=pypi).
+  # Publish to real PyPI from a `v*` tag only: a tag push, or a manual run
+  # with target=pypi dispatched from the tag.
   # ---------------------------------------------------------------------------
   publish-pypi:
     name: Publish to PyPI
     needs: build
-    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi') }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && (github.event_name == 'push' || inputs.target == 'pypi') }}
     runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pql-test
     permissions:
       id-token: write   # OIDC token for trusted publishing
     steps:

@@ -27,15 +27,21 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# Maintained docs. tasks/ and research/ are historical records and are not checked.
+# Maintained docs. tasks/ is a historical record and is not checked.
 FILES = [
     "README.md",
     "python/README.md",
     "CONTRIBUTING.md",
     "LICENSES.md",
     "SECURITY.md",
+    "CLA.md",
+    "UPGRADING.md",
+    "COPILOT-QUICKSTART.md",
+    "TESTING-AIDD.md",
     "vision.md",
-    "docs/*.md",
+    "docs/**/*.md",
+    ".github/workflows/README.md",
+    "tests/promptfoo/README.md",
     "skills/*/SKILL.md",
     "aidd-custom/AGENTS.md",
     "aidd-custom/skills/*/SKILL.md",
