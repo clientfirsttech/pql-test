@@ -23,9 +23,19 @@ The generated DAX calls functions from PQL.Assert
 Copyright (c) 2026 Client First Technologies, licensed under the MIT License.
 pql-test records only PQL.Assert function names and argument order, as data,
 in pql_test/odcs/catalog/. It does not bundle PQL.Assert's functions.tmdl.
-The repository's tests use an unmodified copy of PQL.Assert 0.8.0 under
-python/tests/odcs/fixtures/pql-assert-0.8.0/, with its MIT LICENSE; it is not
+The repository's tests use an unmodified copy of PQL.Assert 0.9.0 under
+python/tests/odcs/fixtures/pql-assert-0.9.0/, with its MIT LICENSE; it is not
 part of the published package.
+
+-------------------------------------------------------------------------------
+AIDD Framework
+-------------------------------------------------------------------------------
+The repository's AI-Driven Development tooling (ai/, .cursor, and the parts of
+AGENTS.md and .github/agents/ that come from it) is taken from the AIDD
+Framework (https://github.com/paralleldrive/aidd), Copyright (c) 2025 Eric
+Elliott, licensed under the MIT License, whose full text is included as
+LICENSE-AIDD.txt. It is development tooling and is not part of the published
+package.
 
 "Power BI" and "Microsoft Fabric" are trademarks of Microsoft Corporation.
 "Bitol" and "Open Data Contract Standard" belong to their respective owners.
