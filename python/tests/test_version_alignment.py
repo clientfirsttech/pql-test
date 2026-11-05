@@ -58,3 +58,11 @@ def test_skill_version_matches_pyproject(skill_path: Path):
 
     assert match, f"{given}: missing version: frontmatter"
     assert match.group(1) == _pyproject_version(), f"{given}: {should}"
+
+
+def test_package_dunder_version_matches_pyproject():
+    given = "pql_test.__version__ (public, in __all__)"
+    should = "equal the pyproject version instead of a hard-coded string"
+    import pql_test
+
+    assert pql_test.__version__ == _pyproject_version(), f"{given}: {should}"

@@ -38,7 +38,13 @@ from pql_test.runner import (
     resolve_xmla_connection,
     run_tests,
 )
-from pql_test.runner.cli_format import STATUS_COLORS, banner
+from pql_test.runner.cli_format import (
+    STATUS_COLORS,
+    azure_text,
+    banner,
+    github_data,
+    github_property,
+)
 from pql_test.runner.model_path import parse_model_identifier
 from pql_test.runner.models import PqlTest
 
@@ -91,9 +97,10 @@ def print_trace_annotations(report, log_format: str) -> None:
         level = "warning" if rule.severity == "warning" else "error"
         text = f"ODCS rule {rule.rule_id} {rule.status}: {_rule_detail(rule)}".replace("\n", " ")
         if log_format == "github":
-            click.echo(f"::{level} title=ODCS rule {rule.rule_id}::{text}")
+            title = github_property(f"ODCS rule {rule.rule_id}")
+            click.echo(f"::{level} title={title}::{github_data(text)}")
         else:
-            click.echo(f"##vso[task.logissue type={level}]{text}")
+            click.echo(f"##vso[task.logissue type={level}]{azure_text(text, vso_data=True)}")
 
 
 def print_trace(report) -> None:

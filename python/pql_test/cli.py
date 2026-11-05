@@ -106,7 +106,10 @@ from pql_test.runner import (
 )
 from pql_test.runner.cli_format import (
     STATUS_COLORS,
+    azure_text,
     banner,
+    github_data,
+    github_property,
     pad,
     table_bottom,
     table_mid,
@@ -445,24 +448,25 @@ def _print_results(
 def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
     """Print test results using Azure DevOps pipeline logging commands."""
     click.echo("##[group]pql-test Results")
-    click.echo(f"model: {suite.model_path}")
+    click.echo(f"model: {azure_text(suite.model_path)}")
     click.echo("")
 
     for r in suite.results:
+        name = azure_text(r.test_name)
         if r.skipped:
-            click.echo(f"##[warning]SKIPPED {r.test_name}: {r.message}")
+            click.echo(f"##[warning]SKIPPED {name}: {azure_text(r.message)}")
         elif r.passed:
-            click.echo(f"  PASS {r.test_name}")
+            click.echo(f"  PASS {name}")
         else:
-            msg = f"FAILED {r.test_name}"
+            msg = f"FAILED {name}"
             if r.message:
-                msg += f" -- {r.message}"
+                msg += f" -- {azure_text(r.message)}"
             click.echo(f"##[error]{msg}")
             if r.error:
-                click.echo(f"##[error]  Error: {r.error}")
+                click.echo(f"##[error]  Error: {azure_text(r.error)}")
 
     for w in (pre_warnings or []):
-        click.echo(f"##[warning]{w}")
+        click.echo(f"##[warning]{azure_text(w)}")
 
     click.echo("")
     click.echo("##[endgroup]")
@@ -478,22 +482,22 @@ def _print_results_azuredevops(suite: TestSuite, pre_warnings: list[str] | None 
 def _print_results_github(suite: TestSuite, pre_warnings: list[str] | None = None) -> None:
     """Print test results using GitHub Actions workflow commands."""
     click.echo("::group::pql-test Results")
-    click.echo(f"model: {suite.model_path}")
+    click.echo(f"model: {github_data(suite.model_path)}")
     click.echo("")
 
     for r in suite.results:
         if r.skipped:
-            click.echo(f"::warning::{r.test_name}: {r.message}")
+            click.echo(f"::warning::{github_data(f'{r.test_name}: {r.message}')}")
         elif r.passed:
-            click.echo(f"  PASS {r.test_name}")
+            click.echo(f"  PASS {github_data(r.test_name)}")
         else:
-            msg = r.message or ""
-            click.echo(f"::error title={r.test_name}::{msg}")
+            title = github_property(r.test_name)
+            click.echo(f"::error title={title}::{github_data(r.message or '')}")
             if r.error:
-                click.echo(f"::error title={r.test_name} Error::{r.error}")
+                click.echo(f"::error title={title} Error::{github_data(r.error)}")
 
     for w in (pre_warnings or []):
-        click.echo(f"::warning::{w}")
+        click.echo(f"::warning::{github_data(w)}")
 
     click.echo("")
     click.echo("::endgroup::")
@@ -1433,7 +1437,10 @@ def auth() -> None:
 @click.option(
     "--client-secret",
     "password",
-    help="Client secret, or the certificate's password with --certificate",
+    help=(
+        "Client secret, or the certificate's password with --certificate. "
+        "For a client secret, prefer setting PQL_CLIENT_SECRET, which keeps it off the command line"
+    ),
 )
 @deprecated_alias("--tenant", to="tenant_id", use="--tenant-id", metavar="TENANT_ID")
 @click.option("--tenant-id", "tenant_id", help="Azure AD tenant ID")
@@ -1482,8 +1489,8 @@ def cmd_auth_login(
       # Interactive browser login
       pql-test auth login
 
-      # Service principal with secret
-      pql-test auth login --client-id <client-id> --client-secret <secret> --tenant-id <tenant-id>
+      # Service principal with secret (read from PQL_CLIENT_SECRET)
+      pql-test auth login --client-id <client-id> --tenant-id <tenant-id>
 
       # Service principal with certificate
       pql-test auth login --client-id <client-id> --certificate cert.pem --tenant-id <tenant-id>
@@ -1497,6 +1504,13 @@ def cmd_auth_login(
     from pql_test.auth import AuthenticationManager, AuthMethod, CredentialConfig
 
     manager = AuthenticationManager()
+
+    # With --client-id and --tenant-id, a service-principal secret can come from
+    # PQL_CLIENT_SECRET instead of the command line (shell history, process
+    # list). Not for certificates: there --client-secret is the certificate's
+    # password. --client-id alone still falls through to browser sign-in.
+    if user_or_client and tenant_id and not (password or certificate or identity or federated_token):
+        password = os.environ.get("PQL_CLIENT_SECRET") or None
 
     # Determine authentication method from provided arguments
     if identity:

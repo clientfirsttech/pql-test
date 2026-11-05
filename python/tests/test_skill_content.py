@@ -409,3 +409,12 @@ def test_contract_skill_describes_the_merged_commands():
     assert ("local/<name>" in content, "pql-odcs" in content, "pql-test[contracts]" in content) == (True, False, False), (
         "contract skill must document local/<name> and not send anyone to the removed pql-odcs package or extra"
     )
+
+
+@pytest.mark.parametrize("name", ["../evil", "a/b", r"a\b", "..", "", "Bad Name"])
+def test_resolve_skill_dir_refuses_names_that_are_not_skill_slugs(tmp_path, name):
+    given = f"skill name {name!r} (from a local SKILL.md frontmatter)"
+    should = "be refused, so it cannot point the install target outside the skills folder"
+
+    with pytest.raises(ValueError):
+        resolve_skill_dir(name, repo_root=tmp_path)

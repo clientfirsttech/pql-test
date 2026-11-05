@@ -140,3 +140,43 @@ class TestStatusColors:
         should = "PASS is green, FAIL is red, and SKIP is yellow -- the only status colors in the CLI"
 
         assert STATUS_COLORS == {"PASS": "green", "FAIL": "red", "SKIP": "yellow"}, f"{given}: {should}"
+
+
+class TestCiLogEscaping:
+    """Model data (test names, Expected/Actual, errors) must not forge CI logging commands."""
+
+    def test_github_data_escapes_percent_and_line_breaks(self):
+        given = "a message with %, CR, and LF"
+        should = "encode them as %25, %0D, %0A so the text stays one workflow command"
+        from pql_test.runner.cli_format import github_data
+
+        actual = github_data("50%\r\n::add-mask::x")
+
+        assert actual == "50%25%0D%0A::add-mask::x", f"{given}: {should}"
+
+    def test_github_property_also_escapes_colon_and_comma(self):
+        given = "a title with ':' and ','"
+        should = "encode them as %3A and %2C so the title cannot end the property list"
+        from pql_test.runner.cli_format import github_property
+
+        actual = github_property("a:b,c%\n")
+
+        assert actual == "a%3Ab%2Cc%25%0A", f"{given}: {should}"
+
+    def test_azure_text_cannot_start_a_logging_command(self):
+        given = "a message with a line break and an embedded ##vso[ command"
+        should = "join the lines and break the ##vso[ / ##[ prefixes, in any case"
+        from pql_test.runner.cli_format import azure_text
+
+        actual = azure_text("x\r\n##vso[task.setvariable variable=A]1 ##VSO[y] ##[error]z")
+
+        assert actual == "x ##vso [task.setvariable variable=A]1 ##VSO [y] ## [error]z", f"{given}: {should}"
+
+    def test_azure_text_escapes_percent_for_vso_data(self):
+        given = "a message with % passed as ##vso command data"
+        should = "encode % as %AZP25 so the agent does not decode %0A into a line break"
+        from pql_test.runner.cli_format import azure_text
+
+        actual = azure_text("100%0A", vso_data=True)
+
+        assert actual == "100%AZP250A", f"{given}: {should}"
