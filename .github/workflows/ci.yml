@@ -134,6 +134,9 @@ jobs:
   run-tests-remote:
     name: Stage 3b – Run DAX tests (Windows, remote workspace)
     needs: promptfoo-eval
+    # Dependabot runs get no Actions secrets, so the service principal sign-in cannot work
+    # and every test would be skipped (a failure). Its PRs only bump workflow dependencies.
+    if: github.actor != 'dependabot[bot]'
     uses: ./.github/workflows/run-tests-remote.yml
     with:
       environment: ${{ inputs.environment || 'Public' }}
