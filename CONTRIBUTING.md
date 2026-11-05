@@ -48,7 +48,7 @@ pql-test is licensed under AGPL-3.0-only ([LICENSES.md](LICENSES.md)).
 - **Sign off every commit** with the [Developer Certificate of Origin](https://developercertificate.org/):
   `git commit -s`. The sign-off certifies that you have the right to submit the change under AGPL-3.0-only.
 - **Sign the [Contributor License Agreement](CLA.md) once** (outside contributors; a bot comments on your first pull request and you reply with the sentence it gives). It is the Apache Individual CLA adapted to Client First Technologies: you keep your copyright and license your contributions to the Company, which lets it also offer pql-test under other licenses. The DCO sign-off above is still required.
-- **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, LGPL, or GPL-3.0 licensed packages.
+- **Keep runtime dependencies AGPL-compatible**: MIT, BSD, Apache-2.0, MPL-2.0, LGPL, or GPL-3.0 licensed packages.
 - **Keep the contract file commands free of XMLA.** `pql-test contract lint|coverage|generate|trace`
   only read and write files, so they run on Linux CI. Import ADOMD.NET-dependent code lazily, inside
   `run` and `doctor` only.
@@ -756,11 +756,11 @@ anywhere in the repo.
   (`clientfirsttech/pql-test`), workflow name `release.yml`, and the
   Environment-name field left **blank**.  An equivalent publisher exists on
   TestPyPI.
-- No GitHub Environments are required.  (They need a paid plan on private
-  repos; trusted publishing works without them.  If you later want a
-  manual-approval gate on production releases, add a `pypi` environment and
-  wire it into `release.yml` + the PyPI publisher config — see the NOTE in
-  that workflow file.)
+- The publish job runs in the `pypi` GitHub Environment.  Give it required
+  reviewers and limit its deployment refs to `v*` tags in the repository
+  settings, so a release waits for a maintainer's approval.  Real PyPI
+  publishes only from a `v*` tag; a manual run from a branch can only reach
+  TestPyPI.  See the header of `release.yml`.
 
 **Per-release checklist:**
 

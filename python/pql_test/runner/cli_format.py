@@ -12,12 +12,17 @@ presentation, per tasks/archive/2026-09-22-consistent-cli-output.md.
 
 from __future__ import annotations
 
+import re
+
 import click
 
 __all__ = [
     "DEFAULT_WIDTH",
     "STATUS_COLORS",
+    "azure_text",
     "banner",
+    "github_data",
+    "github_property",
     "pad",
     "table_bottom",
     "table_mid",
@@ -81,3 +86,38 @@ def table_row(cells: list[str]) -> str:
 def _table_border(widths: list[int], left: str, mid: str, right: str) -> str:
     parts = ["─" * (w + 2) for w in widths]
     return left + mid.join(parts) + right
+
+
+# ---------------------------------------------------------------------------
+# CI logging commands
+#
+# Test names, Expected/Actual values, and error text come from the model and
+# its data. Escape them before they go into a GitHub workflow command or an
+# Azure DevOps logging command, so a value cannot end the command early or
+# start a new one (for example ``##vso[task.setvariable ...]``).
+# ---------------------------------------------------------------------------
+
+_AZURE_PREFIX = re.compile(r"##(vso)?\[", re.IGNORECASE)
+
+
+def github_data(text: object) -> str:
+    """Escape *text* for the message part of a GitHub ``::command::message``."""
+    return str(text).replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def github_property(text: object) -> str:
+    """Escape *text* for a GitHub workflow-command property value such as ``title=``."""
+    return github_data(text).replace(":", "%3A").replace(",", "%2C")
+
+
+def azure_text(text: object, vso_data: bool = False) -> str:
+    """Make *text* safe to print on an Azure DevOps ``##[...]`` or ``##vso[...]`` line.
+
+    Line breaks become spaces and every ``##vso[`` / ``##[`` prefix gets a space,
+    because the agent reads a logging command anywhere in a line. With
+    *vso_data*, ``%`` is also escaped, since ``##vso`` data is percent-decoded.
+    """
+    flat = " ".join(str(text).splitlines())
+    if vso_data:
+        flat = flat.replace("%", "%AZP25")
+    return _AZURE_PREFIX.sub(lambda m: m.group(0)[:-1] + " [", flat)

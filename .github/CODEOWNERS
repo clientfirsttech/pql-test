@@ -5,6 +5,8 @@
 /NOTICE              @kerski-cft
 /python/NOTICE       @kerski-cft
 /LICENSES.md         @kerski-cft
+/CLA.md              @kerski-cft
+/LICENSE-AIDD.txt    @kerski-cft
 
 # Workflows and the secret/security checks need the maintainer's review too:
 # a change here can expose repository secrets or turn a check off.
@@ -12,3 +14,9 @@
 /.pre-commit-config.yaml   @kerski-cft
 /.gitleaksignore           @kerski-cft
 /SECURITY.md               @kerski-cft
+
+# Dependencies and the scripts that set up sign-in for the smoke workflows.
+/python/pyproject.toml     @kerski-cft
+/uv.lock                   @kerski-cft
+/pyproject.toml            @kerski-cft
+/scripts/                  @kerski-cft

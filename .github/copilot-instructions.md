@@ -114,11 +114,9 @@ pql-test/
 ├── skills/                 # Plugin skills (check-prereqs, retrieve-test, retrieve-tests, run-tests)
 │   └── <skill>/SKILL.md    # Skill definition with YAML frontmatter (name + description required)
 ├── python/                 # Python package source
-│   ├── pql_test_cli.py     # Click-based CLI entry point
-│   ├── pql_test_runner.py  # Core test runner logic
-│   ├── pyproject.toml      # Build metadata, dependencies, pytest config
-│   ├── requirements.txt    # Runtime dependencies
-│   └── requirements-dev.txt # Dev/test dependencies
+│   ├── pql_test/           # Package: cli.py (Click entry point), runner/, auth/, odcs/
+│   ├── tests/              # pytest suite
+│   └── pyproject.toml      # Build metadata, runtime and dev dependencies, pytest config
 ├── examples/               # PBIP semantic models with sample DAX test suites
 │   ├── SampleModel.SemanticModel/
 │   ├── RLS_Model.SemanticModel/
@@ -187,8 +185,7 @@ Credentials are configured via environment variables (loaded from `.env` when `p
 
 ```bash
 cd python
-pip install -e .                   # Install pql-test in editable mode
-pip install -r requirements-dev.txt # Install dev/test dependencies
+pip install -e ".[dev]"            # Install pql-test (editable) with dev/test dependencies
 ```
 
 ### Run Unit Tests

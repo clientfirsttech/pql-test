@@ -331,3 +331,78 @@ class TestReviewFindings:
         result = CliRunner().invoke(cli, ["check-prereqs", "--format", "JSON"])
 
         assert "checks" in json.loads(result.stdout), f"{given}: {should}\n{result.output}"
+
+
+class TestCiAnnotationsEscapeModelData:
+    @staticmethod
+    def _suite():
+        from pql_test.runner import TestResult, TestSuite
+
+        bad = TestResult(
+            test_name="Sales, total: 1",
+            passed=False,
+            message="Expected: 1 | Actual: x\n##vso[task.setvariable variable=PQL_CLIENT_SECRET]leak",
+        )
+        return TestSuite(model_path="m", tests=[], results=[bad], passed=0, failed=1, skipped=0, total=1)
+
+    def test_azuredevops_output_has_no_forged_logging_command(self, capsys):
+        given = "a failed test whose Actual value holds a newline and ##vso[task.setvariable"
+        should = "print one ##[error] line and no line that sets a pipeline variable"
+        from pql_test.cli import _print_results_azuredevops
+
+        _print_results_azuredevops(self._suite())
+        out = capsys.readouterr().out
+
+        assert "##vso[task.setvariable" not in out, f"{given}: {should}\n{out}"
+
+    def test_github_output_keeps_each_annotation_on_one_line(self, capsys):
+        given = "a failed test with ',' and ':' in its name and a newline in its message"
+        should = "escape the title and message so no new workflow command starts"
+        from pql_test.cli import _print_results_github
+
+        _print_results_github(self._suite())
+        lines = capsys.readouterr().out.splitlines()
+
+        errors = [ln for ln in lines if ln.startswith("::error")]
+        assert errors == [
+            "::error title=Sales%2C total%3A 1::Expected: 1 | Actual: x%0A"
+            "##vso[task.setvariable variable=PQL_CLIENT_SECRET]leak"
+        ], f"{given}: {should}\n{lines}"
+
+
+def test_auth_login_reads_the_client_secret_from_the_environment(monkeypatch):
+    given = "auth login --client-id X --tenant-id T with PQL_CLIENT_SECRET set"
+    should = "log in as service principal X with that secret, keeping it off the command line"
+    from unittest.mock import MagicMock
+
+    manager = MagicMock()
+    monkeypatch.setattr("pql_test.auth.AuthenticationManager", lambda: manager)
+    monkeypatch.setenv("PQL_CLIENT_SECRET", "from-env")
+
+    result = CliRunner().invoke(cli, ["auth", "login", "--client-id", "X", "--tenant-id", "T"])
+
+    config = manager.save_credential.call_args.args[0]
+    assert (result.exit_code, config.method.value, config.client_secret) == (
+        0,
+        "service_principal_secret",
+        "from-env",
+    ), f"{given}: {should}\n{result.output}"
+
+
+def test_auth_login_certificate_ignores_the_environment_client_secret(monkeypatch, tmp_path):
+    given = "auth login --certificate with PQL_CLIENT_SECRET set and no --client-secret"
+    should = "not use the client secret as the certificate password"
+    from unittest.mock import MagicMock
+
+    manager = MagicMock()
+    monkeypatch.setattr("pql_test.auth.AuthenticationManager", lambda: manager)
+    monkeypatch.setenv("PQL_CLIENT_SECRET", "from-env")
+    cert = tmp_path / "c.pem"
+    cert.write_text("x")
+
+    CliRunner().invoke(
+        cli, ["auth", "login", "--client-id", "X", "--tenant-id", "T", "--certificate", str(cert)]
+    )
+
+    config = manager.save_credential.call_args.args[0]
+    assert config.certificate_password is None, f"{given}: {should}"

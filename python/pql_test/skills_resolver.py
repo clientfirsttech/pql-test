@@ -8,7 +8,10 @@ to packaged resources (pql_test/skills/).
 from __future__ import annotations
 
 import importlib.resources as pkg_resources
+import re
 from pathlib import Path
+
+_SKILL_NAME = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 
 
 def resolve_skill_dir(name: str, repo_root: Path | None = None) -> Path:
@@ -25,6 +28,11 @@ def resolve_skill_dir(name: str, repo_root: Path | None = None) -> Path:
     Raises:
         FileNotFoundError: If the skill is not found in local override or package
     """
+    # The name comes from SKILL.md frontmatter and becomes part of an install
+    # path, so allow only a skill slug (no separators, no "..").
+    if not _SKILL_NAME.fullmatch(name):
+        raise ValueError(f"Invalid skill name {name!r}: use lowercase letters, digits, and hyphens")
+
     # Try local override first (repo's skills/ directory)
     if repo_root is None:
         repo_root = Path.cwd()

@@ -1,7 +1,7 @@
 # pql-test — DAX Test Runner for PBIP Models
 
 ![Coverage](https://img.shields.io/badge/coverage-77%25-yellow)
-[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE.txt)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](https://github.com/clientfirsttech/pql-test/blob/main/LICENSE.txt)
 
 ## Run Your Semantic Model Tests from the Command Line
 
@@ -1861,6 +1861,12 @@ EVALUATE Calculations.DEV.Tests()
 
 ---
 
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](https://github.com/clientfirsttech/pql-test/blob/main/CONTRIBUTING.md) for the development setup and conventions. Outside contributors sign the [Contributor License Agreement](https://github.com/clientfirsttech/pql-test/blob/main/CLA.md) once: a bot asks on your first pull request. To report a vulnerability, see [SECURITY.md](https://github.com/clientfirsttech/pql-test/blob/main/SECURITY.md).
+
+---
+
 ## License
 
-pql-test is licensed under the [GNU Affero General Public License v3.0 only](LICENSE.txt) (AGPL-3.0-only), Copyright (C) 2026 Client First Technologies. Releases up to v0.1.x were published under the Business Source License 1.1 and keep it. See [LICENSES.md](https://github.com/clientfirsttech/pql-test/blob/main/LICENSES.md) for the third-party files that carry their own license.
+pql-test is licensed under the [GNU Affero General Public License v3.0 only](https://github.com/clientfirsttech/pql-test/blob/main/LICENSE.txt) (AGPL-3.0-only), Copyright (C) 2026 Client First Technologies. Releases up to v0.1.x were published under the Business Source License 1.1 and keep it. See [LICENSES.md](https://github.com/clientfirsttech/pql-test/blob/main/LICENSES.md) for the third-party files that carry their own license.

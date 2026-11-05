@@ -4,10 +4,25 @@
 from __future__ import annotations
 
 import json
-import pytest
+import os
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 from click.testing import CliRunner
 from pql_test.cli import cli
+
+
+@contextmanager
+def _in_new_dir(base: Path):
+    """Run the block in a fresh directory under *base* (replaces Click's deprecated isolated_filesystem)."""
+    previous = os.getcwd()
+    os.chdir(tempfile.mkdtemp(dir=base))
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 @pytest.fixture
@@ -65,7 +80,7 @@ def temp_workspace(tmp_path):
 
 def test_skill_install_copilot_creates_instructions_file(runner, temp_workspace):
     """Given pql-test skill --install copilot, should create .github/copilot-instructions.md."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'copilot'])
         
         assert result.exit_code == 0
@@ -78,7 +93,7 @@ def test_skill_install_copilot_creates_instructions_file(runner, temp_workspace)
 
 def test_skill_install_claude_creates_skills_directory(runner, temp_workspace):
     """Given pql-test skill --install claude, should create .claude/skills/pql-test/."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'claude'])
         
         assert result.exit_code == 0
@@ -88,7 +103,7 @@ def test_skill_install_claude_creates_skills_directory(runner, temp_workspace):
 
 def test_skill_install_cursor_creates_cursor_directory(runner, temp_workspace):
     """Given pql-test skill --install cursor, should create .cursor/skills/pql-test/."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'cursor'])
         
         assert result.exit_code == 0
@@ -97,7 +112,7 @@ def test_skill_install_cursor_creates_cursor_directory(runner, temp_workspace):
 
 def test_skill_install_windsurf_creates_windsurf_directory(runner, temp_workspace):
     """Given pql-test skill --install windsurf, should create .windsurf/skills/pql-test/."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'windsurf'])
         
         assert result.exit_code == 0
@@ -108,7 +123,7 @@ def test_skill_install_adds_marker_comment(runner, temp_workspace):
     """Given installed skill files, should contain marker comment with version."""
     from importlib.metadata import version as _pkg_version
 
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
         skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
@@ -119,7 +134,7 @@ def test_skill_install_adds_marker_comment(runner, temp_workspace):
 
 def test_skill_install_dry_run_reports_changes_without_writing(runner, temp_workspace):
     """Given pql-test skill --install claude --dry-run, should report what would change without writing."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'claude', '--dry-run'])
         
         assert result.exit_code == 0
@@ -129,7 +144,7 @@ def test_skill_install_dry_run_reports_changes_without_writing(runner, temp_work
 
 def test_skill_install_reports_created_files(runner, temp_workspace):
     """Given pql-test skill --install, should report created/updated/unchanged per file."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'claude'])
         
         assert result.exit_code == 0
@@ -139,7 +154,7 @@ def test_skill_install_reports_created_files(runner, temp_workspace):
 
 def test_skill_install_is_idempotent(runner, temp_workspace):
     """Given pql-test skill --install run twice, should not error and report unchanged."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result1 = runner.invoke(cli, ['skill', '--install', 'claude'])
         result2 = runner.invoke(cli, ['skill', '--install', 'claude'])
         
@@ -150,7 +165,7 @@ def test_skill_install_is_idempotent(runner, temp_workspace):
 
 def test_skill_show_reports_install_status(runner, temp_workspace):
     """Given pql-test skill --show, should report install state per harness."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         # Install to one harness
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
@@ -165,7 +180,7 @@ def test_skill_show_reports_install_status(runner, temp_workspace):
 
 def test_skill_uninstall_removes_installed_files(runner, temp_workspace):
     """Given pql-test skill --uninstall, should remove files with pql-test marker."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         assert Path('.claude/skills/pql-test/run-tests/SKILL.md').exists()
         
@@ -177,7 +192,7 @@ def test_skill_uninstall_removes_installed_files(runner, temp_workspace):
 
 def test_skill_install_invalid_harness_fails(runner, temp_workspace):
     """Given pql-test skill --install invalid-name, should list valid harnesses and exit 1."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--install', 'invalid-harness'])
         
         assert result.exit_code == 1
@@ -189,7 +204,7 @@ def test_skill_install_invalid_harness_fails(runner, temp_workspace):
 
 def test_skill_install_all_installs_to_all_harnesses(runner, temp_workspace):
     """Given pql-test skill --all, should install to all detected harnesses."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         result = runner.invoke(cli, ['skill', '--all'])
         
         assert result.exit_code == 0
@@ -204,7 +219,7 @@ def test_skill_show_detects_version_mismatch(runner, temp_workspace):
     """Given installed skill with different version, should report version mismatch."""
     from importlib.metadata import version as _pkg_version
 
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
         
         skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
@@ -226,7 +241,7 @@ def test_skill_show_detects_version_mismatch(runner, temp_workspace):
 
 def test_install_preserves_customization_when_marker_version_matches(runner, temp_workspace):
     """User edits an installed skill; second `--install` must not clobber it."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
 
         skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
@@ -244,7 +259,7 @@ def test_install_preserves_customization_when_marker_version_matches(runner, tem
 
 def test_install_force_overwrites_customization(runner, temp_workspace):
     """`--force` must overwrite user-modified files regardless of marker version."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
 
         skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
@@ -260,7 +275,7 @@ def test_install_force_overwrites_customization(runner, temp_workspace):
 
 def test_install_updates_when_marker_version_differs(runner, temp_workspace):
     """When installed marker version is older than package, install must update."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         runner.invoke(cli, ['skill', '--install', 'claude'])
 
         skill_file = Path('.claude/skills/pql-test/run-tests/SKILL.md')
@@ -279,7 +294,7 @@ def test_install_updates_when_marker_version_differs(runner, temp_workspace):
 
 def test_install_preserves_unmanaged_files_without_marker(runner, temp_workspace):
     """A pre-existing file with no pql-test marker must not be clobbered without --force."""
-    with runner.isolated_filesystem(temp_dir=temp_workspace):
+    with _in_new_dir(temp_workspace):
         skill_dir = Path('.claude/skills/pql-test/run-tests')
         skill_dir.mkdir(parents=True)
         unmanaged = skill_dir / 'SKILL.md'

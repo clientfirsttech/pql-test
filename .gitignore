@@ -79,5 +79,9 @@ renamedenv
 .hypothesis/
 .coverage
 
+# pytest --cov reports (CI uploads them as artifacts)
+/python/coverage.json
+/python/htmlcov/
+
 # Local-only notes (e.g. secret-rotation.local.md); never committed
 *.local.md

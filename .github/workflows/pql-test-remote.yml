@@ -105,7 +105,8 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install pql-test ms-fabric-cli
+          # Pinned: this job holds the service principal secret. Bump on purpose.
+          pip install pql-test==0.1.20 ms-fabric-cli==1.8.0
 
       # ---------------------------------------------------------------------
       # 2. ADOMD.NET client libraries (required by pyadomd on Windows)

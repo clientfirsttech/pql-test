@@ -59,7 +59,8 @@ on:
     branches:
       - main
       - master
-      - 'copilot/**'
+    # Copilot coding-agent branches run through the pull_request trigger below,
+    # where a bot-authored PR gets no secrets (see BOT_PR in stage 3).
   pull_request:
   workflow_dispatch:
     inputs:
@@ -119,14 +120,18 @@ jobs:
     uses: ./.github/workflows/pytest.yml
     permissions:
       contents: read
+    # BOT_PR: a pull request opened by a bot (the gh-aw issue agent, the Copilot coding
+    # agent, Dependabot) carries code no maintainer wrote, so its run gets no secrets.
+    # The live tests then skip. A maintainer can run them after review with
+    # workflow_dispatch on that branch.
     secrets:
-      PQL_TENANT_ID:        ${{ secrets.PQL_TENANT_ID }}
-      PQL_CLIENT_ID:        ${{ secrets.PQL_CLIENT_ID }}
-      PQL_CLIENT_SECRET:    ${{ secrets.PQL_CLIENT_SECRET }}
-      PQL_DATASET_ID:       ${{ secrets.PQL_DATASET_ID }}
-      PQL_DATASET_ID_RLS:   ${{ secrets.PQL_DATASET_ID_RLS }}
-      PQL_DATASET_ID_OLS:   ${{ secrets.PQL_DATASET_ID_OLS }}
-      PQL_ENVIRONMENT:      ${{ secrets.PQL_ENVIRONMENT }}
+      PQL_TENANT_ID:        ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_TENANT_ID || '' }}
+      PQL_CLIENT_ID:        ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_CLIENT_ID || '' }}
+      PQL_CLIENT_SECRET:    ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_CLIENT_SECRET || '' }}
+      PQL_DATASET_ID:       ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_DATASET_ID || '' }}
+      PQL_DATASET_ID_RLS:   ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_DATASET_ID_RLS || '' }}
+      PQL_DATASET_ID_OLS:   ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_DATASET_ID_OLS || '' }}
+      PQL_ENVIRONMENT:      ${{ (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot') && secrets.PQL_ENVIRONMENT || '' }}
 
   # ---------------------------------------------------------------------------
   # Stage 3b: run DAX tests against the examples/ folder → deployed workspace
@@ -134,9 +139,10 @@ jobs:
   run-tests-remote:
     name: Stage 3b – Run DAX tests (Windows, remote workspace)
     needs: promptfoo-eval
-    # Dependabot runs get no Actions secrets, so the service principal sign-in cannot work
-    # and every test would be skipped (a failure). Its PRs only bump workflow dependencies.
-    if: github.actor != 'dependabot[bot]'
+    # Skipped for Dependabot (it gets no Actions secrets, so every test would be skipped,
+    # a failure) and for any bot-authored pull request (BOT_PR above): this stage needs
+    # the secrets.
+    if: github.actor != 'dependabot[bot]' && (github.event_name != 'pull_request' || github.event.pull_request.user.type != 'Bot')
     uses: ./.github/workflows/run-tests-remote.yml
     with:
       environment: ${{ inputs.environment || 'Public' }}
