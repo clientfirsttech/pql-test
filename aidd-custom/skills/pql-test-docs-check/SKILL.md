@@ -36,6 +36,6 @@ Constraints {
   Edit README.md and python/README.md identically; the sync test fails otherwise.
   Edit skills/<name>/SKILL.md and python/pql_test/skills/<name>/SKILL.md identically.
   Never "fix" a dead link by deleting the reference without saying so; replace it, or report it.
-  tasks/ and research/ are historical records: their links are not checked.
+  tasks/ is a historical record: its links are not checked.
 }
 ```
