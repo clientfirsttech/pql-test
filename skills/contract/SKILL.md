@@ -1,7 +1,7 @@
 ---
 name: contract
 description: Write an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 data contract for a PBIP semantic model (starting from its TMDL), and turn it into PQL.Assert DAX test suites, report which contract rules are enforced, run them, and trace failures back to contract rule ids.
-version: 0.2.0
+version: 0.2.1
 ---
 
 `pql-test contract` turns an ODCS data contract's quality rules into PQL.Assert `*.Tests.dax` suites. It reports every rule as mapped, approximated, or skipped, so no rule is silently dropped. The commands come with `pip install pql-test`. `run` and `doctor`'s live checks need XMLA (Windows); `lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in CI.
