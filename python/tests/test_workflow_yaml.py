@@ -64,3 +64,30 @@ def test_duplicate_key_check_catches_a_repeated_env():
     loader.dispose()
 
     assert loader.duplicates == ["'env' at line 5"], f"Given {given}, should {should}"
+
+
+def test_security_checks_lockfile_before_exporting_frozen_dependencies():
+    given = "the security workflow exports frozen dependencies"
+    should = "first reject a stale lockfile with a required freshness check"
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "security.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["security"]["steps"]
+    lock_checks = [
+        index
+        for index, step in enumerate(steps)
+        if step.get("run", "").strip() == "uv lock --check"
+    ]
+
+    assert len(lock_checks) == 1, f"Given {given}, should {should}"
+    lock_index = lock_checks[0]
+    lock_step = steps[lock_index]
+    assert not lock_step.get("continue-on-error", False), should
+    assert "if" not in lock_step, should
+    export_indices = [
+        index
+        for index, step in enumerate(steps)
+        if "uv export --frozen" in step.get("run", "")
+    ]
+    assert export_indices, "Expected the locked dependency audit export"
+    assert all(lock_index < index for index in export_indices), should
