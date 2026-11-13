@@ -1,7 +1,7 @@
 ---
 name: check-prereqs
 description: Verify that all required packages and runtime dependencies for pql-test are available (Python >= 3.10, pyadomd, msal, psutil).
-version: 0.2.0
+version: 0.2.1
 ---
 
 Run `pql-test check-prereqs` to verify that all required packages and tools are installed before attempting to run DAX tests.

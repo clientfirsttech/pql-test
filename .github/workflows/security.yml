@@ -52,6 +52,9 @@ jobs:
       - name: bandit (medium severity and up)
         run: bandit -c python/pyproject.toml -r python/pql_test --severity-level medium
 
+      - name: Lockfile matches the project metadata
+        run: uv lock --check
+
       - name: pip-audit on pql-test's locked runtime dependencies
         # Audits exactly what uv.lock resolves for this Python (3.12), not the runner's own
         # packages.

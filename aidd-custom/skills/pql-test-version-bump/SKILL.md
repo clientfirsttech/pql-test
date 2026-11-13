@@ -1,6 +1,6 @@
 ---
 name: pql-test-version-bump
-description: Bump the pql-test release version consistently across pyproject.toml, plugin.json, and every source and packaged SKILL.md. Use when shipping a user-visible change, adding or editing a skill, preparing a release tag, or when the version-alignment test or CI check fails.
+description: Bump the pql-test release version consistently across pyproject.toml, uv.lock, plugin.json, and every source and packaged SKILL.md. Use when shipping a user-visible change, adding or editing a skill, preparing a release tag, or when the version-alignment test or CI check fails.
 allowed-tools: Bash(git:*)
 ---
 
@@ -14,6 +14,7 @@ a bump is not done until all of them agree.
 | File | Field |
 |---|---|
 | `python/pyproject.toml` | `version = "X.Y.Z"` (source of truth — `release.yml` checks the `vX.Y.Z` tag against it) |
+| `uv.lock` | `version = "X.Y.Z"` in the `[[package]]` entry with `name = "pql-test"` (regenerate with `uv lock`) |
 | `plugin.json` | `"version": "X.Y.Z"` (Copilot CLI plugin manifest) |
 | `skills/*/SKILL.md` | `version: X.Y.Z` frontmatter (source skills) |
 | `python/pql_test/skills/*/SKILL.md` | `version: X.Y.Z` frontmatter (packaged skills — must stay byte-identical to `skills/`) |
@@ -31,14 +32,18 @@ BumpVersion(newVersion) {
   2. Update every file in the table above to newVersion.
   3. Re-sync packaged skills: each python/pql_test/skills/<name>/SKILL.md must be
      byte-identical to skills/<name>/SKILL.md.
-  4. Verify:
+    4. Regenerate the workspace lockfile from the repository root:
+      uv lock
+      // Keep existing dependency pins; do not use --upgrade for a version-only bump.
+    5. Verify:
+      uv lock --check
      cd python && pytest tests/test_version_alignment.py tests/test_skill_content.py
-  5. Record the bump in plan.md / the commit message
+    6. Record the bump in plan.md / the commit message
      (e.g. "chore: bump to X.Y.Z").
 }
 
 Constraints {
-  Never bump only pyproject.toml — plugin.json and all SKILL.md files move with it.
+    Never bump only pyproject.toml — uv.lock, plugin.json, and all SKILL.md files move with it.
   Never edit installed skill copies (.claude/skills/pql-test/**) — they are
     per-machine installs, refreshed with `pql-test skill --install <harness>`.
   Keep old version numbers in CONTRIBUTING.md examples as-is; they are illustrative.
@@ -73,4 +78,7 @@ identically across all files:
   any SKILL.md differs from `pyproject.toml`.
 - The "Versions aligned with pyproject.toml" step in
   `.github/workflows/validate-plugin.yml` fails CI for the same drift.
+- The "Lockfile matches the project metadata" step in
+  `.github/workflows/security.yml` runs `uv lock --check` before exporting frozen
+  dependencies and fails CI when `uv.lock` is stale, including a missed package version bump.
 - `release.yml` fails when the pushed `vX.Y.Z` tag differs from `pyproject.toml`.

@@ -79,10 +79,22 @@ def _make_mock_tcp_listen(port: int, ip: str = "127.0.0.1") -> MagicMock:
     return conn
 
 
-def _make_mock_process(pid: int, name: str, ppid: int, listen_port: int | None = None) -> MagicMock:
-    """Return a MagicMock that looks like a psutil Process object."""
+def _make_mock_process(
+    pid: int,
+    name: str,
+    ppid: int,
+    listen_port: int | None = None,
+    cmdline: list[str] | None = None,
+) -> MagicMock:
+    """Return a MagicMock that looks like a psutil Process from ``process_iter(["pid", "name"])``.
+
+    ``info`` holds only the prefetched attrs; ``ppid()`` and ``cmdline()``
+    are lazy method calls, as on a real psutil Process.
+    """
     proc = MagicMock()
-    proc.info = {"pid": pid, "name": name, "ppid": ppid}
+    proc.info = {"pid": pid, "name": name}
+    proc.ppid.return_value = ppid
+    proc.cmdline.return_value = cmdline or []
     if listen_port is not None:
         proc.net_connections.return_value = [_make_mock_tcp_listen(listen_port)]
     else:
@@ -1079,6 +1091,84 @@ class TestGetPbiFilesOpened:
     processes via psutil, and verifies connectivity via EVALUATE INFO.VIEW.MEASURES().
     """
 
+    def test_scans_processes_by_name_only_and_reads_details_lazily(self):
+        """
+        Discovery makes one ``process_iter(["pid", "name"])`` pass and reads
+        ``cmdline()`` / ``ppid()`` / ``net_connections()`` only on matching
+        processes, so unrelated processes cost no extra handle opens.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        port = _MOCK_AS_PORT_A
+        unrelated = _make_mock_process(pid=7, name="chrome.exe", ppid=1, listen_port=443)
+        pbi = _make_mock_process(
+            pid=100, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"PBIDesktop.exe", r"C:\Models\FastModel.pbip"],
+        )
+        msmdsrv = _make_mock_process(pid=999, name="msmdsrv.exe", ppid=100, listen_port=port)
+        with (
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch(
+                "pql_test.runner._psutil.process_iter",
+                return_value=[unrelated, pbi, msmdsrv],
+            ) as process_iter_mock,
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+        ):
+            instances = get_pbi_files_opened()
+
+        process_iter_mock.assert_called_once_with(["pid", "name"])
+        unrelated.cmdline.assert_not_called()
+        unrelated.ppid.assert_not_called()
+        unrelated.net_connections.assert_not_called()
+        msmdsrv.cmdline.assert_not_called()
+        assert [(i.model_name, i.server) for i in instances] == [
+            ("FastModel", f"localhost:{port}")
+        ]
+
+    def test_cmdline_access_denied_keeps_pbi_pid_for_window_matching(self):
+        """
+        When ``cmdline()`` raises AccessDenied (e.g. elevated PBI Desktop), the
+        PBIDesktop pid is still known so its window title can name the model.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        from pql_test import runner
+
+        pbi = _make_mock_process(pid=100, name="PBIDesktop.exe", ppid=1)
+        pbi.cmdline.side_effect = runner._psutil.AccessDenied(pid=100)
+        msmdsrv = _make_mock_process(pid=999, name="msmdsrv.exe", ppid=100, listen_port=_MOCK_AS_PORT_A)
+        titles_mock = MagicMock(return_value={100: "ElevatedModel"})
+        with (
+            patch("pql_test.runner._get_pbi_process_window_titles", titles_mock),
+            patch("pql_test.runner._psutil.process_iter", return_value=[pbi, msmdsrv]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+        ):
+            instances = get_pbi_files_opened()
+
+        titles_mock.assert_called_once_with(known_pbi_pids={100})
+        assert [i.model_name for i in instances] == ["ElevatedModel"]
+
+    def test_ppid_access_denied_still_returns_unnamed_instance(self):
+        """
+        When ``ppid()`` raises AccessDenied the msmdsrv port is still reported
+        (with an empty model name) so the unnamed-instance fallback can use it.
+        """
+        if not HAS_PSUTIL:
+            pytest.skip("psutil not installed")
+        from pql_test import runner
+
+        port = _MOCK_AS_PORT_A
+        msmdsrv = _make_mock_process(pid=999, name="msmdsrv.exe", ppid=100, listen_port=port)
+        msmdsrv.ppid.side_effect = runner._psutil.AccessDenied(pid=999)
+        with (
+            patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
+            patch("pql_test.runner._psutil.process_iter", return_value=[msmdsrv]),
+            patch("pql_test.runner._psutil.net_connections", return_value=[]),
+        ):
+            instances = get_pbi_files_opened()
+
+        assert [(i.model_name, i.server) for i in instances] == [("", f"localhost:{port}")]
+
     def test_raises_import_error_when_psutil_unavailable(self):
         """Mirrors Pester: meaningful error when prerequisite is missing."""
         from pql_test import runner
@@ -1202,7 +1292,8 @@ class TestGetPbiFilesOpened:
             pytest.skip("psutil not installed")
         from pql_test import runner
         bad_proc = MagicMock()
-        bad_proc.info = {"pid": 99, "name": "msmdsrv.exe", "ppid": 1234}
+        bad_proc.info = {"pid": 99, "name": "msmdsrv.exe"}
+        bad_proc.ppid.return_value = 1234
         bad_proc.net_connections.side_effect = runner._psutil.AccessDenied(pid=99)
         with (
             patch(
@@ -1253,7 +1344,8 @@ class TestGetPbiFilesOpened:
         conn.laddr.port = port
 
         fake_proc = MagicMock()
-        fake_proc.info = {"pid": 999, "name": "msmdsrv.exe", "ppid": 1234}
+        fake_proc.info = {"pid": 999, "name": "msmdsrv.exe"}
+        fake_proc.ppid.return_value = 1234
         fake_proc.net_connections.return_value = [conn]
 
         with (
@@ -1323,7 +1415,8 @@ class TestGetPbiFilesOpened:
         pbi_pid = 1234
 
         fake_proc = MagicMock()
-        fake_proc.info = {"pid": msmdsrv_pid, "name": "msmdsrv.exe", "ppid": pbi_pid}
+        fake_proc.info = {"pid": msmdsrv_pid, "name": "msmdsrv.exe"}
+        fake_proc.ppid.return_value = pbi_pid
         # net_connections on the process object would NOT be called when the
         # global map already has the entry.
         fake_proc.net_connections.side_effect = AssertionError("should not be called")
@@ -1396,19 +1489,13 @@ class TestGetPbiFilesOpened:
         )
 
         # PBIDesktop.exe process with a .pbip path in its cmdline
-        pbi_proc = MagicMock()
-        pbi_proc.info = {
-            "pid": pbi_pid,
-            "name": "PBIDesktop.exe",
-            "cmdline": [r"C:\Program Files\...\PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
-        }
+        pbi_proc = _make_mock_process(
+            pid=pbi_pid, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"C:\Program Files\...\PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
+        )
 
         def _fake_process_iter(attrs):
-            if "cmdline" in attrs:
-                # Step 1b scan: returns pbi_proc
-                return [pbi_proc]
-            # msmdsrv scan
-            return [msmdsrv_proc]
+            return [pbi_proc, msmdsrv_proc]
 
         with (
             patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
@@ -1434,17 +1521,13 @@ class TestGetPbiFilesOpened:
             pid=888, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
         )
 
-        pbi_proc = MagicMock()
-        pbi_proc.info = {
-            "pid": pbi_pid,
-            "name": "PBIDesktop.exe",
-            "cmdline": [r"C:\...\PBIDesktop.exe", r"C:\Reports\SalesReport.pbix"],
-        }
+        pbi_proc = _make_mock_process(
+            pid=pbi_pid, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"C:\...\PBIDesktop.exe", r"C:\Reports\SalesReport.pbix"],
+        )
 
         def _fake_process_iter(attrs):
-            if "cmdline" in attrs:
-                return [pbi_proc]
-            return [msmdsrv_proc]
+            return [pbi_proc, msmdsrv_proc]
 
         with (
             patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
@@ -1477,23 +1560,17 @@ class TestGetPbiFilesOpened:
             pid=902, name="msmdsrv.exe", ppid=pbi_pid_sample, listen_port=_MOCK_AS_PORT_B
         )
 
-        pbi_proc_rls = MagicMock()
-        pbi_proc_rls.info = {
-            "pid": pbi_pid_rls,
-            "name": "PBIDesktop.exe",
-            "cmdline": [r"PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
-        }
-        pbi_proc_sample = MagicMock()
-        pbi_proc_sample.info = {
-            "pid": pbi_pid_sample,
-            "name": "PBIDesktop.exe",
-            "cmdline": [r"PBIDesktop.exe", r"C:\Models\SampleModel.pbip"],
-        }
+        pbi_proc_rls = _make_mock_process(
+            pid=pbi_pid_rls, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"PBIDesktop.exe", r"C:\Models\RLS_Model.pbip"],
+        )
+        pbi_proc_sample = _make_mock_process(
+            pid=pbi_pid_sample, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"PBIDesktop.exe", r"C:\Models\SampleModel.pbip"],
+        )
 
         def _fake_process_iter(attrs):
-            if "cmdline" in attrs:
-                return [pbi_proc_rls, pbi_proc_sample]
-            return [msmdsrv_rls, msmdsrv_sample]
+            return [pbi_proc_rls, pbi_proc_sample, msmdsrv_rls, msmdsrv_sample]
 
         with (
             patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
@@ -1521,21 +1598,14 @@ class TestGetPbiFilesOpened:
         msmdsrv_proc = _make_mock_process(
             pid=999, name="msmdsrv.exe", ppid=pbi_pid, listen_port=port
         )
-        # _find_pbi_ancestor_pid calls proc.ppid() (method, not .info["ppid"]).
-        # Set it so the tree-walk returns the right integer and stops immediately.
-        msmdsrv_proc.ppid.return_value = pbi_pid
 
-        pbi_proc = MagicMock()
-        pbi_proc.info = {
-            "pid": pbi_pid,
-            "name": "PBIDesktop.exe",
-            "cmdline": [r"PBIDesktop.exe"],  # no file argument
-        }
+        pbi_proc = _make_mock_process(
+            pid=pbi_pid, name="PBIDesktop.exe", ppid=1,
+            cmdline=[r"PBIDesktop.exe"],  # no file argument
+        )
 
         def _fake_process_iter(attrs):
-            if "cmdline" in attrs:
-                return [pbi_proc]
-            return [msmdsrv_proc]
+            return [pbi_proc, msmdsrv_proc]
 
         with (
             patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),
@@ -1553,20 +1623,16 @@ class TestGetPbiFilesOpened:
         if not HAS_PSUTIL:
             pytest.skip("psutil not installed")
 
-        other_proc = MagicMock()
-        other_proc.info = {
-            "pid": 999,
-            "name": "notepad.exe",
-            "cmdline": [r"notepad.exe", r"C:\file.pbip"],
-        }
+        other_proc = _make_mock_process(
+            pid=999, name="notepad.exe", ppid=1,
+            cmdline=[r"notepad.exe", r"C:\file.pbip"],
+        )
         msmdsrv_proc = _make_mock_process(
             pid=111, name="msmdsrv.exe", ppid=999, listen_port=_MOCK_AS_PORT_A
         )
 
         def _fake_process_iter(attrs):
-            if "cmdline" in attrs:
-                return [other_proc]
-            return [msmdsrv_proc]
+            return [other_proc, msmdsrv_proc]
 
         with (
             patch("pql_test.runner._get_pbi_process_window_titles", return_value={}),

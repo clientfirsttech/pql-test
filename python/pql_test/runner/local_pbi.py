@@ -208,24 +208,40 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # accept any visible window owned by a known PBI pid — newer/Store
     # builds drop the legacy " - Power BI Desktop" suffix and would
     # otherwise be filtered out by the title-substring check.
+    #
+    # One name-only pass over all processes.  ``ppid`` and ``cmdline`` are
+    # NOT prefetched: on Windows, psutil resolves each of them per process
+    # (cmdline needs a handle open + memory read), which made discovery
+    # scale with every process on the machine.  They are read below only
+    # for the handful of PBIDesktop.exe / msmdsrv.exe matches.
+    pbi_procs: list = []
+    msmdsrv_procs: list = []
+    for proc in psutil_mod.process_iter(["pid", "name"]):
+        pname = (proc.info.get("name") or "").lower()
+        if pname == "pbidesktop.exe":
+            pbi_procs.append(proc)
+        elif pname == "msmdsrv.exe":
+            msmdsrv_procs.append(proc)
+
     pbi_pid_to_model: dict[int, str] = {}
-    for _fp in psutil_mod.process_iter(["pid", "name", "cmdline"]):
-        try:
-            _pname = (_fp.info.get("name") or "").lower()
-            if _pname != "pbidesktop.exe":
-                continue
-            _pid = int(_fp.info.get("pid") or 0)
-            if not _pid:
-                continue
-            _model = ""
-            for _arg in (_fp.info.get("cmdline") or [])[1:]:
-                _p = Path(_arg)
-                if _p.suffix.lower() in (".pbix", ".pbip"):
-                    _model = _p.stem
-                    break
-            pbi_pid_to_model[_pid] = _model
-        except (psutil_mod.NoSuchProcess, psutil_mod.AccessDenied):
+    for proc in pbi_procs:
+        pid = int(proc.info.get("pid") or 0)
+        if not pid:
             continue
+        try:
+            cmdline = proc.cmdline() or []
+        except psutil_mod.NoSuchProcess:
+            continue
+        except psutil_mod.AccessDenied:
+            # Keep the pid so its window title can still name the model.
+            cmdline = []
+        model = ""
+        for arg in cmdline[1:]:
+            path = Path(arg)
+            if path.suffix.lower() in (".pbix", ".pbip"):
+                model = path.stem
+                break
+        pbi_pid_to_model[pid] = model
     pbi_pids = set(pbi_pid_to_model.keys())
 
     # Step 1b — PID → window title mapping.  Pass the known PBI pids so
@@ -276,16 +292,15 @@ def get_pbi_files_opened() -> list[LocalPbiInstance]:
     # Step 2 & 3 — msmdsrv ports mapped back to parent PBIDesktop via PPID
     # (walking the full process tree, not just the immediate parent)
     instances: list[LocalPbiInstance] = []
-    for proc in psutil_mod.process_iter(["pid", "name", "ppid"]):
+    for proc in msmdsrv_procs:
         try:
-            pname = (proc.info.get("name") or "").lower()
-            if pname != "msmdsrv.exe":
-                continue
-
             msmdsrv_pid: int = proc.info.get("pid") or 0
 
             # Try immediate parent first (fast path), then walk the tree.
-            parent_pid: int = proc.info.get("ppid") or 0
+            try:
+                parent_pid: int = proc.ppid() or 0
+            except psutil_mod.AccessDenied:
+                parent_pid = 0
             model_name = pbi_pid_to_model.get(parent_pid, "")
             if not model_name and pbi_pids:
                 ancestor = runner._find_pbi_ancestor_pid(proc, pbi_pids)

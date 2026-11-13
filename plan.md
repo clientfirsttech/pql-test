@@ -60,6 +60,10 @@
 
 ## Completed Work
 
+### 2026-11-12 — Faster local Power BI Desktop discovery, version 0.2.1
+
+`get_pbi_files_opened()` now makes one `process_iter(["pid", "name"])` pass and reads `cmdline()` / `ppid()` only for `PBIDesktop.exe` / `msmdsrv.exe`, instead of prefetching both for every process. Benchmarked with two models open (378 processes): 54.9 ms → 3.8 ms median. Version bumped to 0.2.1. Epic: [tasks/archive/2026-11-12-fast-local-pbi-process-discovery.md](tasks/archive/2026-11-12-fast-local-pbi-process-discovery.md).
+
 ### 2026-11-04 — Published JSON schema for `contract run` output (branch `dev-odcs`)
 
 `contract run --output` and `contract trace --format json` now carry `schemaVersion: 1` and are described by `python/pql_test/odcs/contract-run-result.schema.json` (packaged). `tests/odcs/test_run_result_schema.py` validates real output against it and checks the schema agrees with the code. Documented in docs/contracts.md, "Reading the results from another tool".
