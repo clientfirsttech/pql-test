@@ -170,3 +170,29 @@ class TestCoverageCommand:
         result = _run(STARTER, SAMPLE, "--min-coverage", threshold)
 
         assert result.exit_code == code, f"{given}: {should}\n{result.output}"
+
+
+class TestLiveOption:
+    def test_without_adomd_live_fails_with_the_reason_and_files_still_work(self, monkeypatch):
+        given = "a machine without ADOMD.NET"
+        should = "fail --live with exit 1 and the reason, and still run from the PBIP folder without it"
+        monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: "ADOMD.NET is not available here")
+
+        live = _run(SCENARIOS, SAMPLE, "--live")
+        files = _run(SCENARIOS, SAMPLE)
+
+        assert (live.exit_code, "ADOMD.NET is not available here" in live.output, files.exit_code) == (1, True, 0), (
+            f"{given}: {should}\n{live.output}"
+        )
+
+    def test_no_connection_is_an_error_not_an_empty_report(self, monkeypatch):
+        given = "--live when no model can be reached"
+        should = "exit 1 and say how to connect, instead of reporting 0% coverage"
+        monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: None)
+        monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+
+        result = _run(SCENARIOS, SAMPLE, "--live")
+
+        assert (result.exit_code, "--workspace-id" in result.output, "covered" in result.stdout) == (1, True, False), (
+            f"{given}: {should}\n{result.output}"
+        )

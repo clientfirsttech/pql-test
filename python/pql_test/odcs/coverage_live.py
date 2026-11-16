@@ -34,10 +34,12 @@ from pql_test.odcs.coverage import (
     Unresolved,
     column_id,
     dax_rule_assertions,
+    inventory_of,
     scanned_evidence,
 )
 from pql_test.odcs.dax_refs import mask_references
 from pql_test.odcs.emit.dax import dax_string, render_call
+from pql_test.odcs.pbip import ModelColumn, ModelTable
 
 if TYPE_CHECKING:
     from pql_test.odcs.api import Plan
@@ -163,3 +165,62 @@ def engine_dax_evidence(
             continue
         evidence += _rows_evidence(names, rows, rule_id, {Kind.TABLE, Kind.COLUMN})
     return DaxEvidence(tuple(dict.fromkeys(evidence)), tuple(dict.fromkeys(unresolved)))
+
+
+# INFO.COLUMNS()[Type] (TOM ColumnType) and [ExplicitDataType] (TOM DataType) codes.
+_CALCULATED, _ROW_NUMBER, _CALCULATED_TABLE_COLUMN = 2, 3, 4
+_TMDL_DATA_TYPES = {2: "string", 6: "int64", 8: "double", 9: "dateTime", 10: "decimal", 11: "boolean", 17: "binary"}
+
+
+def _data_type(row: dict) -> str | None:
+    for name in ("ExplicitDataType", "InferredDataType"):
+        found = _TMDL_DATA_TYPES.get(_int(_cell(row, name)))
+        if found:
+            return found
+    return None
+
+
+def _int(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def live_inventory(query: Callable[[str], list[dict]]) -> Inventory:
+    """The connected model's tables, columns, measures, and relationships, read from its INFO functions,
+    with the same exclusions as the TMDL inventory. Raises when the model refuses an INFO query."""
+    tables: dict[int, dict] = {}
+    for row in query("EVALUATE INFO.TABLES()"):
+        tables[_int(_cell(row, "ID"))] = {
+            "name": _cell(row, "Name"),
+            "calculation_group": _cell(row, "CalculationGroupID") is not None,
+            "columns": [],
+            "measures": [],
+        }
+    for row in query("EVALUATE INFO.COLUMNS()"):
+        table, kind = tables.get(_int(_cell(row, "TableID"))), _int(_cell(row, "Type"))
+        if table is None or kind == _ROW_NUMBER:
+            continue
+        name = _cell(row, "ExplicitName") or _cell(row, "InferredName")
+        calculated = kind in (_CALCULATED, _CALCULATED_TABLE_COLUMN)
+        table["columns"].append(ModelColumn(name, _data_type(row), bool(_cell(row, "IsHidden")), calculated))
+    for row in query("EVALUATE INFO.MEASURES()"):
+        table = tables.get(_int(_cell(row, "TableID")))
+        if table is not None:
+            table["measures"].append(_cell(row, "Name"))
+    relationships = sorted(
+        (_cell(r, "FromTable"), _cell(r, "FromColumn"), _cell(r, "ToTable"), _cell(r, "ToColumn"))
+        for r in query("EVALUATE INFO.VIEW.RELATIONSHIPS()")
+    )
+    model = [
+        ModelTable(
+            t["name"],
+            tuple(t["columns"]),
+            tuple(t["measures"]),
+            calculated=any(c.calculated for c in t["columns"]) and all(c.calculated for c in t["columns"]),
+            calculation_group=t["calculation_group"],
+        )
+        for t in sorted(tables.values(), key=lambda t: str(t["name"]).lower())
+    ]
+    return inventory_of(model, relationships)

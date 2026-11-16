@@ -625,7 +625,9 @@ def print_coverage(report, verbose: bool, min_coverage: float | None = None) -> 
     c = report.contract
     click.echo("\n" + banner("contract coverage session starts"))
     click.echo(f"contract: {c['id']} (ODCS {c['apiVersion']}), PQL.Assert {report.pql_assert}")
-    click.echo(f"model: {report.model}")
+    how = "the connected model; contract DAX read by its engine" if report.live else "TMDL; contract DAX read by a text scan"
+    click.echo(f"model: {report.model} ({how})")
+    _listing("Not checked", list(report.unavailable))
     total = report.counts()
     overall = f"{total.covered}/{total.eligible} covered ({total.percent}%), {total.values_tested} with values tested"
     record_summary(f"Overall: {overall}")
@@ -670,68 +672,147 @@ MAPPING_MOVED = (
 )
 
 
+def _fail(message: str) -> None:
+    click.echo(f"Error: {message}", err=True)
+    sys.exit(1)
+
+
+def _file_coverage(contract, model_path: str, pql_assert: str):
+    """The coverage report from the PBIP folder's TMDL and a text scan of contract DAX: no connection."""
+    from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.cli import _model_pql_assert
+    from pql_test.odcs.coverage import build_coverage, model_inventory
+    from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+
+    try:
+        semantic_model_dir = require_semantic_model_dir(model_path)
+    except ModelPathError as exc:
+        raise click.UsageError(str(exc)) from None
+    if pql_assert == "auto":
+        pql_assert = _model_pql_assert(str(semantic_model_dir))
+    plan = plan_contract(contract, pql_assert=pql_assert)
+    return build_coverage(plan, model_inventory(semantic_model_dir), model=str(semantic_model_dir), pql_assert=pql_assert)
+
+
+def _live_coverage(contract, model_path: str, pql_assert: str, hooks: RunHooks, credentials: tuple):
+    """The coverage report from the connected model's INFO functions and its engine's reading of contract DAX.
+
+    Connects exactly as `contract run` does, and only runs read-only queries.
+    """
+    from functools import partial
+
+    from pql_test.odcs.api import plan_contract
+    from pql_test.odcs.coverage import build_coverage
+    from pql_test.odcs.coverage_live import batched_dependencies, engine_dax_evidence, live_inventory
+    from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+    from pql_test.runner.xmla import summarize_xmla_exception
+
+    unavailable = xmla_unavailable()
+    if unavailable:
+        _fail(f"--live needs XMLA: {unavailable}. Leave out --live to count from the PBIP folder.")
+    folder, target = resolve_model_target(model_path, None)
+    semantic_model_dir = None
+    if not target.startswith("local/"):
+        try:
+            semantic_model_dir = require_semantic_model_dir(folder)
+        except ModelPathError as exc:
+            raise click.UsageError(str(exc)) from None
+    _, conn = _connect(target, hooks, credentials, semantic_model_dir)
+    if conn is None:
+        _fail(
+            _no_local_connection(target)
+            or "No XMLA connection for --live. Open the model in Power BI Desktop, or supply --tenant-id, "
+            "--workspace-id, --dataset-id (and --client-id, --client-secret)."
+        )
+    click.echo(f"XMLA connection: {conn.server} / catalog: {conn.catalog}")
+    if pql_assert == "auto":
+        pql_assert = detect_pql_assert(conn)
+        click.echo(f"PQL.Assert {pql_assert} catalog selected (detected from the model; override with --pql-assert).")
+
+    def query(dax: str) -> list[dict]:
+        return _execute_dax_query(conn, dax)
+
+    try:
+        inventory = live_inventory(query)
+    except Exception as exc:  # noqa: BLE001 - say why the model's objects could not be listed
+        _fail(f"Could not list the model's objects over XMLA: {summarize_xmla_exception(exc)}")
+    plan = plan_contract(contract, pql_assert=pql_assert)
+    dax = engine_dax_evidence(plan, inventory, partial(batched_dependencies, query))
+    # A Desktop connection has no catalog name: name the model by its MODEL_PATH instead.
+    label = f"{conn.server} / {conn.catalog}" if conn.catalog else f"{target} at {conn.server}"
+    return build_coverage(plan, inventory, model=label, pql_assert=pql_assert, dax=dax)
+
+
 def make_coverage_command(hooks: RunHooks) -> click.Command:
-    """`contract coverage`: which model objects CONTRACT covers, read from the files."""
+    """`contract coverage`: which model objects CONTRACT covers, from the files or, with --live, the model."""
 
     @click.command("coverage")
     @click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
     @click.argument("model_path", metavar="MODEL_PATH", required=False)
+    @click.option(
+        "--live",
+        is_flag=True,
+        help="Read the model's objects from the connected model, and ask its engine what contract DAX references "
+        "(XMLA, Windows; needs write permission on the model). Only reads: it never changes the model.",
+    )
     @click.option(
         "--pql-assert",
         "pql_assert",
         type=click.Choice(["auto", "0.7", "0.8", "0.9"]),
         default="auto",
         show_default=True,
-        help="PQL.Assert version whose rules count as enforced. auto reads the model folder's functions.tmdl.",
+        help="PQL.Assert version whose rules count as enforced. auto reads the model folder's functions.tmdl "
+        "(with --live, asks the model).",
     )
     @min_coverage_option("Exit 1 when the share of model objects with at least one enforced rule is below PERCENT.")
     @format_option(help="Output format: the coverage report (text), or the JSON report on stdout.")
     @output_option("Also write the JSON report to FILE.")
     @verbosity_options(verbose_help="Also list covered objects with their rules, and the objects left out.")
+    @hooks.conn_options
     def coverage(
         contract_path: str,
         model_path: str | None,
+        live: bool,
         pql_assert: str,
         min_coverage: float | None,
         output_format: str,
         output: str | None,
         verbose: bool,
+        tenant_id: str | None,
+        workspace_id: str | None,
+        dataset_id: str | None,
+        client_id: str | None,
+        client_secret: str | None,
     ) -> None:
         """Show which tables, columns, relationships, and measures in MODEL_PATH CONTRACT covers.
 
         Each model object is values tested (a rule checks its data), listed (a schema check runs),
         listed but not enforced (every rule on it is skipped), or not covered. Only direct references
-        count: a rule on a measure does not cover what that measure uses. It reads the contract and
-        the model's TMDL only, so it also runs on Linux, and it never writes to the model.
+        count: a rule on a measure does not cover what that measure uses. By default it reads the
+        contract and the model's TMDL only, so it also runs on Linux. --live reads the deployed or
+        open model instead, and asks its engine what the contract's DAX references. Neither writes
+        to the model.
 
         \b
         Examples:
           pql-test contract coverage orders.odcs.yaml ./SalesModel
           pql-test contract coverage orders.odcs.yaml ./SalesModel --format json --output coverage.json
           pql-test contract coverage orders.odcs.yaml ./SalesModel --min-coverage 80
+          pql-test contract coverage orders.odcs.yaml local/SalesModel --live
         """
-        from pql_test.odcs.api import plan_contract
-        from pql_test.odcs.cli import _model_pql_assert
-        from pql_test.odcs.coverage import build_coverage, model_inventory
         from pql_test.odcs.loader import ContractError, load_contract
-        from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
 
         if not model_path:
             raise click.UsageError(MAPPING_MOVED)
         try:
-            semantic_model_dir = require_semantic_model_dir(model_path)
-        except ModelPathError as exc:
-            raise click.UsageError(str(exc)) from None
-        try:
             contract = load_contract(contract_path)
         except ContractError as exc:
-            click.echo(f"Error: {exc}", err=True)
-            sys.exit(1)
-        if pql_assert == "auto":
-            pql_assert = _model_pql_assert(str(semantic_model_dir))
-        plan = plan_contract(contract, pql_assert=pql_assert)
-        inventory = model_inventory(semantic_model_dir)
-        report = build_coverage(plan, inventory, model=str(semantic_model_dir), pql_assert=pql_assert)
+            _fail(str(exc))
+        if live:
+            credentials = (tenant_id, workspace_id, dataset_id, client_id, client_secret)
+            report = _live_coverage(contract, model_path, pql_assert, hooks, credentials)
+        else:
+            report = _file_coverage(contract, model_path, pql_assert)
 
         payload = json.dumps(report.to_json(), indent=2)
         if output_format == "json":

@@ -151,3 +151,48 @@ class TestBatchedDependencies:
         found = batched_dependencies(lambda _dax: [], texts)
 
         assert len(found) == len(texts), f"{given}: {should}"
+
+
+class TestLiveInventory:
+    @staticmethod
+    def _query(dax: str) -> list[dict]:
+        """INFO rows shaped like SampleModel's (2026-11-16), for a fact table, a measure table, and a calculation group."""
+        if "INFO.TABLES" in dax:
+            return [
+                {"[ID]": 10, "[Name]": "Sales", "[CalculationGroupID]": None},
+                {"[ID]": 11, "[Name]": "_Measures", "[CalculationGroupID]": None},
+                {"[ID]": 12, "[Name]": "Time Calc", "[CalculationGroupID]": 1},
+            ]
+        if "INFO.COLUMNS" in dax:
+            return [
+                {"[TableID]": 10, "[ExplicitName]": ROW_NUMBER, "[Type]": 3, "[ExplicitDataType]": 6, "[IsHidden]": True},
+                {"[TableID]": 10, "[ExplicitName]": "Amount", "[Type]": 1, "[ExplicitDataType]": 8, "[IsHidden]": False},
+                {"[TableID]": 10, "[ExplicitName]": "Band", "[Type]": 2, "[ExplicitDataType]": 2, "[IsHidden]": False},
+                {"[TableID]": 11, "[ExplicitName]": "Placeholder", "[Type]": 1, "[ExplicitDataType]": 2, "[IsHidden]": True},
+                {"[TableID]": 12, "[ExplicitName]": "Name", "[Type]": 1, "[ExplicitDataType]": 2, "[IsHidden]": False},
+            ]
+        if "INFO.MEASURES" in dax:
+            return [{"[TableID]": 10, "[Name]": "Total"}, {"[TableID]": 11, "[Name]": "Now"}]
+        return []
+
+    def test_reads_the_model_like_the_tmdl_inventory(self):
+        given = "INFO rows with a RowNumber column, a calculated column, a measure table, and a calculation group"
+        should = (
+            "count the data and calculated columns with their TMDL types, both measures, and only the fact table; "
+            "leave out RowNumber, the measure table, and the calculation group"
+        )
+        from pql_test.odcs.coverage_live import live_inventory
+
+        inventory = live_inventory(self._query)
+
+        objects = {(o.kind, o.identifier, o.calculated, o.data_type) for o in inventory.objects}
+        assert (objects, sorted(e.identifier for e in inventory.excluded if e.kind is Kind.TABLE)) == (
+            {
+                (Kind.TABLE, "Sales", False, None),
+                (Kind.COLUMN, "Sales[Amount]", False, "double"),
+                (Kind.COLUMN, "Sales[Band]", True, "string"),
+                (Kind.MEASURE, "Sales[Total]", False, None),
+                (Kind.MEASURE, "_Measures[Now]", False, None),
+            },
+            ["Time Calc", "_Measures"],
+        ), f"{given}: {should}"
