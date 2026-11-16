@@ -15,11 +15,9 @@ import yaml
 
 from pql_test.odcs.datatypes import CURRENCY
 from pql_test.odcs.naming import DATA_TYPE_KEY
-from pql_test.odcs.pbip import measure_tables, model_columns
+from pql_test.odcs.pbip import AUTO_DATE_TABLE_RE, measure_tables, model_columns
 
 API_VERSION = "v3.1.0"
-# Power BI's automatic date/time tables: not part of the model anyone wrote.
-_AUTO_TABLE_RE = re.compile(r"^(LocalDateTable_|DateTableTemplate_)")
 
 # TMDL dataType -> (ODCS logicalType, pbiDataType to pin, or None).
 TMDL_LOGICAL_TYPES = {
@@ -69,7 +67,7 @@ def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), con
     columns = {
         t: cols
         for t, cols in model_columns(semantic_model_dir).items()
-        if cols and t not in skip and not _AUTO_TABLE_RE.match(t)
+        if cols and t not in skip and not AUTO_DATE_TABLE_RE.match(t)
     }
     if tables:
         by_lower = {t.lower(): t for t in columns}
