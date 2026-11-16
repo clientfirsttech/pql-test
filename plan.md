@@ -7,7 +7,6 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Contract coverage of the model** — planned 2026-11-16. `contract coverage CONTRACT MODEL_PATH` shows which tables, columns, relationships, and measures a contract leaves uncovered, from files by default and with an opt-in `--live` engine check; the current rule-mapping report becomes `contract mapping` (breaking, 0.3.0). See [tasks/contract-model-coverage-epic.md](tasks/contract-model-coverage-epic.md).
 
 ## Open Items
 
@@ -60,6 +59,14 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-16 — `contract coverage`: which parts of the model a contract covers, version 0.3.0 (branch `feat/contract-model-coverage`)
+
+- **Breaking:** the rule report is now `pql-test contract mapping CONTRACT` (Python: `pql_test.odcs.mapping_report`); `contract coverage CONTRACT` without a model, or with `--fail-on-skipped` / `--closed-schema`, fails pointing to it.
+- `pql-test contract coverage CONTRACT MODEL_PATH` counts every table, column, relationship, and measure as values tested, listed, listed but not enforced, or not covered, with the rules behind each, direct references only. It lists calculated columns no rule checks, contract entries the model lacks (lint's checks, now in `odcs/model_check.py`), and ODCS YAML for every gap; `--min-coverage` gates CI; JSON follows `contract-coverage.schema.json`. It reads only the contract and TMDL (Linux CI smoke test added).
+- `--live` reads the deployed or open model's INFO functions and asks its engine (`INFO.CALCDEPENDENCY("QUERY", ...)`, twice per rule, measures masked the second time) what contract DAX references. It never writes to the model: checked against SampleModel in Desktop and in the service. Without write permission it falls back to the PBIP folder and the text scan.
+- A measure table must now also be in no relationship, so `init` and `coverage` keep a fact table that hides every column.
+- Epic: [tasks/archive/2026-11-16-contract-model-coverage.md](tasks/archive/2026-11-16-contract-model-coverage.md). Not yet checked: `--live` with an identity that lacks write permission (the test service principal is a workspace Member or Admin).
 
 ### 2026-11-12 — Faster local Power BI Desktop discovery, version 0.2.1
 
