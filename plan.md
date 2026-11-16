@@ -7,6 +7,7 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Contract coverage of the model** — planned 2026-11-16. `contract coverage CONTRACT MODEL_PATH` shows which tables, columns, relationships, and measures a contract leaves uncovered, from files by default and with an opt-in `--live` engine check; the current rule-mapping report becomes `contract mapping` (breaking, 0.3.0). See [tasks/contract-model-coverage-epic.md](tasks/contract-model-coverage-epic.md).
 
 ## Open Items
 
