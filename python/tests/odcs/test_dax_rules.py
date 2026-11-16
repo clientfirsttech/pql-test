@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.cli import contract as cli
-from pql_test.odcs.coverage import build_report, format_text
+from pql_test.odcs.mapping_report import build_report, format_text
 from pql_test.odcs.ir import Status
 from pql_test.odcs.mapping.dax_rules import dax_problem
 from tests.odcs.factories import contract_dict, prop, schema_object

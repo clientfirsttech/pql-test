@@ -1341,7 +1341,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 |---|---|
 | `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
 | `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
-| `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
+| `pql-test contract mapping CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table, column, and relationship resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
 | `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them, and traces every failure back to its contract rule id. It writes no files and never changes the model; `--write` also saves the suites into `DAXQueries/` |
@@ -1351,13 +1351,13 @@ MODEL_PATH means the same in every contract command: a PBIP folder, its `.pbip` 
 
 ```bash
 pql-test contract init local/SalesModel --output orders.odcs.yaml                    # start from the model
-pql-test contract coverage orders.odcs.yaml
+pql-test contract mapping orders.odcs.yaml
 pql-test contract lint orders.odcs.yaml local/SalesModel
 pql-test contract run orders.odcs.yaml local/SalesModel --env DEV                    # the model open in Power BI Desktop
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # the workspace, with PQL_* credentials
 ```
 
-`lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA (Windows).
+`lint`, `mapping`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA (Windows).
 
 The generated files follow the rules below:
 - Test names are `ODCS <contractId> <ruleId>: <description>`.

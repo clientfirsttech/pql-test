@@ -19,10 +19,10 @@
     task: Before generating anything, how can I see which rules in orders.odcs.yaml will actually be tested and which won't?
   assert:
     - type: contains
-      value: pql-test contract coverage orders.odcs.yaml
+      value: pql-test contract mapping orders.odcs.yaml
     - type: llm-rubric
       value: |
-        The response should recommend `pql-test contract coverage` and explain that every
+        The response should recommend `pql-test contract mapping` and explain that every
         rule is listed as mapped, approximated, or skipped with a reason.
 
 - description: Strict CI on unmappable rules

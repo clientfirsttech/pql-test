@@ -109,9 +109,27 @@ class TestContractGroup:
         should = "offer the file-only commands plus run and doctor in one group"
         from pql_test.cli import cli
 
-        assert set(cli.commands["contract"].commands) == {"init", "lint", "coverage", "generate", "trace", "run", "doctor"}, (
+        assert set(cli.commands["contract"].commands) == {"init", "lint", "mapping", "coverage", "generate", "trace", "run", "doctor"}, (
             f"{given}: {should}"
         )
+
+    def test_coverage_without_a_model_points_to_mapping(self):
+        given = "contract coverage CONTRACT with no MODEL_PATH (the rule report's old spelling)"
+        should = "fail as a usage error that names `contract mapping`, so old scripts fail loudly"
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "coverage", str(FIXTURES / "marvel.odcs.yaml")])
+
+        assert (result.exit_code, "pql-test contract mapping" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_old_python_api_is_gone(self):
+        given = "code importing build_report from pql_test.odcs.coverage (the rule report's old module)"
+        should = "fail with ImportError instead of returning a different report"
+
+        with pytest.raises(ImportError):
+            from pql_test.odcs.coverage import build_report  # noqa: F401
 
 
 class TestContractRunCommand:

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """
-The connected `pql-test contract` commands: `run` (generate PQL.Assert suites
-from an ODCS contract, run them, and trace the results back to contract rule
-ids) and `doctor` (file checks plus the deployed or open model's library).
+The `pql-test contract` commands that can connect to a model: `run` (generate PQL.Assert
+suites from an ODCS contract, run them, and trace the results back to contract rule ids),
+`doctor` (file checks plus the deployed or open model's library), and `coverage` (which
+model objects the contract covers, from files or, with --live, from the model).
 
 The file-only commands live in ``pql_test.odcs.cli``; ``register_contract_commands``
-adds these two to that group.
+adds these three to that group.
 
 `run` never changes the PBIP project: it renders the suites in memory and runs them
 from their own ``DEFINE FUNCTION ... EVALUATE`` text with ``run_tests()``. Writing them
@@ -185,7 +186,7 @@ def pql_assert_version_warning(deployed_version: str | None, selected: str) -> s
         return (
             f"the deployed model has PQL.Assert {reported}; pql-test supports up to {LATEST_PQL_ASSERT}. "
             f"Rules that need newer functions are approximated or skipped: update PQL.Assert from DAX Lib "
-            "and publish the model (see `pql-test contract coverage --pql-assert`)."
+            "and publish the model (see `pql-test contract mapping --pql-assert`)."
         )
     return None
 
@@ -514,7 +515,7 @@ def print_doctor(report, conn=None, model_path: str | None = None) -> None:
     record_summary(f"contract doctor: {summary}")
     click.echo(banner(summary))
     if report.recommended:
-        click.echo(f"Use --pql-assert {report.recommended} with generate, coverage, and trace for this model.")
+        click.echo(f"Use --pql-assert {report.recommended} with generate, mapping, and trace for this model.")
 
 
 def make_doctor_command(hooks: RunHooks) -> click.Command:
@@ -570,10 +571,34 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
     return doctor
 
 
+MAPPING_MOVED = (
+    "`contract coverage` compares CONTRACT with a model and needs MODEL_PATH. For the rule-by-rule report "
+    "(mapped / approximated / skipped), use `pql-test contract mapping CONTRACT`."
+)
+
+
+def make_coverage_command(hooks: RunHooks) -> click.Command:
+    """`contract coverage`: which model objects CONTRACT covers."""
+
+    @click.command("coverage")
+    @click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
+    @click.argument("model_path", metavar="MODEL_PATH", required=False)
+    @format_option()
+    @verbosity_options()
+    def coverage(contract_path: str, model_path: str | None, output_format: str) -> None:
+        """Show which tables, columns, relationships, and measures in MODEL_PATH CONTRACT covers."""
+        if not model_path:
+            raise click.UsageError(MAPPING_MOVED)
+        raise click.UsageError("contract coverage is not implemented yet.")
+
+    return coverage
+
+
 def register_contract_commands(cli: click.Group, hooks: RunHooks) -> None:
-    """Add `pql-test contract` to *cli*: the file-only commands plus `run` and `doctor`."""
+    """Add `pql-test contract` to *cli*: the file-only commands plus `run`, `doctor`, and `coverage`."""
     from pql_test.odcs.cli import contract
 
     contract.add_command(make_run_command(hooks))
     contract.add_command(make_doctor_command(hooks))
+    contract.add_command(make_coverage_command(hooks))
     cli.add_command(contract)

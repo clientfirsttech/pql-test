@@ -4,7 +4,7 @@ description: Write an ODCS (Open Data Contract Standard) v3.0, v3.1, or v3.2 dat
 version: 0.2.1
 ---
 
-`pql-test contract` turns an ODCS data contract's quality rules into PQL.Assert `*.Tests.dax` suites. It reports every rule as mapped, approximated, or skipped, so no rule is silently dropped. The commands come with `pip install pql-test`. `run` and `doctor`'s live checks need XMLA (Windows); `lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in CI.
+`pql-test contract` turns an ODCS data contract's quality rules into PQL.Assert `*.Tests.dax` suites. It reports every rule as mapped, approximated, or skipped, so no rule is silently dropped. The commands come with `pip install pql-test`. `run` and `doctor`'s live checks need XMLA (Windows); `lint`, `mapping`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in CI.
 
 ## Behavioral Contract
 
@@ -12,7 +12,8 @@ version: 0.2.1
 Interface Contract {
   init MODEL_PATH [--output FILE]          // starter contract from the model's TMDL: tables, columns, types
   generate CONTRACT MODEL_PATH --env ENV   // writes <Prefix>.<Suite>.<ENV>.Tests.dax into MODEL_PATH/DAXQueries/
-  coverage CONTRACT [--format text|json]   // every rule: mapped | approximated | skipped (+ reason)
+  mapping CONTRACT [--format text|json]    // every rule: mapped | approximated | skipped (+ reason)
+  coverage CONTRACT MODEL_PATH             // which model tables, columns, relationships, measures the contract covers
   lint CONTRACT [MODEL_PATH]               // ODCS schema validation + every name resolves
   trace CONTRACT RESULTS_JSON              // joins `pql-test run-tests --output` JSON to contract rule ids
   run CONTRACT MODEL_PATH --env ENV        // generate in memory, run, then trace; writes no files (--write also saves them)
@@ -52,7 +53,7 @@ Constraints {
     pql-test supplies testName; the function form needs --pql-assert 0.8. The DAX must be one expression (no EVALUATE or
     DEFINE, balanced brackets and quotes, no comma outside brackets, no control characters but line feed and tab);
     lint reports a rule that breaks this. On --pql-assert 0.7 a BLANK result passes text mustBe and number comparisons
-    (approximated). Coverage JSON marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools
+    (approximated). Mapping JSON marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools
     would run it as SQL)
   Both workflows are supported: regenerate in CI (`contract run`, which writes no files), or commit the generated
     suites and fail CI on drift (`generate` then `git diff --exit-code`); see docs/contracts.md
@@ -60,7 +61,7 @@ Constraints {
   Model names come only from the contract: customProperties pbiTable (schema object) / pbiColumn (property), else the ODCS logical name;
     customProperties pbiDataType (property) pins the exact model type for the column type check (Text, Integer, Number, Currency, Date, True/False, Binary);
     there is no sidecar mapping file
-  Never claim a rule is enforced when coverage reports it skipped; quote the reason instead
+  Never claim a rule is enforced when mapping reports it skipped; quote the reason instead
 }
 ```
 
@@ -110,7 +111,7 @@ Work in this loop, and fix each step before the next:
 1. `pql-test contract init MODEL --output c.odcs.yaml`
 2. edit the rules
 3. `pql-test contract lint c.odcs.yaml MODEL` — valid ODCS, names and types match the model
-4. `pql-test contract coverage c.odcs.yaml --pql-assert 0.8` — what is enforced, approximated, or skipped
+4. `pql-test contract mapping c.odcs.yaml --pql-assert 0.8` — what is enforced, approximated, or skipped
 5. `pql-test contract run c.odcs.yaml MODEL --env DEV` — run it against the model (writes no files)
 
 Scenario tests (a measure's value in a filter context) and freshness go in the same contract:
@@ -176,12 +177,12 @@ With `--pql-assert 0.8` (needs PQL.Assert 0.8.0 or later in the model), more rul
 - a `latency` SLA with `table.column` element(s) uses `Col.MaxDateShouldBeWithinDays` / `…Hours` (data age), and a `frequency` SLA with a table element checks the hours since the last refresh (refresh recency); both are approximated;
 - `engine: pql-test` rules can also call any PQL.Assert assertion directly (`implementation: {function, args}`).
 
-Options shared by `generate`, `coverage`, and `run`:
+Options shared by `generate`, `mapping`, and `run`:
 - `--env ENV` — environment token for suite names, e.g. `DEV` (generate/run; required).
 - `--suite-prefix NAME` — override the suite name prefix.
 - `--closed-schema` — also fail when a table has columns the contract does not list.
 - `--pql-assert 0.7|0.8` — PQL.Assert version to generate for (`run` also accepts `auto`, its default).
-- `--fail-on-skipped` — exit 1 when any rule is skipped (generate/coverage; strict CI).
+- `--fail-on-skipped` — exit 1 when any rule is skipped (generate/mapping; strict CI).
 - `--dry-run` — print the DAX instead of writing files (generate).
 - `--force` — overwrite suite files that pql-test did not generate (generate, run --write).
 
@@ -197,7 +198,10 @@ Usage:
 pql-test contract doctor ./MyModel
 
 # See which contract rules can be enforced before generating anything
-pql-test contract coverage orders.odcs.yaml
+pql-test contract mapping orders.odcs.yaml
+
+# See which parts of the model the contract does not cover yet
+pql-test contract coverage orders.odcs.yaml ./MyModel
 
 # Check the contract and that every table/column exists in the model
 pql-test contract lint orders.odcs.yaml ./MyModel
@@ -212,7 +216,7 @@ pql-test contract run orders.odcs.yaml ./MyModel --env DEV
 pql-test contract run orders.odcs.yaml local/MyModel --env DEV
 
 # CI: GitHub annotations, JSON results, and fail if any rule cannot be enforced
-pql-test contract coverage orders.odcs.yaml --fail-on-skipped
+pql-test contract mapping orders.odcs.yaml --fail-on-skipped
 pql-test contract run orders.odcs.yaml ./MyModel --env DEV --output results.json --log-format github
 
 # Trace an earlier run-tests result file back to contract rule ids

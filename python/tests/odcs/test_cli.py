@@ -47,7 +47,7 @@ def _run(*args):
 class TestGenerate:
     def test_writes_suites_and_reports_coverage(self, tmp_path):
         given = "generate with a valid contract and a PBIP model"
-        should = "exit 0, write the suites, and summarise coverage"
+        should = "exit 0, write the suites, and summarise how the rules map"
         model = _pbip(tmp_path)
 
         result = _run("generate", _write_contract(tmp_path), model, "--env", "DEV")
@@ -147,28 +147,28 @@ class TestGenerate:
         ) == (1, True, True), f"{given}: {should}"
 
 
-class TestCoverage:
+class TestMapping:
     def test_json_format_is_machine_readable(self, tmp_path):
-        given = "coverage --format json"
+        given = "mapping --format json"
         should = "print only the JSON report on stdout"
 
-        result = _run("coverage", _write_contract(tmp_path), "--format", "json")
+        result = _run("mapping", _write_contract(tmp_path), "--format", "json")
 
         assert (result.exit_code, json.loads(result.output)["summary"]["skipped"]) == (0, 1), f"{given}: {should}"
 
     def test_text_format_lists_rules(self, tmp_path):
-        given = "coverage with default text format"
+        given = "mapping with default text format"
         should = "list each rule id"
 
-        result = _run("coverage", _write_contract(tmp_path))
+        result = _run("mapping", _write_contract(tmp_path))
 
         assert all(r in result.output for r in ("T.exists", "T.id.required", "T.quality[1]")), f"{given}: {should}"
 
     def test_fail_on_skipped_exits_1_after_the_report(self, tmp_path):
-        given = "coverage --fail-on-skipped with a skipped rule"
+        given = "mapping --fail-on-skipped with a skipped rule"
         should = "print the full report, then exit 1"
 
-        result = _run("coverage", _write_contract(tmp_path), "--fail-on-skipped")
+        result = _run("mapping", _write_contract(tmp_path), "--fail-on-skipped")
 
         assert (result.exit_code, "T.exists" in result.output) == (1, True), f"{given}: {should}"
 
@@ -207,7 +207,7 @@ class TestLint:
         given = "--mapping (removed: names come only from the contract's customProperties)"
         should = "be rejected as a usage error"
 
-        assert _run("coverage", _write_contract(tmp_path), "--mapping", "x.yaml").exit_code == 2, f"{given}: {should}"
+        assert _run("mapping", _write_contract(tmp_path), "--mapping", "x.yaml").exit_code == 2, f"{given}: {should}"
 
     def test_schema_violations_are_listed(self, tmp_path):
         given = "a contract with two schema violations"

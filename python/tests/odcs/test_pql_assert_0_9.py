@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.catalog import catalog_for
 from pql_test.odcs.cli import contract as cli
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 from pql_test.odcs.ir import Status, Target
 from tests.odcs.factories import contract_dict, prop, schema_object
 
@@ -163,11 +163,11 @@ class TestCli:
 
         assert "Col.NullCountShouldBeAtMost" in result.output, f"{given}: {should}"
 
-    def test_coverage_json_names_the_0_9_catalog_version(self, tmp_path):
-        given = "coverage --format json --pql-assert 0.9"
+    def test_mapping_json_names_the_0_9_catalog_version(self, tmp_path):
+        given = "mapping --format json --pql-assert 0.9"
         should = "report minVersion 0.9.0"
 
-        result = self._run(tmp_path, "coverage", "--format", "json", "--pql-assert", "0.9")
+        result = self._run(tmp_path, "mapping", "--format", "json", "--pql-assert", "0.9")
 
         data = json.loads(result.output)
         assert data["catalog"]["minVersion"] == "0.9.0", f"{given}: {should}"

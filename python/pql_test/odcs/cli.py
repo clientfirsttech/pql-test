@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The file-only commands of ``pql-test contract``: init, generate, coverage, lint, trace.
+"""The file-only commands of ``pql-test contract``: init, generate, mapping, lint, trace.
 
-``run`` and ``doctor`` connect to a model, so they live in ``pql_test.contract_run`` and are
-added to this group by ``pql_test.cli``. Exit codes: 0 success; 1 contract invalid, lint
+``run``, ``doctor``, and ``coverage`` can connect to a model, so they live in ``pql_test.contract_run``
+and are added to this group by ``pql_test.cli``. Exit codes: 0 success; 1 contract invalid, lint
 problems, or ``--fail-on-skipped`` triggered; 2 usage error (bad option, MODEL_PATH, or a suite
 file pql-test would overwrite).
 """
@@ -66,7 +66,7 @@ def _plan(contract_path: str, closed_schema: bool, pql_assert: str = "0.7"):
 
 
 def _report(plan) -> dict:
-    from pql_test.odcs.coverage import build_report
+    from pql_test.odcs.mapping_report import build_report
 
     return build_report(plan.contract, plan.outcomes, catalog=plan.catalog)
 
@@ -143,8 +143,8 @@ def generate_cmd(
     report = _report(plan)
     s = report["summary"]
     click.echo(
-        f"Coverage: {s['mapped']} mapped, {s['approximated']} approximated, {s['skipped']} skipped "
-        f"of {s['total']} rules (run `coverage` for details).",
+        f"Rules: {s['mapped']} mapped, {s['approximated']} approximated, {s['skipped']} skipped "
+        f"of {s['total']} (run `mapping` for details).",
         err=True,
     )
     _fail_if_skipped(report, fail_on_skipped)
@@ -195,16 +195,16 @@ def init_cmd(model_path, tables, contract_id, output, force):
     click.echo(f"wrote   {path}", err=True)
 
 
-@contract.command("coverage")
+@contract.command("mapping")
 @_CONTRACT
 @format_option()
 @_CLOSED
 @_PQL_ASSERT
 @_FAIL_ON_SKIPPED
 @verbosity_options()
-def coverage_cmd(contract_path, output_format, closed_schema, pql_assert, fail_on_skipped):
+def mapping_cmd(contract_path, output_format, closed_schema, pql_assert, fail_on_skipped):
     """List every rule in CONTRACT as mapped, approximated, or skipped."""
-    from pql_test.odcs.coverage import format_text
+    from pql_test.odcs.mapping_report import format_text
 
     report = _report(_plan(contract_path, closed_schema, pql_assert))
     if output_format == "json":
@@ -327,7 +327,7 @@ def _relationship_problems(plan, model: set[tuple[str, str, str, str]]) -> list[
     for obj, prop, scope, index, rel in relationship_entries(plan.contract):
         found = resolve(plan.contract, plan.names, obj, prop, rel)
         if isinstance(found, str):
-            continue  # reported as skipped by `coverage`
+            continue  # reported as skipped by `mapping`
         key = tuple(n.lower() for n in found)
         if key in defined:
             continue

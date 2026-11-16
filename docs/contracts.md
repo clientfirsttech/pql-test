@@ -2,14 +2,14 @@
 
 Generate [PQL.Assert](https://github.com/clientfirsttech/PQL.Assert) DAX test suites from [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, and v3.2 data contracts, run them, and trace every result back to its contract rule. Every contract rule is reported as **mapped**, **approximated**, or **skipped**, so nothing is dropped silently.
 
-The commands come with pql-test (`pip install pql-test`). `lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA, which is Windows-only.
+The commands come with pql-test (`pip install pql-test`). `lint`, `mapping`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA, which is Windows-only.
 
 ## Quick start
 
 ```bash
 pql-test contract init ./SalesModel -o orders.odcs.yaml                 # start the contract from the model
 pql-test contract doctor ./SalesModel                                   # which PQL.Assert? which --pql-assert?
-pql-test contract coverage orders.odcs.yaml                             # which rules can be enforced?
+pql-test contract mapping orders.odcs.yaml                              # which rules can be enforced?
 pql-test contract lint orders.odcs.yaml ./SalesModel                    # contract valid, names resolve?
 pql-test contract generate orders.odcs.yaml ./SalesModel --env DEV      # write *.Tests.dax suites
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate in memory, run, trace
@@ -29,7 +29,7 @@ pql-test contract init local/SalesModel --table Sales --table Customer -o sales.
 
 `init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
 
-The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init`'s own output against SampleModel, unedited except for a comment.
+The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `mapping CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init`'s own output against SampleModel, unedited except for a comment.
 
 ## Commands
 
@@ -37,7 +37,7 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 |---|---|
 | `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, and types (see [above](#start-a-contract-from-the-model)) |
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
-| `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
+| `mapping CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
 | `lint CONTRACT [MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve, that every [`engine: pql-test` DAX rule](#dax-rules-in-the-contract-engine-pql-test) can be generated, and (with a MODEL_PATH) that every table, column, and relationship exists in the model's TMDL |
 | `run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them over XMLA, and traces the results to rule ids, without writing any file (`--output`, `--log-format azuredevops\|github`, and the `run-tests` connection options). `--write` also saves the suites into `DAXQueries/`, like `generate` |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
@@ -47,8 +47,8 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 
 **Shared flags**:
 - `--closed-schema` also forbids columns the contract does not list.
-- `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
-- `--pql-assert 0.7|0.8|0.9` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08) and [PQL.Assert 0.9](#pqlassert-09). When `run` is connected to a model, it warns (on stderr, and in the CI annotations) if the deployed PQL.Assert is older than the newest version pql-test supports, or older than the `--pql-assert` you chose. The warning does not change the exit code.
+- `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `mapping`).
+- `--pql-assert 0.7|0.8|0.9` picks the PQL.Assert version to generate for (`generate`, `mapping`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08) and [PQL.Assert 0.9](#pqlassert-09). When `run` is connected to a model, it warns (on stderr, and in the CI annotations) if the deployed PQL.Assert is older than the newest version pql-test supports, or older than the `--pql-assert` you chose. The warning does not change the exit code.
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `run`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
 - `--force` overwrites suite files that pql-test did not generate (`generate`, and `run --write`).
@@ -163,7 +163,7 @@ A `number` check accepts either type and still reports both when it fails, for e
 
 ### PQL.Assert 0.8
 
-PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md)). Pass `--pql-assert 0.8` to `generate`, `coverage`, and `trace` to use them; the default stays `0.7`, so existing suites and golden files do not change. `pql-test contract run` defaults to `auto`: it asks the model with `PQL.Assert.LibraryVersion()` and uses 0.7 when that call fails. Use the same value for `generate` and `trace` that you used when the suites were generated.
+PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md)). Pass `--pql-assert 0.8` to `generate`, `mapping`, and `trace` to use them; the default stays `0.7`, so existing suites and golden files do not change. `pql-test contract run` defaults to `auto`: it asks the model with `PQL.Assert.LibraryVersion()` and uses 0.7 when that call fails. Use the same value for `generate` and `trace` that you used when the suites were generated.
 
 | ODCS rule | PQL.Assert 0.8 call | Status |
 |---|---|---|
@@ -193,7 +193,7 @@ Upgrading note: suites generated with `--pql-assert 0.8` change when you regener
 
 ### PQL.Assert 0.9
 
-PQL.Assert 0.9.0 gave ODCS `frequency` a native function; every other 0.8 mapping is unchanged. Pass `--pql-assert 0.9` to `generate`, `coverage`, and `trace`; the default stays `0.7`.
+PQL.Assert 0.9.0 gave ODCS `frequency` a native function; every other 0.8 mapping is unchanged. Pass `--pql-assert 0.9` to `generate`, `mapping`, and `trace`; the default stays `0.7`.
 
 | ODCS rule | PQL.Assert 0.9 call | Status |
 |---|---|---|
@@ -311,7 +311,7 @@ Two tests fail before a gap reaches a user: [`test_odcs_rule_matrix.py`](../pyth
 
 The format is a published contract: [contract-run-result.schema.json](https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-run-result.schema.json) (JSON Schema 2020-12, also installed with the package). The `contract` object carries `schemaVersion` (currently `1`). New properties can appear without changing it, so ignore properties you do not know; removing or retyping a property bumps it. Tests fail if the output stops matching the schema.
 
-- Per rule, `status` is `passed`, `failed`, `error` (a test could not run), `not_executed` (the suite did not run, for example with no connection), or `skipped` (the rule maps to no DAX; see `contract coverage`). A rule with `severity: warning` never fails the run.
+- Per rule, `status` is `passed`, `failed`, `error` (a test could not run), `not_executed` (the suite did not run, for example with no connection), or `skipped` (the rule maps to no DAX; see `contract mapping`). A rule with `severity: warning` never fails the run.
 - The exit code is the pass/fail signal: `0` when every blocking suite passed, `1` otherwise (a failed or errored blocking test, nothing executed, or no connection). Read the file for per-rule detail; do not parse the human-readable report.
 
 ```bash
@@ -323,7 +323,7 @@ python -c "import json; r = json.load(open('results.json'))['contract']; print(r
 
 ```python
 from pql_test.odcs.api import plan_contract, render, generate
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 from pql_test.odcs.results import trace
 
 plan = plan_contract("orders.odcs.yaml", pql_assert="0.8")  # or an already-parsed dict; default "0.7"

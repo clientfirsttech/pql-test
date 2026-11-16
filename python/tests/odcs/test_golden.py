@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from pql_test.odcs.api import plan_contract, render
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures"

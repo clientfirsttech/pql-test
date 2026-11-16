@@ -172,7 +172,7 @@ class TestCli:
 
         assert (result.exit_code, result.output.rstrip().splitlines()[-1]) == (
             0,
-            "Use --pql-assert 0.9 with generate, coverage, and trace for this model.",
+            "Use --pql-assert 0.9 with generate, mapping, and trace for this model.",
         ), f"{given}: {should}\n{result.output}"
 
 
