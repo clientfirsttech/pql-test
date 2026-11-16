@@ -17,11 +17,14 @@ to a model or writes to one.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+import re
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import yaml
 
 from pql_test.odcs.dax_refs import DaxRef, dax_references
 from pql_test.odcs.ir import CONTRACT_DAX_SUITE, DIRECT_CALL, SCHEMA_SUITE, Assertion, Status
@@ -58,6 +61,9 @@ class ModelObject:
     kind: Kind
     identifier: str
     calculated: bool = False  # columns only: its values come from DAX
+    table: str = ""  # tables, columns, measures: the (home) table
+    name: str = ""  # columns and measures: the name without the table
+    data_type: str | None = None  # columns only: the TMDL dataType, when known
 
 
 @dataclass(frozen=True)
@@ -71,6 +77,10 @@ class Exclusion:
 class Inventory:
     objects: tuple[ModelObject, ...]
     excluded: tuple[Exclusion, ...]
+    # Every table's columns, left-out tables included, for the checks `lint` makes
+    # (``table -> {column: TMDL dataType or None}``), and every relationship's ends.
+    tables: Mapping[str, Mapping[str, str | None]] = field(default_factory=dict)
+    relationships: tuple[tuple[str, str, str, str], ...] = ()
 
 
 def column_id(table: str, column: str) -> str:
@@ -94,29 +104,47 @@ def _table_exclusion(table: ModelTable) -> str | None:
 
 def model_inventory(semantic_model_dir: Path) -> Inventory:
     """Every table, column, measure, and relationship the report counts, and the ones it leaves out (with why)."""
+    tables = model_tables(semantic_model_dir)
+    return inventory_of(tables, sorted(model_relationships(semantic_model_dir)))
+
+
+def inventory_of(tables: Iterable[ModelTable], relationships: Iterable[tuple[str, str, str, str]]) -> Inventory:
+    """The inventory of a model given as tables and relationship ends, read from TMDL or from a connected model."""
+    tables, relationships = tuple(tables), tuple(relationships)
     objects: list[ModelObject] = []
     excluded: list[Exclusion] = []
     left_out: dict[str, str] = {}
-    for table in model_tables(semantic_model_dir):
+    for table in tables:
         reason = _table_exclusion(table)
-        objects.extend(ModelObject(Kind.MEASURE, column_id(table.name, m)) for m in table.measures)
+        objects.extend(
+            ModelObject(Kind.MEASURE, column_id(table.name, m), table=table.name, name=m) for m in table.measures
+        )
         if reason:
             left_out[table.name.lower()] = reason
             excluded.append(Exclusion(Kind.TABLE, table.name, reason))
             excluded.extend(Exclusion(Kind.COLUMN, column_id(table.name, c.name), reason) for c in table.columns)
             continue
-        objects.append(ModelObject(Kind.TABLE, table.name))
+        objects.append(ModelObject(Kind.TABLE, table.name, table=table.name))
         objects.extend(
-            ModelObject(Kind.COLUMN, column_id(table.name, c.name), calculated=c.calculated) for c in table.columns
+            ModelObject(
+                Kind.COLUMN,
+                column_id(table.name, c.name),
+                calculated=c.calculated,
+                table=table.name,
+                name=c.name,
+                data_type=c.data_type,
+            )
+            for c in table.columns
         )
-    for ends in sorted(model_relationships(semantic_model_dir)):
+    for ends in relationships:
         identifier = relationship_id(*ends)
         reason = left_out.get(ends[0].lower()) or left_out.get(ends[2].lower())
         if reason:
             excluded.append(Exclusion(Kind.RELATIONSHIP, identifier, f"it joins {reason}"))
         else:
             objects.append(ModelObject(Kind.RELATIONSHIP, identifier))
-    return Inventory(tuple(objects), tuple(excluded))
+    columns = {t.name: {c.name: c.data_type for c in t.columns} for t in tables}
+    return Inventory(tuple(objects), tuple(excluded), columns, relationships)
 
 
 class Level(IntEnum):
@@ -163,14 +191,18 @@ class ContractEvidence:
     unresolved: tuple[Unresolved, ...]
 
 
-class _Names:
+class ModelNames:
     """The inventory's identifiers by lower-case name (DAX names ignore case)."""
 
     def __init__(self, inventory: Inventory) -> None:
         self.by_key = {(o.kind, o.identifier.lower()): o.identifier for o in inventory.objects}
         self.tables = {i.lower(): i for (k, _), i in self.by_key.items() if k is Kind.TABLE}
         # Measure names are unique in a model, so [Name] finds its measure without the table.
-        self.measures = {i[i.index("[") + 1 : -1].lower(): i for (k, _), i in self.by_key.items() if k is Kind.MEASURE}
+        self.measures = {
+            (o.name or o.identifier[o.identifier.index("[") + 1 : -1]).lower(): o.identifier
+            for o in inventory.objects
+            if o.kind is Kind.MEASURE
+        }
 
     def model(self, kind: Kind, identifier: str) -> str:
         """The model's spelling of *identifier*, or *identifier* itself when the model lacks it."""
@@ -180,7 +212,7 @@ class _Names:
         return (kind, identifier.lower()) in self.by_key
 
 
-def _column_and_table(names: _Names, table: str, column: str, level: Level, rule_id: str, source: str) -> list[Evidence]:
+def _column_and_table(names: ModelNames, table: str, column: str, level: Level, rule_id: str, source: str) -> list[Evidence]:
     """A column reference covers its table too: the engine reports the table for every column reference."""
     return [
         Evidence(Kind.COLUMN, names.model(Kind.COLUMN, column_id(table, column)), level, rule_id, source),
@@ -188,7 +220,7 @@ def _column_and_table(names: _Names, table: str, column: str, level: Level, rule
     ]
 
 
-def _assertion_evidence(names: _Names, a: Assertion, rule_id: str) -> list[Evidence]:
+def _assertion_evidence(names: ModelNames, a: Assertion, rule_id: str) -> list[Evidence]:
     """What a translated (not contract-written) assertion covers, from its target and arguments."""
     level = Level.LISTED if a.suite == SCHEMA_SUITE else Level.VALUES_TESTED
     if a.op == "rel.exists":
@@ -209,7 +241,7 @@ def _dax_texts(a: Assertion) -> list[str]:
     return [str(a.args["expression"])] if "expression" in a.args else []
 
 
-def _resolve_reference(names: _Names, ref: DaxRef) -> list[tuple[Kind, str]] | None:
+def _resolve_reference(names: ModelNames, ref: DaxRef) -> list[tuple[Kind, str]] | None:
     """The model objects one DAX reference names, ``[]`` for a bare word that is not a table, or None when unresolved."""
     if ref.name is None:
         table = names.tables.get(ref.table.lower())
@@ -227,7 +259,8 @@ def _resolve_reference(names: _Names, ref: DaxRef) -> list[tuple[Kind, str]] | N
     return None
 
 
-def _scanned(names: _Names, a: Assertion, rule_id: str) -> tuple[list[Evidence], list[Unresolved]]:
+def scanned_evidence(names: ModelNames, a: Assertion, rule_id: str) -> tuple[list[Evidence], list[Unresolved]]:
+    """What a contract-DAX assertion references, read from its text: the evidence, and names that match nothing."""
     found, unresolved = [], []
     for text in _dax_texts(a):
         for ref in dax_references(text):
@@ -238,7 +271,7 @@ def _scanned(names: _Names, a: Assertion, rule_id: str) -> tuple[list[Evidence],
     return found, unresolved
 
 
-def _listed(plan: Plan, names: _Names) -> Iterator[Evidence]:
+def _listed(plan: Plan, names: ModelNames) -> Iterator[Evidence]:
     """Everything the contract's schema lists, at the weakest level: skipped rules still list their object."""
     for obj in plan.contract.schema_objects:
         table = plan.names.table(obj)
@@ -255,27 +288,300 @@ def _listed(plan: Plan, names: _Names) -> Iterator[Evidence]:
             yield Evidence(Kind.RELATIONSHIP, identifier, Level.LISTED_NOT_ENFORCED, f"{scope}.relationships[{index}]")
 
 
-def contract_evidence(plan: Plan, inventory: Inventory) -> ContractEvidence:
+def dax_rule_assertions(plan: Plan) -> list[tuple[str, Assertion]]:
+    """``(rule id, assertion)`` for every enforced rule whose DAX the contract wrote (``engine: pql-test``)."""
+    return [
+        (outcome.rule_id, a)
+        for outcome in plan.outcomes
+        if outcome.status is not Status.SKIPPED
+        for a in outcome.assertions
+        if a.suite == CONTRACT_DAX_SUITE
+    ]
+
+
+def contract_evidence(plan: Plan, inventory: Inventory, *, scan_dax: bool = True) -> ContractEvidence:
     """What every rule in *plan* covers in *inventory*, without connecting to the model.
 
     Translated rules cover their target (and its table); rules whose DAX the contract wrote cover
     only what that DAX references, read by a text scan, never the table they are placed under.
+    With *scan_dax* False those rules are left out, for the caller to ask the model's engine instead.
     """
-    names = _Names(inventory)
+    names = ModelNames(inventory)
     evidence: list[Evidence] = list(_listed(plan, names))
     unresolved: list[Unresolved] = []
     for outcome in plan.outcomes:
         if outcome.status is Status.SKIPPED:
             continue
         for a in outcome.assertions:
-            if a.suite == CONTRACT_DAX_SUITE:
-                found, missing = _scanned(names, a, outcome.rule_id)
+            if a.suite != CONTRACT_DAX_SUITE:
+                evidence += _assertion_evidence(names, a, outcome.rule_id)
+            elif scan_dax:
+                found, missing = scanned_evidence(names, a, outcome.rule_id)
                 evidence += found
                 unresolved += missing
-            else:
-                evidence += _assertion_evidence(names, a, outcome.rule_id)
     return ContractEvidence(tuple(_unique(evidence)), tuple(_unique(unresolved)))
+
+
+@dataclass(frozen=True)
+class DaxEvidence:
+    """What the model's engine says contract DAX references (``--live``), with what it could not analyse."""
+
+    evidence: tuple[Evidence, ...]
+    unresolved: tuple[Unresolved, ...] = ()
+    unavailable: tuple[str, ...] = ()  # why the engine check could not run at all
 
 
 def _unique(items: Iterable) -> list:
     return list(dict.fromkeys(items))
+
+
+SCHEMA_VERSION = 1
+CALCULATED_GAP = (
+    "calculated columns whose DAX no rule checks: a calculated column's values come from DAX, "
+    "so only a rule on its values tests that logic"
+)
+
+
+@dataclass(frozen=True)
+class Classified:
+    """One model object at its strongest level, with the rules (or, when listed but not enforced, the
+    contract paths) that put it there, and where that evidence came from."""
+
+    obj: ModelObject
+    level: Level
+    rules: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()
+
+
+def classify(inventory: Inventory, evidence: Iterable[Evidence]) -> tuple[Classified, ...]:
+    """Each inventory object at the strongest level any evidence gives it. Evidence for objects the
+    model lacks is ignored here (``lint`` reports those)."""
+    by_key: dict[tuple[Kind, str], list[Evidence]] = {}
+    for e in evidence:
+        by_key.setdefault((e.kind, e.identifier.lower()), []).append(e)
+    result = []
+    for obj in inventory.objects:
+        found = by_key.get((obj.kind, obj.identifier.lower()), [])
+        level = max((e.level for e in found), default=Level.NOT_COVERED)
+        strongest = [e for e in found if e.level is level]
+        rules = tuple(_unique(e.rule_id for e in strongest))
+        sources = tuple(sorted({e.source for e in strongest}))
+        result.append(Classified(obj, level, rules, sources))
+    return tuple(result)
+
+
+@dataclass(frozen=True)
+class Counts:
+    eligible: int = 0
+    values_tested: int = 0
+    listed: int = 0
+    listed_not_enforced: int = 0
+    not_covered: int = 0
+
+    @property
+    def covered(self) -> int:
+        """Objects with at least one rule that runs: values tested or listed."""
+        return self.values_tested + self.listed
+
+    @property
+    def percent(self) -> float:
+        # code-coverage's rounding: only every object covered rounds to 100.
+        from pql_test.runner.coverage_report import coverage_percent
+
+        return coverage_percent(self.covered, self.eligible)
+
+    @classmethod
+    def of(cls, objects: Iterable[Classified]) -> Counts:
+        levels = [c.level for c in objects]
+        return cls(
+            eligible=len(levels),
+            values_tested=levels.count(Level.VALUES_TESTED),
+            listed=levels.count(Level.LISTED),
+            listed_not_enforced=levels.count(Level.LISTED_NOT_ENFORCED),
+            not_covered=levels.count(Level.NOT_COVERED),
+        )
+
+    def to_json(self) -> dict:
+        return {
+            "eligible": self.eligible,
+            "covered": self.covered,
+            "percent": self.percent,
+            "valuesTested": self.values_tested,
+            "listed": self.listed,
+            "listedNotEnforced": self.listed_not_enforced,
+            "notCovered": self.not_covered,
+        }
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    """ODCS YAML that would cover one uncovered object, and where in the contract it goes.
+
+    *section* is ``schema`` (a new schema object), or ``properties`` / ``quality`` of the
+    schema object named *schema_object* (None: any schema object).
+    """
+
+    kind: Kind
+    identifier: str
+    section: str
+    schema_object: str | None
+    yaml: str
+
+    @property
+    def where(self) -> str:
+        if self.section == "schema":
+            return "under schema:"
+        owner = f"schema object {self.schema_object!r}" if self.schema_object else "any schema object"
+        return f"under {owner}, {self.section}:"
+
+
+def _yaml(entries: list) -> str:
+    return yaml.safe_dump(entries, sort_keys=False, allow_unicode=True, width=120)
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "measure"
+
+
+def _measure_rule(obj: ModelObject) -> dict:
+    """An ``engine: pql-test`` rule template that tests the measure's value (the comparator is a placeholder)."""
+    return {
+        "id": f"{_slug(obj.name)}-check",
+        "type": "custom",
+        "engine": "pql-test",
+        "description": f"{obj.name} has the expected value (edit the comparator below)",
+        "implementation": {"expression": f"[{obj.name.replace(']', ']]')}]", "mustBeGreaterThan": 0},
+    }
+
+
+def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, ...]:
+    """YAML for every uncovered table, column, and measure: tables and columns the way `init` writes them,
+    and a rule template per measure (an ODCS schema cannot list a measure, so only a rule covers one)."""
+    from pql_test.odcs.scaffold import starter_object, starter_property
+
+    objects = tuple(objects)
+    in_contract = {plan.names.table(o).lower(): o["name"] for o in plan.contract.schema_objects}
+    columns: dict[str, list[ModelObject]] = {}
+    for c in objects:
+        if c.obj.kind is Kind.COLUMN:
+            columns.setdefault(c.obj.table.lower(), []).append(c.obj)
+    uncovered = [c.obj for c in objects if c.level is Level.NOT_COVERED]
+    # A table the schema does not list gets a new schema object, which covers its columns, and holds
+    # the rule templates for its uncovered measures.
+    new_tables = {
+        o.table: None for o in uncovered if o.kind in (Kind.TABLE, Kind.COLUMN) and o.table.lower() not in in_contract
+    }
+    new_lower = {t.lower() for t in new_tables}
+    found = []
+    for table in new_tables:
+        entry = starter_object(table, {c.name: c.data_type for c in columns.get(table.lower(), [])})
+        rules = [_measure_rule(o) for o in uncovered if o.kind is Kind.MEASURE and o.table.lower() == table.lower()]
+        if rules:
+            entry["quality"] = rules
+        found.append(Suggestion(Kind.TABLE, table, "schema", None, _yaml([entry])))
+    for o in uncovered:
+        if o.kind is Kind.COLUMN and o.table.lower() in in_contract:
+            owner = in_contract[o.table.lower()]
+            found.append(Suggestion(Kind.COLUMN, o.identifier, "properties", owner, _yaml([starter_property(o.name, o.data_type)])))
+        elif o.kind is Kind.MEASURE and o.table.lower() not in new_lower:
+            # Placement does not change what a rule covers, so a measure whose table is not in the contract
+            # (a measure table, say) can go under any schema object.
+            owner = in_contract.get(o.table.lower())
+            found.append(Suggestion(Kind.MEASURE, o.identifier, "quality", owner, _yaml([_measure_rule(o)])))
+    return tuple(found)
+
+
+@dataclass(frozen=True)
+class CoverageReport:
+    contract: dict  # id, name, apiVersion, source
+    model: str
+    pql_assert: str
+    objects: tuple[Classified, ...]
+    excluded: tuple[Exclusion, ...] = ()
+    unresolved: tuple[Unresolved, ...] = ()
+    suggestions: tuple[Suggestion, ...] = ()
+    mismatches: tuple[str, ...] = ()  # contract entries the model lacks or types differently (lint's checks)
+    live: bool = False  # the objects came from the connected model and its engine read the contract DAX
+    unavailable: tuple[str, ...] = ()  # checks that could not run, and why
+
+    def counts(self, kind: Kind | None = None) -> Counts:
+        return Counts.of(c for c in self.objects if kind is None or c.obj.kind is kind)
+
+    @property
+    def calculated_without_value_rule(self) -> tuple[str, ...]:
+        return tuple(
+            c.obj.identifier for c in self.objects if c.obj.calculated and c.level is not Level.VALUES_TESTED
+        )
+
+    def to_json(self) -> dict:
+        from pql_test.odcs import __version__
+
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "generator": f"pql-test {__version__}",
+            "contract": self.contract,
+            "model": self.model,
+            "source": "model" if self.live else "files",
+            "pqlAssert": self.pql_assert,
+            "summary": self.counts().to_json(),
+            "categories": {k.value: self.counts(k).to_json() for k in Kind},
+            "objects": [
+                {
+                    "kind": c.obj.kind.value,
+                    "identifier": c.obj.identifier,
+                    "level": c.level.name.lower(),
+                    **({"calculated": True} if c.obj.calculated else {}),
+                    "rules": list(c.rules),
+                    "sources": list(c.sources),
+                }
+                for c in self.objects
+            ],
+            "calculatedColumnsWithoutValueRule": list(self.calculated_without_value_rule),
+            "excluded": [{"kind": e.kind.value, "identifier": e.identifier, "reason": e.reason} for e in self.excluded],
+            "notCounted": NOT_COUNTED,
+            "unresolved": [{"ruleId": u.rule_id, "reference": u.reference} for u in self.unresolved],
+            "suggestions": [
+                {
+                    "kind": s.kind.value,
+                    "identifier": s.identifier,
+                    "section": s.section,
+                    "schemaObject": s.schema_object,
+                    "yaml": s.yaml,
+                }
+                for s in self.suggestions
+            ],
+            "mismatches": list(self.mismatches),
+            "unavailable": list(self.unavailable),
+        }
+
+
+def build_coverage(
+    plan: Plan,
+    inventory: Inventory,
+    *,
+    model: str,
+    pql_assert: str,
+    dax: DaxEvidence | None = None,
+) -> CoverageReport:
+    """The coverage report for *plan* against *inventory*.
+
+    Without *dax*, contract DAX is read by a text scan; with it (``--live``), the engine's answer is used.
+    """
+    from pql_test.odcs.model_check import model_problems
+
+    found = contract_evidence(plan, inventory, scan_dax=dax is None)
+    evidence = found.evidence + (dax.evidence if dax else ())
+    objects = classify(inventory, evidence)
+    c = plan.contract
+    return CoverageReport(
+        contract={"id": c.id, "name": c.name, "apiVersion": c.api_version, "source": c.source},
+        model=model,
+        pql_assert=pql_assert,
+        objects=objects,
+        excluded=inventory.excluded,
+        unresolved=found.unresolved + (dax.unresolved if dax else ()),
+        suggestions=suggestions(plan, objects),
+        mismatches=tuple(model_problems(plan, inventory.tables, inventory.relationships)),
+        live=dax is not None,
+        unavailable=dax.unavailable if dax else (),
+    )

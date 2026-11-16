@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from pql_test.odcs.dax_refs import DaxRef, dax_references
+from pql_test.odcs.dax_refs import DaxRef, dax_references, mask_references
 
 
 class TestDaxReferences:
@@ -46,3 +46,19 @@ class TestDaxReferences:
         assert dax_references("'O''Brien'[a]]b]") == [DaxRef(table="O'Brien", name="a]b", quoted=True)], (
             f"{given}: {should}"
         )
+
+
+class TestMaskReferences:
+    def test_replaces_the_named_measures_only(self):
+        given = "a measure written bare, the same measure table-qualified, another measure, and its name in a string"
+        should = "replace both references to the named measure with BLANK(), and leave the rest alone"
+        text = "[Total] + 'Sales'[total] + [Other] & \"[Total]\""
+
+        assert mask_references(text, {"total"}) == "BLANK() + BLANK() + [Other] & \"[Total]\"", f"{given}: {should}"
+
+    def test_nothing_to_mask_leaves_the_text_unchanged(self):
+        given = "no measure names to mask"
+        should = "return the text as it was"
+        text = "COUNTROWS('Sales') // [Total]"
+
+        assert mask_references(text, set()) == text, f"{given}: {should}"

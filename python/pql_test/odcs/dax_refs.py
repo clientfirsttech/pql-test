@@ -10,7 +10,8 @@ name means (a column, a measure, or nothing in the model) is the caller's job.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 
 # A bare word: a table name, a variable, a keyword, or (followed by "(") a function, dots included.
 _WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
@@ -24,6 +25,7 @@ class DaxRef:
     table: str | None = None
     name: str | None = None
     quoted: bool = False  # the table was written 'quoted', so it can only be a table name
+    span: tuple[int, int] = field(default=(0, 0), compare=False)  # where it sits in the text
 
     def __str__(self) -> str:
         table = "" if self.table is None else (f"'{self.table}'" if self.quoted else self.table)
@@ -53,7 +55,21 @@ def _bracket_after(text: str, i: int) -> tuple[str, int] | None:
 
 def dax_references(text: str) -> list[DaxRef]:
     """Every table and bracketed name *text* references, in order, outside strings and comments."""
-    refs: list[DaxRef] = []
+    return list(_scan(text))
+
+
+def mask_references(text: str, measures: set[str]) -> str:
+    """*text* with every reference to a measure named in *measures* (lower case), bare or table-qualified,
+    replaced by ``BLANK()``. What is left references only what the text itself names directly."""
+    if not measures:
+        return text
+    spans = [r.span for r in _scan(text) if r.name is not None and r.name.lower() in measures]
+    for start, end in reversed(spans):
+        text = text[:start] + "BLANK()" + text[end:]
+    return text
+
+
+def _scan(text: str) -> Iterator[DaxRef]:
     i = 0
     while i < len(text):
         ch, pair = text[i], text[i : i + 2]
@@ -69,29 +85,29 @@ def dax_references(text: str) -> list[DaxRef]:
         elif ch == "'":
             found = _quoted(text, i, "'")
             if found is None:
-                break
-            table, i = found
+                return
+            start, (table, i) = i, found
             column = _bracket_after(text, i)
             if column:
-                refs.append(DaxRef(table, column[0], quoted=True))
+                yield DaxRef(table, column[0], quoted=True, span=(start, column[1]))
                 i = column[1]
             else:
-                refs.append(DaxRef(table, quoted=True))
+                yield DaxRef(table, quoted=True, span=(start, i))
         elif ch == "[":
             found = _quoted(text, i, "]")
             if found is None:
-                break
-            refs.append(DaxRef(name=found[0]))
+                return
+            yield DaxRef(name=found[0], span=(i, found[1]))
             i = found[1]
         elif _WORD_RE.match(text, i) and not (i and (text[i - 1].isalnum() or text[i - 1] in "_.")):
-            word = _WORD_RE.match(text, i)
+            start, word = i, _WORD_RE.match(text, i)
             i = word.end()
             column = _bracket_after(text, i)
+            after = _SPACE_RE.match(text, i).end()
             if column:
-                refs.append(DaxRef(word.group(), column[0]))
+                yield DaxRef(word.group(), column[0], span=(start, column[1]))
                 i = column[1]
-            elif text[_SPACE_RE.match(text, i).end() : _SPACE_RE.match(text, i).end() + 1] != "(":
-                refs.append(DaxRef(word.group()))
+            elif text[after : after + 1] != "(":
+                yield DaxRef(word.group(), span=(start, i))
         else:
             i += 1
-    return refs

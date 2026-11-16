@@ -28,6 +28,7 @@ import click
 from pql_test.cli_options import (
     emit_result,
     format_option,
+    min_coverage_option,
     output_option,
     record_summary,
     verbosity_options,
@@ -45,6 +46,11 @@ from pql_test.runner.cli_format import (
     banner,
     github_data,
     github_property,
+    pad,
+    table_bottom,
+    table_mid,
+    table_row,
+    table_top,
 )
 from pql_test.runner.model_path import parse_model_identifier
 from pql_test.runner.models import PqlTest
@@ -571,6 +577,93 @@ def make_doctor_command(hooks: RunHooks) -> click.Command:
     return doctor
 
 
+_LEVEL_COLUMNS = (("Tested", "values_tested"), ("Listed", "listed"), ("Not enforced", "listed_not_enforced"))
+
+
+def _coverage_table(report, min_coverage: float | None) -> list[str]:
+    """The "By category" table: per kind, how many objects sit at each level, and the covered share."""
+    from pql_test.odcs.coverage import Kind
+    from pql_test.runner.coverage_report import coverage_status
+
+    headers = ["Category", *(h for h, _ in _LEVEL_COLUMNS), "Covered", "Eligible", "%"]
+    rows = []
+    for kind in Kind:
+        counts = report.counts(kind)
+        if not counts.eligible:
+            rows.append((kind.value, *(["0"] * (len(headers) - 2)), "-", None))
+            continue
+        cells = [str(getattr(counts, attr)) for _, attr in _LEVEL_COLUMNS]
+        color = STATUS_COLORS[coverage_status(counts.percent, min_coverage)]
+        rows.append((kind.value, *cells, str(counts.covered), str(counts.eligible), f"{counts.percent}%", color))
+    widths = [max(len(headers[i]), *(len(r[i]) for r in rows)) for i in range(len(headers))]
+
+    def cells_of(values) -> list[str]:
+        return [pad(v, w, "left" if i == 0 else "right") for i, (v, w) in enumerate(zip(values, widths))]
+
+    lines = [table_top(widths), table_row(cells_of(headers)), table_mid(widths)]
+    for *values, color in rows:
+        padded = cells_of(values)
+        if color:
+            padded[-1] = click.style(padded[-1], fg=color)
+        lines.append(table_row(padded))
+    lines.append(table_bottom(widths))
+    return lines
+
+
+def _listing(title: str, items: list[str]) -> None:
+    if items:
+        click.echo(f"\n{title} ({len(items)}):")
+        for item in items:
+            click.echo(f"  {item}")
+
+
+def print_coverage(report, verbose: bool, min_coverage: float | None = None) -> None:
+    """The coverage report in code-coverage's layout, then what the contract does not cover."""
+    from pql_test.odcs.coverage import CALCULATED_GAP, NOT_COUNTED, Level
+    from pql_test.runner.coverage_report import coverage_status
+
+    c = report.contract
+    click.echo("\n" + banner("contract coverage session starts"))
+    click.echo(f"contract: {c['id']} (ODCS {c['apiVersion']}), PQL.Assert {report.pql_assert}")
+    click.echo(f"model: {report.model}")
+    total = report.counts()
+    overall = f"{total.covered}/{total.eligible} covered ({total.percent}%), {total.values_tested} with values tested"
+    record_summary(f"Overall: {overall}")
+    click.echo(f"\nOverall: {click.style(overall, fg=STATUS_COLORS[coverage_status(total.percent, min_coverage)])}")
+    click.echo("\nBy category:")
+    for line in _coverage_table(report, min_coverage):
+        click.echo(line)
+
+    by_level = {level: [o for o in report.objects if o.level is level] for level in Level}
+    _listing("Not covered", [f"{o.obj.kind.value} {o.obj.identifier}" for o in by_level[Level.NOT_COVERED]])
+    _listing(
+        "Listed, but every rule on it is skipped",
+        [f"{o.obj.kind.value} {o.obj.identifier} (in {', '.join(o.rules)})" for o in by_level[Level.LISTED_NOT_ENFORCED]],
+    )
+    _listing(CALCULATED_GAP[0].upper() + CALCULATED_GAP[1:], list(report.calculated_without_value_rule))
+    _listing(
+        "Names in contract DAX that match nothing in the model (not counted)",
+        [f"{u.rule_id}: {u.reference}" for u in report.unresolved],
+    )
+    _listing("In the contract but not matching the model (the checks lint makes)", list(report.mismatches))
+    if verbose:
+        for level in (Level.VALUES_TESTED, Level.LISTED):
+            _listing(
+                level.label.capitalize(),
+                [f"{o.obj.kind.value} {o.obj.identifier}: {', '.join(o.rules)}" for o in by_level[level]],
+            )
+        _listing("Left out", [f"{e.kind.value} {e.identifier}: {e.reason}" for e in report.excluded])
+    elif report.excluded:
+        click.echo(f"\n{len(report.excluded)} object(s) left out (automatic date tables, measure tables, calculation groups); -v lists them.")
+    if report.suggestions:
+        click.echo(f"\nTo cover them, add to the contract ({len(report.suggestions)}):")
+        for s in report.suggestions:
+            click.echo(f"\n  # {s.kind.value} {s.identifier}, {s.where}")
+            for line in s.yaml.rstrip("\n").splitlines():
+                click.echo(f"  {line}")
+    click.echo(f"\n{NOT_COUNTED}")
+
+
 MAPPING_MOVED = (
     "`contract coverage` compares CONTRACT with a model and needs MODEL_PATH. For the rule-by-rule report "
     "(mapped / approximated / skipped), use `pql-test contract mapping CONTRACT`."
@@ -578,18 +671,83 @@ MAPPING_MOVED = (
 
 
 def make_coverage_command(hooks: RunHooks) -> click.Command:
-    """`contract coverage`: which model objects CONTRACT covers."""
+    """`contract coverage`: which model objects CONTRACT covers, read from the files."""
 
     @click.command("coverage")
     @click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
     @click.argument("model_path", metavar="MODEL_PATH", required=False)
-    @format_option()
-    @verbosity_options()
-    def coverage(contract_path: str, model_path: str | None, output_format: str) -> None:
-        """Show which tables, columns, relationships, and measures in MODEL_PATH CONTRACT covers."""
+    @click.option(
+        "--pql-assert",
+        "pql_assert",
+        type=click.Choice(["auto", "0.7", "0.8", "0.9"]),
+        default="auto",
+        show_default=True,
+        help="PQL.Assert version whose rules count as enforced. auto reads the model folder's functions.tmdl.",
+    )
+    @min_coverage_option("Exit 1 when the share of model objects with at least one enforced rule is below PERCENT.")
+    @format_option(help="Output format: the coverage report (text), or the JSON report on stdout.")
+    @output_option("Also write the JSON report to FILE.")
+    @verbosity_options(verbose_help="Also list covered objects with their rules, and the objects left out.")
+    def coverage(
+        contract_path: str,
+        model_path: str | None,
+        pql_assert: str,
+        min_coverage: float | None,
+        output_format: str,
+        output: str | None,
+        verbose: bool,
+    ) -> None:
+        """Show which tables, columns, relationships, and measures in MODEL_PATH CONTRACT covers.
+
+        Each model object is values tested (a rule checks its data), listed (a schema check runs),
+        listed but not enforced (every rule on it is skipped), or not covered. Only direct references
+        count: a rule on a measure does not cover what that measure uses. It reads the contract and
+        the model's TMDL only, so it also runs on Linux, and it never writes to the model.
+
+        \b
+        Examples:
+          pql-test contract coverage orders.odcs.yaml ./SalesModel
+          pql-test contract coverage orders.odcs.yaml ./SalesModel --format json --output coverage.json
+          pql-test contract coverage orders.odcs.yaml ./SalesModel --min-coverage 80
+        """
+        from pql_test.odcs.api import plan_contract
+        from pql_test.odcs.cli import _model_pql_assert
+        from pql_test.odcs.coverage import build_coverage, model_inventory
+        from pql_test.odcs.loader import ContractError, load_contract
+        from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+
         if not model_path:
             raise click.UsageError(MAPPING_MOVED)
-        raise click.UsageError("contract coverage is not implemented yet.")
+        try:
+            semantic_model_dir = require_semantic_model_dir(model_path)
+        except ModelPathError as exc:
+            raise click.UsageError(str(exc)) from None
+        try:
+            contract = load_contract(contract_path)
+        except ContractError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+        if pql_assert == "auto":
+            pql_assert = _model_pql_assert(str(semantic_model_dir))
+        plan = plan_contract(contract, pql_assert=pql_assert)
+        inventory = model_inventory(semantic_model_dir)
+        report = build_coverage(plan, inventory, model=str(semantic_model_dir), pql_assert=pql_assert)
+
+        payload = json.dumps(report.to_json(), indent=2)
+        if output_format == "json":
+            emit_result(payload)
+        else:
+            print_coverage(report, verbose, min_coverage)
+        if output:
+            Path(output).write_text(payload, encoding="utf-8")
+            click.echo(f"\nCoverage report written to: {output}")
+        if min_coverage is None:
+            return
+        percent = report.counts().percent
+        if percent < min_coverage:
+            click.echo(f"\nError: coverage {percent}% is below the required {min_coverage}% threshold.", err=True)
+            sys.exit(1)
+        click.echo(f"\nRequired coverage of {min_coverage}% reached. Total coverage: {percent}%")
 
     return coverage
 

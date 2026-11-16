@@ -45,7 +45,8 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "contract"
 
 
-def _property(column: str, data_type: str | None) -> dict:
+def starter_property(column: str, data_type: str | None) -> dict:
+    """The ODCS property `init` writes for a column with this TMDL dataType."""
     prop: dict = {"name": column}
     if data_type is None:
         prop["description"] = NO_TMDL_TYPE
@@ -58,6 +59,11 @@ def _property(column: str, data_type: str | None) -> dict:
     if pinned:
         prop["customProperties"] = [{"property": DATA_TYPE_KEY, "value": pinned}]
     return prop
+
+
+def starter_object(table: str, columns: dict[str, str | None]) -> dict:
+    """The ODCS schema object `init` writes for a table: ``columns`` is ``{column: TMDL dataType or None}``."""
+    return {"name": table, "physicalType": "table", "properties": [starter_property(c, dt) for c, dt in columns.items()]}
 
 
 def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), contract_id: str | None = None) -> dict:
@@ -84,10 +90,7 @@ def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), con
         "name": model,
         "version": "1.0.0",
         "status": "draft",
-        "schema": [
-            {"name": table, "physicalType": "table", "properties": [_property(c, dt) for c, dt in cols.items()]}
-            for table, cols in columns.items()
-        ],
+        "schema": [starter_object(table, cols) for table, cols in columns.items()],
     }
 
 

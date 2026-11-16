@@ -61,7 +61,6 @@ Environment variables (loaded from .env when python-dotenv is installed):
 from __future__ import annotations
 
 import json
-import math
 import os
 import sys
 from dataclasses import replace
@@ -123,6 +122,7 @@ from pql_test.cli_options import (
     deprecated_alias,
     emit_result,
     format_option,
+    min_coverage_option,
     output_option,
     record_summary,
     verbosity_options,
@@ -1290,21 +1290,6 @@ def _print_coverage_report(
                 click.echo(f"  {ex.object_type.value} {ex.identifier} — {ex.reason}")
 
 
-def _validate_finite_min_coverage(
-    ctx: click.Context, param: click.Parameter, value: float | None
-) -> float | None:
-    """Reject non-finite --min-coverage values that FloatRange(0, 100) lets through.
-
-    math.nan compares False against both bounds, so click.FloatRange(0, 100)
-    accepts "nan" even though the skill promises malformed thresholds fail
-    before any XMLA query; the later ``summary.percent < min_coverage``
-    check is also False for NaN, which would silently report success.
-    """
-    if value is not None and math.isnan(value):
-        raise click.BadParameter("must be a finite number between 0 and 100", ctx=ctx, param=param)
-    return value
-
-
 @cli.command("code-coverage")
 @click.argument("model_path", metavar="MODEL_PATH")
 @format_option(help="Output format: human-readable text (default) or a stable JSON report.")
@@ -1312,12 +1297,7 @@ def _validate_finite_min_coverage(
     verbose_help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
 )
 @output_option("Write the JSON report to FILE, as well as the report.")
-@click.option(
-    "--min-coverage", "min_coverage",
-    type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
-    callback=_validate_finite_min_coverage,
-    help="Exit non-zero when overall eligible coverage is below PERCENT.",
-)
+@min_coverage_option("Exit non-zero when overall eligible coverage is below PERCENT.")
 @conn_options
 def cmd_code_coverage(
     model_path: str,

@@ -21,7 +21,7 @@ Interface Contract {
 
   exit_code: 0 | 1 | 2
     // 0 = success
-    // 1 = contract invalid, lint problems, --fail-on-skipped triggered, a failed doctor check, or (run) a blocking suite failed / nothing ran
+    // 1 = contract invalid, lint problems, --fail-on-skipped triggered, a failed doctor check, (run) a blocking suite failed / nothing ran, or (coverage) below --min-coverage
     // 2 = usage error: bad --env token, MODEL_PATH not a PBIP model, or a file pql-test would overwrite without --force
 }
 
@@ -189,6 +189,8 @@ Options shared by `generate`, `mapping`, and `run`:
 Every contract command takes `-v/--verbose` and `-q/--quiet` (only the summary line; a result on stdout, such as JSON, a contract, or DAX, is never suppressed), and every command with a report takes `--format text|json`, `lint` included. `-o` is short for `--output`.
 
 `doctor [MODEL_PATH]` checks the environment and, with a PBIP model, the PQL.Assert library in its TMDL and in the deployed or open model. It recommends a `--pql-assert` value, warns when the deployed model supports a different one, and exits 1 when a check fails. It accepts `--format json`, `--model-dir`, and the same connection options as `run`.
+
+`coverage CONTRACT MODEL_PATH` shows which tables, columns, relationships, and measures of the model the contract covers. Each object is values tested (a rule checks its data), listed (a schema check runs), listed but not enforced (every rule on it is skipped), or not covered. Only direct references count: a rule on a measure does not cover what that measure uses. It also lists calculated columns no rule checks the values of, and names in contract DAX that match nothing in the model. It reads the contract and the model's TMDL only, so it runs on Linux, and never writes to the model. `--pql-assert auto` (the default) reads the model folder's functions.tmdl; `--min-coverage PERCENT` exits 1 when fewer objects have an enforced rule; `--format json` and `--output FILE` give the JSON report.
 
 `run` also accepts `--write` (also save the suites into DAXQueries/), `--format json` (the JSON results on stdout), `--output FILE`, `--log-format azuredevops|github`, and, with `--write`, `--model-dir DIR` (the PBIP folder of a `local/<name>` MODEL_PATH), plus the connection options of `run-tests`: `--tenant-id`, `--workspace-id`, `--dataset-id`, `--client-id`, `--client-secret`.
 

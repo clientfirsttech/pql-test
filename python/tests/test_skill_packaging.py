@@ -139,7 +139,7 @@ def test_pyproject_includes_package_data():
 
 
 def test_pyproject_ships_contract_data_and_license_files():
-    """Given pyproject.toml, should ship the ODCS schemas, PQL.Assert catalogs, LICENSE.txt, and NOTICE."""
+    """Given pyproject.toml, should ship the ODCS schemas, both report schemas, PQL.Assert catalogs, LICENSE.txt, and NOTICE."""
     try:
         import tomllib  # Python 3.11+ stdlib
     except ModuleNotFoundError:
@@ -154,7 +154,7 @@ def test_pyproject_ships_contract_data_and_license_files():
         package_data.get('pql_test.odcs.catalog'),
         project['project']['license'],
         project['project']['license-files'],
-    ) == (['schemas/*.json', 'schemas/*.txt', 'contract-run-result.schema.json'], ['*.yaml'], 'AGPL-3.0-only', ['LICENSE.txt', 'NOTICE'])
+    ) == (['schemas/*.json', 'schemas/*.txt', 'contract-run-result.schema.json', 'contract-coverage.schema.json'], ['*.yaml'], 'AGPL-3.0-only', ['LICENSE.txt', 'NOTICE'])
 
 
 def test_license_and_notice_copies_match():

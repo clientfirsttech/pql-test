@@ -1,0 +1,334 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-coverage.schema.json",
+  "title": "pql-test contract coverage report",
+  "description": "What `pql-test contract coverage CONTRACT MODEL_PATH --format json` prints: which tables, columns, relationships, and measures of a semantic model an ODCS contract covers. New properties can appear without changing schemaVersion; removing or retyping a property bumps it.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "generator",
+    "contract",
+    "model",
+    "source",
+    "pqlAssert",
+    "summary",
+    "categories",
+    "objects",
+    "calculatedColumnsWithoutValueRule",
+    "excluded",
+    "notCounted",
+    "unresolved",
+    "suggestions",
+    "mismatches",
+    "unavailable"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generator": {
+      "type": "string",
+      "description": "pql-test and its version, e.g. \"pql-test 0.3.0\"."
+    },
+    "contract": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "apiVersion",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "apiVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "model": {
+      "type": "string",
+      "description": "The *.SemanticModel folder whose objects were counted."
+    },
+    "source": {
+      "enum": [
+        "files",
+        "model"
+      ],
+      "description": "files: the PBIP folder's TMDL and a text scan of contract DAX. model: the connected model and its engine (--live)."
+    },
+    "pqlAssert": {
+      "enum": [
+        "0.7",
+        "0.8",
+        "0.9"
+      ],
+      "description": "The PQL.Assert catalog whose rules count as enforced."
+    },
+    "summary": {
+      "$ref": "#/$defs/counts"
+    },
+    "categories": {
+      "type": "object",
+      "required": [
+        "TABLE",
+        "COLUMN",
+        "RELATIONSHIP",
+        "MEASURE"
+      ],
+      "properties": {
+        "TABLE": {
+          "$ref": "#/$defs/counts"
+        },
+        "COLUMN": {
+          "$ref": "#/$defs/counts"
+        },
+        "RELATIONSHIP": {
+          "$ref": "#/$defs/counts"
+        },
+        "MEASURE": {
+          "$ref": "#/$defs/counts"
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/object"
+      }
+    },
+    "calculatedColumnsWithoutValueRule": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Calculated columns no rule checks the values of: only such a rule tests the DAX behind them."
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "identifier",
+          "reason"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/kind"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notCounted": {
+      "type": "string",
+      "description": "The object types never counted, and why."
+    },
+    "unresolved": {
+      "type": "array",
+      "description": "Names in DAX the contract wrote that match nothing in the model, so they are not counted.",
+      "items": {
+        "type": "object",
+        "required": [
+          "ruleId",
+          "reference"
+        ],
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "reference": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "description": "ODCS YAML that would cover each uncovered table, column, and measure, and where it goes.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "identifier",
+          "section",
+          "schemaObject",
+          "yaml"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/kind"
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "section": {
+            "enum": [
+              "schema",
+              "properties",
+              "quality"
+            ],
+            "description": "schema: a new schema object. properties / quality: of the schema object schemaObject."
+          },
+          "schemaObject": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The contract schema object it goes under; null for a new one, or any one."
+          },
+          "yaml": {
+            "type": "string",
+            "description": "A YAML list of the entries to add to that section."
+          }
+        }
+      }
+    },
+    "mismatches": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Contract tables, columns, and relationships the model lacks, and column types it disagrees with (the checks `lint CONTRACT MODEL_PATH` makes)."
+    },
+    "unavailable": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Checks that could not run, and why (with --live: the engine could not analyse contract DAX, so the text scan was used)."
+    }
+  },
+  "$defs": {
+    "kind": {
+      "enum": [
+        "TABLE",
+        "COLUMN",
+        "RELATIONSHIP",
+        "MEASURE"
+      ]
+    },
+    "level": {
+      "enum": [
+        "values_tested",
+        "listed",
+        "listed_not_enforced",
+        "not_covered"
+      ],
+      "description": "values_tested: a rule checks its data. listed: a schema check runs. listed_not_enforced: the contract lists it but every rule on it is skipped. not_covered: nothing in the contract names it."
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "eligible",
+        "covered",
+        "percent",
+        "valuesTested",
+        "listed",
+        "listedNotEnforced",
+        "notCovered"
+      ],
+      "properties": {
+        "eligible": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "covered": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "valuesTested + listed: objects with at least one enforced rule."
+        },
+        "percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "valuesTested": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "listed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "listedNotEnforced": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notCovered": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "object": {
+      "type": "object",
+      "required": [
+        "kind",
+        "identifier",
+        "level",
+        "rules",
+        "sources"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "identifier": {
+          "type": "string",
+          "description": "Table, Table[Column], Table[Measure], or From[column]->To[column], in the model's spelling."
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "calculated": {
+          "const": true,
+          "description": "Present on calculated columns (their values come from DAX)."
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The rule ids at this object's level; for listed_not_enforced, where the contract lists it."
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "contract",
+              "scan",
+              "engine"
+            ]
+          },
+          "description": "contract: a rule's own target. scan: a text scan of DAX the contract wrote. engine: the model's own dependency analysis (--live)."
+        }
+      }
+    }
+  }
+}
