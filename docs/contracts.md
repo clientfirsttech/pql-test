@@ -2,7 +2,7 @@
 
 Generate [PQL.Assert](https://github.com/clientfirsttech/PQL.Assert) DAX test suites from [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, and v3.2 data contracts, run them, and trace every result back to its contract rule. Every contract rule is reported as **mapped**, **approximated**, or **skipped**, so nothing is dropped silently.
 
-The commands come with pql-test (`pip install pql-test`). `lint`, `mapping`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA, which is Windows-only.
+The commands come with pql-test (`pip install pql-test`). `lint`, `mapping`, `generate`, `trace`, and `coverage` (without `--live`) only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, `coverage --live`, and `doctor`'s live checks need XMLA, which is Windows-only.
 
 ## Quick start
 
@@ -10,6 +10,7 @@ The commands come with pql-test (`pip install pql-test`). `lint`, `mapping`, `ge
 pql-test contract init ./SalesModel -o orders.odcs.yaml                 # start the contract from the model
 pql-test contract doctor ./SalesModel                                   # which PQL.Assert? which --pql-assert?
 pql-test contract mapping orders.odcs.yaml                              # which rules can be enforced?
+pql-test contract coverage orders.odcs.yaml ./SalesModel                # which parts of the model does it cover?
 pql-test contract lint orders.odcs.yaml ./SalesModel                    # contract valid, names resolve?
 pql-test contract generate orders.odcs.yaml ./SalesModel --env DEV      # write *.Tests.dax suites
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate in memory, run, trace
@@ -31,6 +32,41 @@ pql-test contract init local/SalesModel --table Sales --table Customer -o sales.
 
 The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `mapping CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init`'s own output against SampleModel, unedited except for a comment.
 
+## Which parts of the model a contract covers
+
+```bash
+pql-test contract coverage orders.odcs.yaml ./SalesModel                       # from the PBIP folder (Linux too)
+pql-test contract coverage orders.odcs.yaml local/SalesModel --live            # from the model open in Power BI Desktop
+pql-test contract coverage orders.odcs.yaml ./SalesModel --format json --min-coverage 80
+```
+
+`mapping` asks which contract rules can run. `coverage` asks the reverse: which tables, columns, relationships, and measures of the model the contract covers, so you can see what to add to the contract as the model grows. Each object gets the strongest level any rule gives it:
+
+| Level | Meaning |
+|---|---|
+| values tested | A rule checks its data: a data-quality or freshness rule on it, or DAX the contract wrote (`engine: pql-test`) that references it |
+| listed | The contract lists it and a schema check runs: the table exists, has the column, the column has its type, the relationship exists |
+| listed, not enforced | The contract lists it, but every rule on it is skipped (`mapping` says why) |
+| not covered | Nothing in the contract names it |
+
+The percentage counts the objects with at least one rule that runs (values tested or listed). `--min-coverage PERCENT` exits 1 below it, rounding like `code-coverage`: only every object covered rounds to 100.
+
+**What counts.**
+- Only direct references count, as in `pql-test code-coverage`: a rule on `[Total Sales]` covers that measure, not the columns `[Total Sales]` uses.
+- A column reference also covers its table.
+- A rule placed under a schema object does not cover that table by itself. Only what its DAX references counts.
+- An ODCS schema has no place to list a measure, so a measure is either values tested by an `engine: pql-test` rule or not covered.
+- A calculated column's values come from DAX, so the report lists every calculated column no rule checks the values of.
+- Left out, the way `init` leaves them out: Power BI's automatic date tables, measure tables and their hidden placeholder columns (their measures still count), and calculation groups. Roles and partitions are never counted, because no contract rule targets them.
+
+**What to change.** The report ends with ODCS YAML for each gap: a schema object for a table the contract does not list (written the way `init` writes one, with a rule template for each of its measures), a property for a missing column, and an `engine: pql-test` rule template for every other uncovered measure. Edit each template's comparator to the value the measure must meet. The report also lists contract entries the model lacks or types differently (the checks `lint CONTRACT MODEL_PATH` makes), and names in contract DAX that match nothing in the model.
+
+**From the files, or from the model.** By default `coverage` reads the PBIP folder's TMDL and finds what contract DAX references with a text scan, so it runs anywhere, Linux CI included. `--live` reads the deployed or open model instead, with `run`'s connection options, and asks the model's engine what each rule's DAX references, through `INFO.CALCDEPENDENCY("QUERY", ...)`. The engine's answer also lists every column a referenced measure uses, so each rule is asked twice, the second time with its measures replaced by `BLANK()`, and only direct references count. `--live` needs XMLA (Windows) and, like `code-coverage`, write permission on the model. Without it, the report says the engine check was unavailable and uses the text scan. The JSON labels each object's evidence `contract`, `scan`, or `engine`.
+
+**The model is never changed.** Neither mode writes to the model. Deploying the generated tests to measure them, then removing them, was ruled out: a write over XMLA stops a Desktop-authored model from being downloaded from the service as a PBIX, a failed cleanup would leave test functions in the model, and most schema checks pass table and column names as text, which leaves no dependency to measure.
+
+**JSON.** `--format json` (or `--output FILE`) prints the report that [contract-coverage.schema.json](https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-coverage.schema.json) describes: `schemaVersion` 1, a summary and per-category counts, every object with its level, rules, and evidence sources, and the gaps, suggestions, and mismatches. New properties can appear without changing `schemaVersion`.
+
 ## Commands
 
 | Command | What it does |
@@ -38,6 +74,7 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 | `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, and types (see [above](#start-a-contract-from-the-model)) |
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
 | `mapping CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
+| `coverage CONTRACT MODEL_PATH [--live]` | Shows which tables, columns, relationships, and measures of the model the contract covers, and the ODCS YAML that would cover the rest (see [below](#which-parts-of-the-model-a-contract-covers)) |
 | `lint CONTRACT [MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve, that every [`engine: pql-test` DAX rule](#dax-rules-in-the-contract-engine-pql-test) can be generated, and (with a MODEL_PATH) that every table, column, and relationship exists in the model's TMDL |
 | `run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them over XMLA, and traces the results to rule ids, without writing any file (`--output`, `--log-format azuredevops\|github`, and the `run-tests` connection options). `--write` also saves the suites into `DAXQueries/`, like `generate` |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
@@ -55,7 +92,7 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 
 **Exit codes**:
 - 0 means success.
-- 1 means the contract is invalid, `lint` found problems, a `doctor` check failed, `--fail-on-skipped` was triggered, or (`run`) a blocking suite failed or nothing ran.
+- 1 means the contract is invalid, `lint` found problems, a `doctor` check failed, `--fail-on-skipped` was triggered, (`run`) a blocking suite failed or nothing ran, or (`coverage`) coverage is below `--min-coverage` or `--live` could not reach the model.
 - 2 means a usage error: a bad `--env` token, a MODEL_PATH that is not a PBIP model, a file pql-test would refuse to overwrite, or an unreadable results file.
 
 ## Generated suites

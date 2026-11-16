@@ -139,3 +139,8 @@ See [direct-udf-code-coverage-metadata-contract.md](../tasks/direct-udf-code-cov
 for the fully verified evidence contract this document summarizes, and the
 [README `code-coverage` section](../README.md#code-coverage) for full CLI
 flags and CI examples.
+
+For an ODCS data contract, whose generated tests are never stored in the
+model, `pql-test contract coverage` answers the same question with the same
+direct-reference rule: see
+[Which parts of the model a contract covers](contracts.md#which-parts-of-the-model-a-contract-covers).

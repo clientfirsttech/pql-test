@@ -51,6 +51,9 @@ jobs:
           # init starts a contract from the TMDL; the starter lints clean against the same model.
           pql-test contract init $M --output /tmp/starter.odcs.yaml
           pql-test contract lint /tmp/starter.odcs.yaml $M
+          # coverage without --live reads only the PBIP folder, so it runs here; the starter lists every table and column.
+          pql-test contract coverage /tmp/starter.odcs.yaml $M --format json > /tmp/coverage.json
+          python -c "import json; r = json.load(open('/tmp/coverage.json')); c = r['categories']; assert r['source'] == 'files' and c['TABLE']['covered'] == c['TABLE']['eligible'] > 0 and c['COLUMN']['covered'] == c['COLUMN']['eligible'], r['summary']"
           pql-test contract lint $F/marvel.odcs.yaml local/SampleModel
           pql-test contract mapping $F/every-row.odcs.yaml --format json > /tmp/mapping.json
           python -c "import json; r = json.load(open('/tmp/mapping.json')); assert r['summary']['total'] == len(r['rules']) > 0"
