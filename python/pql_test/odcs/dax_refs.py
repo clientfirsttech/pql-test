@@ -16,6 +16,10 @@ from dataclasses import dataclass, field
 # A bare word: a table name, a variable, a keyword, or (followed by "(") a function, dots included.
 _WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
 _SPACE_RE = re.compile(r"\s*")
+# DAX keywords, which an unquoted table name can never be: in `RETURN [Total]` the bracket is a bare name.
+_KEYWORDS = frozenset(
+    "VAR RETURN NOT IN AND OR TRUE FALSE DEFINE EVALUATE MEASURE COLUMN TABLE FUNCTION ORDER BY ASC DESC START AT".split()
+)
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,8 @@ def _scan(text: str) -> Iterator[DaxRef]:
         elif _WORD_RE.match(text, i) and not (i and (text[i - 1].isalnum() or text[i - 1] in "_.")):
             start, word = i, _WORD_RE.match(text, i)
             i = word.end()
+            if word.group().upper() in _KEYWORDS:
+                continue  # a bracket after it is read on its own, as a bare name
             column = _bracket_after(text, i)
             after = _SPACE_RE.match(text, i).end()
             if column:

@@ -196,3 +196,37 @@ class TestLiveOption:
         assert (result.exit_code, "--workspace-id" in result.output, "covered" in result.stdout) == (1, True, False), (
             f"{given}: {should}\n{result.output}"
         )
+
+    def test_a_model_that_refuses_info_queries_falls_back_to_the_files(self, monkeypatch):
+        given = "--live with an identity the model refuses INFO queries to (no write permission), and a PBIP folder"
+        should = "count from the PBIP folder and the text scan, exit 0, and say why the model was not read"
+        from types import SimpleNamespace
+
+        def refused(_conn, _dax):
+            raise RuntimeError("The user does not have permission to run this query.")
+
+        monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: None)
+        monkeypatch.setattr(
+            "pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: SimpleNamespace(server="srv", catalog="SampleModel")
+        )
+        monkeypatch.setattr("pql_test.contract_run._execute_dax_query", refused)
+
+        result = _run(SCENARIOS, SAMPLE, "--live", "--format", "json")
+
+        report = json.loads(result.stdout)
+        assert (
+            result.exit_code,
+            report["source"],
+            report["summary"]["eligible"] > 0,
+            any("write permission" in u for u in report["unavailable"]),
+        ) == (0, "files", True, True), f"{given}: {should}\n{result.output}"
+
+
+@pytest.mark.parametrize("flag", ["--fail-on-skipped", "--closed-schema"])
+def test_the_rule_reports_old_flags_point_to_mapping(flag):
+    given = f"contract coverage CONTRACT MODEL_PATH {flag} (a flag of the rule report, now `contract mapping`)"
+    should = "fail as a usage error that names `contract mapping`, not as an unknown option"
+
+    result = _run(STARTER, SAMPLE, flag)
+
+    assert (result.exit_code, "pql-test contract mapping" in result.output) == (2, True), f"{given}: {should}\n{result.output}"

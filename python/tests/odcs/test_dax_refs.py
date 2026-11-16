@@ -62,3 +62,21 @@ class TestMaskReferences:
         text = "COUNTROWS('Sales') // [Total]"
 
         assert mask_references(text, set()) == text, f"{given}: {should}"
+
+
+class TestKeywordsBeforeBrackets:
+    def test_a_keyword_before_a_bracket_is_not_a_table(self):
+        given = "VAR ... RETURN [Measure], and NOT [Flag], the common DAX forms with a keyword before a bracket"
+        should = "read the brackets as bare names, never as columns of a table named RETURN or NOT"
+
+        refs = [r for r in dax_references("VAR n = 1000 RETURN [Total] > n && NOT [Flag]") if r.name]
+
+        assert refs == [DaxRef(name="Total"), DaxRef(name="Flag")], f"{given}: {should}"
+
+    def test_masking_after_a_keyword_keeps_the_keyword(self):
+        given = "a measure right after RETURN"
+        should = "replace only the measure, so the DAX stays valid"
+
+        masked = mask_references("EVALUATE {VAR x = 1 RETURN [Total] > x}", {"total"})
+
+        assert masked == "EVALUATE {VAR x = 1 RETURN BLANK() > x}", f"{given}: {should}"

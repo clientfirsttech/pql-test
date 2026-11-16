@@ -169,3 +169,38 @@ class TestModelInventory:
             sorted(f"{o['name']}[{p['name']}]" for o in contract["schema"] for p in o["properties"]),
         )
         assert (_identifiers(inventory, Kind.TABLE), _identifiers(inventory, Kind.COLUMN)) == starter, f"{given}: {should}"
+
+
+class TestFactTableWithHiddenColumns:
+    @staticmethod
+    def _model(tmp_path):
+        fact = (
+            "table Sales\n\tmeasure Total = SUM(Sales[Amount])\n\n"
+            "\tcolumn Amount\n\t\tdataType: double\n\t\tisHidden\n\n"
+            "\tcolumn DateKey\n\t\tdataType: int64\n\t\tisHidden\n"
+        )
+        return _model(
+            tmp_path,
+            {"Sales": fact, "Date": "table Date\n\tcolumn DateKey\n\t\tdataType: int64\n"},
+            "relationship r1\n\tfromColumn: Sales.DateKey\n\ttoColumn: Date.DateKey\n",
+        )
+
+    def test_is_counted_not_left_out_as_a_measure_table(self, tmp_path):
+        given = "a fact table whose columns are all hidden and that shows only a measure, joined to a dimension"
+        should = "count the table, its columns, and the relationship: a measure table never takes part in a relationship"
+
+        inventory = model_inventory(self._model(tmp_path))
+
+        assert (
+            _identifiers(inventory, Kind.TABLE),
+            _identifiers(inventory, Kind.RELATIONSHIP),
+            inventory.excluded,
+        ) == (["Date", "Sales"], ["Sales[DateKey]->Date[DateKey]"], ()), f"{given}: {should}"
+
+    def test_init_describes_it_too(self, tmp_path):
+        given = "the same model and init"
+        should = "describe the fact table in the starter, so init and coverage keep leaving out the same tables"
+
+        contract = starter_contract(self._model(tmp_path))
+
+        assert sorted(o["name"] for o in contract["schema"]) == ["Date", "Sales"], f"{given}: {should}"

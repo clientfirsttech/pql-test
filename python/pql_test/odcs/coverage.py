@@ -30,7 +30,14 @@ from pql_test.odcs.dax_refs import DaxRef, dax_references
 from pql_test.odcs.ir import CONTRACT_DAX_SUITE, DIRECT_CALL, SCHEMA_SUITE, Assertion, Status
 from pql_test.odcs.mapping.context import is_column
 from pql_test.odcs.mapping.relationships import relationship_entries, resolve
-from pql_test.odcs.pbip import AUTO_DATE_TABLE_RE, ModelTable, model_relationships, model_tables
+from pql_test.odcs.pbip import (
+    AUTO_DATE_TABLE_RE,
+    ModelTable,
+    is_measure_table,
+    model_relationships,
+    model_tables,
+    related_tables,
+)
 
 if TYPE_CHECKING:
     from pql_test.odcs.api import Plan
@@ -46,7 +53,9 @@ class Kind(str, Enum):
 
 
 AUTO_DATE_TABLE = "Power BI's automatic date table, not part of the model anyone wrote"
-MEASURE_TABLE = "a measure table: it holds measures (counted on their own) and only hidden placeholder columns"
+MEASURE_TABLE = (
+    "a measure table: it holds measures (counted on their own), only hidden placeholder columns, and no relationship"
+)
 CALCULATION_GROUP = "a calculation group: no contract rule targets one"
 NOT_COUNTED = (
     "Roles, partitions, and calculation groups are not counted: an ODCS contract has no rule that targets them."
@@ -91,13 +100,13 @@ def relationship_id(from_table: str, from_column: str, to_table: str, to_column:
     return f"{column_id(from_table, from_column)}->{column_id(to_table, to_column)}"
 
 
-def _table_exclusion(table: ModelTable) -> str | None:
+def _table_exclusion(table: ModelTable, related: set[str]) -> str | None:
     """Why a table (and its columns) is not counted, the way `init` leaves it out of a starter contract."""
     if AUTO_DATE_TABLE_RE.match(table.name):
         return AUTO_DATE_TABLE
     if table.calculation_group:
         return CALCULATION_GROUP
-    if table.measure_table:
+    if is_measure_table(table, related):
         return MEASURE_TABLE
     return None
 
@@ -114,8 +123,9 @@ def inventory_of(tables: Iterable[ModelTable], relationships: Iterable[tuple[str
     objects: list[ModelObject] = []
     excluded: list[Exclusion] = []
     left_out: dict[str, str] = {}
+    related = related_tables(relationships)
     for table in tables:
-        reason = _table_exclusion(table)
+        reason = _table_exclusion(table, related)
         objects.extend(
             ModelObject(Kind.MEASURE, column_id(table.name, m), table=table.name, name=m) for m in table.measures
         )
@@ -248,6 +258,8 @@ def _resolve_reference(names: ModelNames, ref: DaxRef) -> list[tuple[Kind, str]]
         if table:
             return [(Kind.TABLE, table)]
         return None if ref.quoted else []  # an unknown bare word is a variable or keyword, not a reference
+    if ref.table is not None and not ref.quoted and ref.table.lower() not in names.tables:
+        ref = DaxRef(name=ref.name)  # an unquoted word that names no table: read [Name] on its own
     if ref.table is None:
         measure = names.measures.get(ref.name.lower())
         return [(Kind.MEASURE, measure)] if measure else None
@@ -443,10 +455,26 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "measure"
 
 
-def _measure_rule(obj: ModelObject) -> dict:
-    """An ``engine: pql-test`` rule template that tests the measure's value (the comparator is a placeholder)."""
+def _quality_ids(plan: Plan) -> set[str]:
+    """Every quality rule id the contract already uses, on schema objects and their properties."""
+    ids = set()
+    for obj in plan.contract.schema_objects:
+        for element in (obj, *(obj.get("properties") or [])):
+            rules = [r for r in element.get("quality") or [] if isinstance(r, Mapping) and r.get("id")]
+            ids.update(str(r["id"]) for r in rules)
+    return ids
+
+
+def _measure_rule(obj: ModelObject, taken: set[str]) -> dict:
+    """An ``engine: pql-test`` rule template that tests the measure's value (the comparator is a placeholder).
+
+    Its id is not in *taken* (ids already in the contract or suggested), and is added to it.
+    """
+    base = f"{_slug(obj.name)}-check"
+    rule_id = next(i for i in (base, *(f"{base}-{n}" for n in range(2, len(taken) + 3))) if i not in taken)
+    taken.add(rule_id)
     return {
-        "id": f"{_slug(obj.name)}-check",
+        "id": rule_id,
         "type": "custom",
         "engine": "pql-test",
         "description": f"{obj.name} has the expected value (edit the comparator below)",
@@ -461,6 +489,7 @@ def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, 
 
     objects = tuple(objects)
     in_contract = {plan.names.table(o).lower(): o["name"] for o in plan.contract.schema_objects}
+    taken = _quality_ids(plan)
     columns: dict[str, list[ModelObject]] = {}
     for c in objects:
         if c.obj.kind is Kind.COLUMN:
@@ -475,19 +504,20 @@ def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, 
     found = []
     for table in new_tables:
         entry = starter_object(table, {c.name: c.data_type for c in columns.get(table.lower(), [])})
-        rules = [_measure_rule(o) for o in uncovered if o.kind is Kind.MEASURE and o.table.lower() == table.lower()]
+        rules = [_measure_rule(o, taken) for o in uncovered if o.kind is Kind.MEASURE and o.table.lower() == table.lower()]
         if rules:
             entry["quality"] = rules
         found.append(Suggestion(Kind.TABLE, table, "schema", None, _yaml([entry])))
     for o in uncovered:
         if o.kind is Kind.COLUMN and o.table.lower() in in_contract:
             owner = in_contract[o.table.lower()]
-            found.append(Suggestion(Kind.COLUMN, o.identifier, "properties", owner, _yaml([starter_property(o.name, o.data_type)])))
+            entry = starter_property(o.name, o.data_type)
+            found.append(Suggestion(Kind.COLUMN, o.identifier, "properties", owner, _yaml([entry])))
         elif o.kind is Kind.MEASURE and o.table.lower() not in new_lower:
             # Placement does not change what a rule covers, so a measure whose table is not in the contract
             # (a measure table, say) can go under any schema object.
             owner = in_contract.get(o.table.lower())
-            found.append(Suggestion(Kind.MEASURE, o.identifier, "quality", owner, _yaml([_measure_rule(o)])))
+            found.append(Suggestion(Kind.MEASURE, o.identifier, "quality", owner, _yaml([_measure_rule(o, taken)])))
     return tuple(found)
 
 

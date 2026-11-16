@@ -115,3 +115,17 @@ class TestContractEvidence:
         found = contract_evidence(plan_contract(contract, pql_assert="0.9"), SALES_MODEL)
 
         assert _levels(found, Kind.COLUMN) == {"Sales[id]": Level.VALUES_TESTED}, f"{given}: {should}"
+
+
+class TestKeywordsBeforeBrackets:
+    def test_a_measure_after_return_is_credited(self):
+        given = "contract DAX in the VAR ... RETURN [Measure] form"
+        should = "credit the measure and report nothing unresolved"
+        rule = _dax_rule("var-form", {"expression": "VAR n = 0 RETURN [Total] > n", "mustBe": True})
+        contract = contract_dict(schema=[schema_object("Sales", quality=[rule])])
+
+        found = contract_evidence(plan_contract(contract, pql_assert="0.9"), SALES_MODEL)
+
+        assert (_levels(found, Kind.MEASURE), list(found.unresolved)) == ({"Sales[Total]": Level.VALUES_TESTED}, []), (
+            f"{given}: {should}"
+        )

@@ -45,10 +45,17 @@ class ModelTable:
     calculated: bool = False  # partition = calculated
     calculation_group: bool = False
 
-    @property
-    def measure_table(self) -> bool:
-        """True for a table that holds measures and only hidden columns, such as a ``_Measures`` table."""
-        return bool(self.measures) and all(c.hidden for c in self.columns)
+
+def is_measure_table(table: ModelTable, related: set[str]) -> bool:
+    """True for a table that only holds measures, such as a ``_Measures`` table: it has measures and only
+    hidden columns, and no relationship (*related*: lower-case names of tables in one). A fact table that
+    hides its columns and shows only measures still joins its dimensions, so it is not one."""
+    return bool(table.measures) and all(c.hidden for c in table.columns) and table.name.lower() not in related
+
+
+def related_tables(relationships) -> set[str]:
+    """Lower-case names of every table at either end of *relationships* ``(from table, column, to table, column)``."""
+    return {end.lower() for r in relationships for end in (r[0], r[2])}
 
 
 class ModelPathError(Exception):
@@ -235,8 +242,9 @@ def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
 
 
 def measure_tables(semantic_model_dir: Path) -> set[str]:
-    """Tables that hold measures and only hidden columns, such as a ``_Measures`` table's placeholder column."""
-    return {name for name, t in _scan_tables(semantic_model_dir).items() if t.measure_table}
+    """Tables that only hold measures (and hidden placeholder columns), such as a ``_Measures`` table."""
+    related = related_tables(model_relationships(semantic_model_dir))
+    return {name for name, t in _scan_tables(semantic_model_dir).items() if is_measure_table(t, related)}
 
 
 def model_names(semantic_model_dir: Path) -> dict[str, set[str]]:

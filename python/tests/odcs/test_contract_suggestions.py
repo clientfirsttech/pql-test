@@ -142,3 +142,19 @@ class TestSuggestions:
             any("Discount" in m and "not found" in m for m in report.mismatches),
             any("Ghost" in m and "not found" in m for m in report.mismatches),
         ) == (True, True), f"{given}: {report.mismatches}"
+
+
+def test_suggested_rule_ids_are_unique(tmp_path):
+    given = "two measures whose names slug alike ('Sales %' and 'Sales $') and a contract rule already named sales-check"
+    should = "give every suggested rule its own id, so pasting them all keeps the contract's ids unique"
+    sm = tmp_path / "M.SemanticModel"
+    (sm / "definition" / "tables").mkdir(parents=True)
+    body = "table Sales\n\tmeasure 'Sales %' = 1\n\n\tmeasure 'Sales $' = 2\n\n\tcolumn Amount\n\t\tdataType: double\n"
+    (sm / "definition" / "tables" / "Sales.tmdl").write_text(body, encoding="utf-8")
+    taken = {"id": "sales-check", "type": "custom", "engine": "pql-test", "implementation": {"expression": "1", "mustBe": 1}}
+    contract = contract_dict(schema=[schema_object("Sales", [prop("Amount", "number")], quality=[taken])])
+
+    report = _report(contract, sm)
+
+    ids = [yaml.safe_load(s.yaml)[0]["id"] for s in report.suggestions if s.kind is Kind.MEASURE]
+    assert (len(ids), len(set(ids)), "sales-check" in ids) == (2, 2, False), f"{given}: {should}: {ids}"

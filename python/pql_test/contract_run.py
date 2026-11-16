@@ -20,7 +20,7 @@ import json
 import re
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import click
@@ -625,8 +625,10 @@ def print_coverage(report, verbose: bool, min_coverage: float | None = None) -> 
     c = report.contract
     click.echo("\n" + banner("contract coverage session starts"))
     click.echo(f"contract: {c['id']} (ODCS {c['apiVersion']}), PQL.Assert {report.pql_assert}")
-    how = "the connected model; contract DAX read by its engine" if report.live else "TMDL; contract DAX read by a text scan"
-    click.echo(f"model: {report.model} ({how})")
+    if report.live:
+        click.echo(f"model: {report.model} (the connected model; contract DAX read by its engine)")
+    else:
+        click.echo(f"model: {report.model} (TMDL; contract DAX read by a text scan)")
     _listing("Not checked", list(report.unavailable))
     total = report.counts()
     overall = f"{total.covered}/{total.eligible} covered ({total.percent}%), {total.values_tested} with values tested"
@@ -656,7 +658,8 @@ def print_coverage(report, verbose: bool, min_coverage: float | None = None) -> 
             )
         _listing("Left out", [f"{e.kind.value} {e.identifier}: {e.reason}" for e in report.excluded])
     elif report.excluded:
-        click.echo(f"\n{len(report.excluded)} object(s) left out (automatic date tables, measure tables, calculation groups); -v lists them.")
+        left_out = "automatic date tables, measure tables, calculation groups"
+        click.echo(f"\n{len(report.excluded)} object(s) left out ({left_out}); -v lists them.")
     if report.suggestions:
         click.echo(f"\nTo cover them, add to the contract ({len(report.suggestions)}):")
         for s in report.suggestions:
@@ -692,6 +695,26 @@ def _file_coverage(contract, model_path: str, pql_assert: str):
         pql_assert = _model_pql_assert(str(semantic_model_dir))
     plan = plan_contract(contract, pql_assert=pql_assert)
     return build_coverage(plan, model_inventory(semantic_model_dir), model=str(semantic_model_dir), pql_assert=pql_assert)
+
+
+def _moved_to_mapping(flag: str) -> Callable:
+    """A hidden flag of the old rule report: given to `coverage`, it fails pointing to `contract mapping`."""
+
+    def moved(_ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+        if value:
+            raise click.UsageError(f"{flag} belongs to the rule report. {MAPPING_MOVED}")
+
+    return click.option(flag, is_flag=True, hidden=True, expose_value=False, callback=moved)
+
+
+def _model_dir_or_none(model_path: str) -> Path | None:
+    """The ``*.SemanticModel`` folder for MODEL_PATH (``local/<name>`` searches this repository), or None."""
+    from pql_test.odcs.pbip import ModelPathError, require_semantic_model_dir
+
+    try:
+        return require_semantic_model_dir(model_path)
+    except ModelPathError:
+        return None
 
 
 def _live_coverage(contract, model_path: str, pql_assert: str, hooks: RunHooks, credentials: tuple):
@@ -735,9 +758,16 @@ def _live_coverage(contract, model_path: str, pql_assert: str, hooks: RunHooks, 
     try:
         inventory = live_inventory(query)
     except Exception as exc:  # noqa: BLE001 - say why the model's objects could not be listed
-        _fail(f"Could not list the model's objects over XMLA: {summarize_xmla_exception(exc)}")
+        # INFO functions need write permission on the model: without it, count from the files instead.
+        reason = f"the model refused its INFO queries ({summarize_xmla_exception(exc)}); they need write permission"
+        folder_dir = semantic_model_dir or _model_dir_or_none(target)
+        if folder_dir is None:
+            _fail(f"Could not list the model's objects over XMLA: {reason}, and no PBIP folder was found to count from.")
+        click.echo(f"Warning: {reason}. Counting from the PBIP folder and a text scan instead.", err=True)
+        report = _file_coverage(contract, str(folder_dir), pql_assert)
+        return replace(report, unavailable=(f"{reason}. Counted from the PBIP folder {folder_dir.name} and a text scan.",))
     plan = plan_contract(contract, pql_assert=pql_assert)
-    dax = engine_dax_evidence(plan, inventory, partial(batched_dependencies, query))
+    dax = engine_dax_evidence(plan, inventory, partial(batched_dependencies, query, describe=summarize_xmla_exception))
     # A Desktop connection has no catalog name: name the model by its MODEL_PATH instead.
     label = f"{conn.server} / {conn.catalog}" if conn.catalog else f"{target} at {conn.server}"
     return build_coverage(plan, inventory, model=label, pql_assert=pql_assert, dax=dax)
@@ -768,6 +798,8 @@ def make_coverage_command(hooks: RunHooks) -> click.Command:
     @format_option(help="Output format: the coverage report (text), or the JSON report on stdout.")
     @output_option("Also write the JSON report to FILE.")
     @verbosity_options(verbose_help="Also list covered objects with their rules, and the objects left out.")
+    @_moved_to_mapping("--fail-on-skipped")
+    @_moved_to_mapping("--closed-schema")
     @hooks.conn_options
     def coverage(
         contract_path: str,

@@ -63,20 +63,25 @@ def _cell(row: dict, name: str):
     return None
 
 
-def _error(exc: Exception) -> str:
-    text = str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
-    return text[:300]
+def first_line(exc: Exception) -> str:
+    """The exception's first line, for callers with no better summary (the CLI passes its XMLA one)."""
+    text = str(exc).strip()
+    return (text.splitlines()[0] if text else type(exc).__name__)[:300]
 
 
-def _single(query: Callable[[str], list[dict]], text: str) -> list[Row] | str:
+Query = Callable[[str], list[dict]]
+Describe = Callable[[Exception], str]
+
+
+def _single(query: Query, text: str, describe: Describe) -> list[Row] | str:
     try:
         rows = query(f"EVALUATE INFO.CALCDEPENDENCY(\"QUERY\", {dax_string(text)})")
     except Exception as exc:  # noqa: BLE001 - the engine's reason is the answer for this text
-        return _error(exc)
+        return describe(exc)
     return [(_cell(r, "REFERENCED_OBJECT_TYPE"), _cell(r, "REFERENCED_TABLE"), _cell(r, "REFERENCED_OBJECT")) for r in rows]
 
 
-def _batch(query: Callable[[str], list[dict]], texts: Sequence[str]) -> list[list[Row] | str]:
+def _batch(query: Query, texts: Sequence[str], describe: Describe) -> list[list[Row] | str]:
     parts = [
         f'SELECTCOLUMNS(INFO.CALCDEPENDENCY("QUERY", {dax_string(t)}), "rule", {i}, '
         '"type", [REFERENCED_OBJECT_TYPE], "table", [REFERENCED_TABLE], "object", [REFERENCED_OBJECT])'
@@ -86,19 +91,19 @@ def _batch(query: Callable[[str], list[dict]], texts: Sequence[str]) -> list[lis
     try:
         rows = query(f"EVALUATE {dax}")
     except Exception:  # noqa: BLE001 - one bad text fails the batch: ask again one by one
-        return [_single(query, t) for t in texts]
+        return [_single(query, t, describe) for t in texts]
     found: list[list[Row] | str] = [[] for _ in texts]
     for r in rows:
         found[int(_cell(r, "rule"))].append((_cell(r, "type"), _cell(r, "table"), _cell(r, "object")))
     return found
 
 
-def batched_dependencies(query: Callable[[str], list[dict]], texts: Sequence[str]) -> list[list[Row] | str]:
+def batched_dependencies(query: Query, texts: Sequence[str], describe: Describe = first_line) -> list[list[Row] | str]:
     """Each text's dependency rows, ``BATCH_SIZE`` texts per round trip; for a text the engine cannot
-    analyse, the engine's error message instead."""
+    analyse, *describe* of the engine's error instead."""
     found: list[list[Row] | str] = []
     for start in range(0, len(texts), BATCH_SIZE):
-        found += _batch(query, texts[start : start + BATCH_SIZE])
+        found += _batch(query, texts[start : start + BATCH_SIZE], describe)
     return found
 
 
@@ -106,12 +111,15 @@ def _rows_evidence(names: ModelNames, rows: list[Row], rule_id: str, kinds: set[
     found = []
     for typ, table, obj in rows:
         if typ == "MEASURE" and Kind.MEASURE in kinds:
-            found.append(Evidence(Kind.MEASURE, names.model(Kind.MEASURE, column_id(table, obj)), Level.VALUES_TESTED, rule_id, ENGINE))
+            kind, identifier = Kind.MEASURE, column_id(table, obj)
         elif typ in _TABLE_TYPES and Kind.TABLE in kinds:
-            found.append(Evidence(Kind.TABLE, names.model(Kind.TABLE, obj), Level.VALUES_TESTED, rule_id, ENGINE))
+            kind, identifier = Kind.TABLE, obj
         elif typ in _COLUMN_TYPES and Kind.COLUMN in kinds and not str(obj).startswith("RowNumber-"):
             # Every table has a hidden RowNumber-<GUID> column; COUNTROWS reports it.
-            found.append(Evidence(Kind.COLUMN, names.model(Kind.COLUMN, column_id(table, obj)), Level.VALUES_TESTED, rule_id, ENGINE))
+            kind, identifier = Kind.COLUMN, column_id(table, obj)
+        else:
+            continue
+        found.append(Evidence(kind, names.model(kind, identifier), Level.VALUES_TESTED, rule_id, ENGINE))
     return found
 
 
@@ -123,7 +131,7 @@ def engine_dax_evidence(
     """What every contract-DAX rule in *plan* references, as the model's engine reads it.
 
     *dependencies* answers a list of DAX queries with each one's dependency rows (or an error
-    message): ``functools.partial(batched_dependencies, query)`` against a connection.
+    message): ``functools.partial(batched_dependencies, query, describe=...)`` against a connection.
     """
     names = ModelNames(inventory)
     rules = dax_rule_assertions(plan)
@@ -148,7 +156,8 @@ def engine_dax_evidence(
         if isinstance(rows, str):
             found, missing = scanned_evidence(names, a, rule_id)
             evidence += found
-            unresolved += [*missing, Unresolved(rule_id, f"(the model could not analyse this rule's DAX: {rows}; used the text scan)")]
+            note = f"(the model could not analyse this rule's DAX: {rows}; used the text scan)"
+            unresolved += [*missing, Unresolved(rule_id, note)]
             continue
         evidence += _rows_evidence(names, rows, rule_id, {Kind.MEASURE})
         measures = {str(obj).lower() for typ, _, obj in rows if typ == "MEASURE"}
@@ -161,7 +170,8 @@ def engine_dax_evidence(
         if isinstance(rows, str):
             found, missing = scanned_evidence(names, a, rule_id)
             evidence += [e for e in found if e.kind in (Kind.TABLE, Kind.COLUMN)]
-            unresolved.append(Unresolved(rule_id, f"(the model could not analyse this rule's DAX without its measures: {rows}; used the text scan)"))
+            note = f"(the model could not analyse this rule's DAX without its measures: {rows}; used the text scan)"
+            unresolved.append(Unresolved(rule_id, note))
             continue
         evidence += _rows_evidence(names, rows, rule_id, {Kind.TABLE, Kind.COLUMN})
     return DaxEvidence(tuple(dict.fromkeys(evidence)), tuple(dict.fromkeys(unresolved)))
