@@ -227,6 +227,7 @@ def lint_cmd(contract_path, model_path, output_format):
     from pql_test.odcs.catalog import LATEST_PQL_ASSERT
     from pql_test.odcs.ir import CONTRACT_DAX, Status
     from pql_test.odcs.loader import ContractError
+    from pql_test.odcs.mapping.relationships import broken_references
     from pql_test.odcs.model_check import model_problems
     from pql_test.odcs.naming import DATA_TYPE_KEY
     from pql_test.odcs.pbip import (
@@ -244,6 +245,7 @@ def lint_cmd(contract_path, model_path, output_format):
         plan, problems = None, exc.problems or [str(exc)]
     if plan is not None:
         problems.extend(plan.names.problems())
+        problems.extend(broken_references(plan.contract, plan.names))
         problems.extend(
             f"{o.rule_id}: {o.reason}" for o in plan.outcomes if o.source == CONTRACT_DAX and o.status is Status.SKIPPED
         )

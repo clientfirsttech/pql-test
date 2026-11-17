@@ -107,11 +107,86 @@ def _minor(api_version: Any) -> tuple[str, str]:
     return key, f"{major}.{minor}.{patch}"
 
 
+@dataclass(frozen=True)
+class ReferenceForms:
+    """An ODCS version's relationship reference patterns (``$defs`` of its bundled schema)."""
+
+    shorthand: re.Pattern  # table.property
+    fully_qualified: re.Pattern  # schema/<object id>/properties/<property id>, by id
+    relationship_keys: frozenset[str]  # every key a relationship may have
+
+    def accepts(self, ref: str) -> bool:
+        return bool(self.shorthand.fullmatch(ref) or self.fully_qualified.fullmatch(ref))
+
+    @property
+    def allowed(self) -> str:
+        """The characters a shorthand name may hold, in words."""
+        return "letters, digits, _, and -" if r"\-" in self.shorthand.pattern else "letters, digits, and _"
+
+
+@cache
+def reference_forms(minor: str) -> ReferenceForms | None:
+    """The reference patterns of ODCS *minor* (``"3.1"``), or None for a version without relationships (3.0)."""
+    defs = _validator(SCHEMAS[minor]).schema["$defs"]
+    if "ShorthandReference" not in defs:
+        return None
+    return ReferenceForms(
+        re.compile(defs["ShorthandReference"]["pattern"]),
+        re.compile(defs["FullyQualifiedReference"]["pattern"]),
+        frozenset(defs["RelationshipBase"]["properties"]),
+    )
+
+
+def _rejected_references(error, forms: ReferenceForms | None) -> list[tuple[list, str]]:
+    """``(json path, reference)`` for each relationship ``from`` / ``to`` string *error* rejects, composite items
+    included."""
+    path = list(error.absolute_path)
+    if forms is None or "relationships" not in path or error.validator not in ("anyOf", "oneOf"):
+        return []
+    at = len(path) - 1 - path[::-1].index("relationships")
+    if path[at + 2 :] not in (["from"], ["to"]):
+        return []
+    value = error.instance
+    items = [(path, value)] if isinstance(value, str) else list(enumerate(value)) if isinstance(value, list) else []
+    items = [(p if isinstance(p, list) else [*path, p], v) for p, v in items]
+    return [(p, v) for p, v in items if isinstance(v, str) and not forms.accepts(v)]
+
+
+def _reference_problem(path: list, value: str, forms: ReferenceForms) -> str:
+    return (
+        f"{_json_path(path)}: {value!r} is not a valid ODCS reference. A table.property reference allows only "
+        f"{forms.allowed} in each name, and ODCS has no escape syntax (quotes, brackets, backticks, and "
+        "backslashes are not escapes). Give both schema elements an id and write the reference as "
+        "schema/<object id>/properties/<property id>"
+    )
+
+
 def validate(data: Mapping) -> list[str]:
-    """Return every schema violation in *data* as ``<json path>: <message>``, sorted."""
+    """Return every schema violation in *data* as ``<json path>: <message>``, sorted.
+
+    A relationship end the schema rejects (usually a name with a space) becomes one problem that explains the
+    id form. The schema's other error for that relationship, that its keys are unexpected, is dropped when every
+    key is one a relationship may have, because it only repeats the rejected reference.
+    """
     key, _ = _minor(data.get("apiVersion"))
-    errors = _validator(SCHEMAS[key]).iter_errors(data)
-    return sorted({f"{_json_path(e.absolute_path)}: {e.message}" for e in errors})
+    forms = reference_forms(key)
+    problems, explained = set(), set()
+    errors = list(_validator(SCHEMAS[key]).iter_errors(data))
+    for e in errors:
+        rejected = _rejected_references(e, forms)
+        problems.update(_reference_problem(p, v, forms) for p, v in rejected)
+        explained.update(tuple(p[: len(p) - 1 - p[::-1].index("relationships") + 2]) for p, _ in rejected)
+        if not rejected:
+            problems.add(f"{_json_path(e.absolute_path)}: {e.message}")
+    noise = {
+        f"{_json_path(e.absolute_path)}: {e.message}"
+        for e in errors
+        if e.validator == "unevaluatedProperties"
+        and tuple(e.absolute_path) in explained
+        and isinstance(e.instance, Mapping)
+        and set(e.instance) <= forms.relationship_keys
+    }
+    return sorted(problems - noise)
 
 
 def load_contract(source: ContractSource) -> Contract:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import yaml
 from click.testing import CliRunner
 
@@ -279,3 +280,126 @@ class TestLintRelationships:
             1,
             True,
         ), f"{given}: {should}\n{result.output}"
+
+
+class TestLintReferences:
+    """ODCS has no escape syntax for a name a table.property reference cannot hold; the id form references it."""
+
+    def _contract(self, tmp_path, to, **relationship):
+        fk = prop("Date ID", "integer", id="date_id", relationships=[{"to": to, **relationship}])
+        key = prop("Date ID", "integer", id="date_id")
+        schema = [schema_object("Fact Table", [fk], id="fact"), schema_object("Date Dim", [key], id="date_dim")]
+        return _write_contract(tmp_path, contract_dict(schema=schema))
+
+    def _model(self, tmp_path):
+        model = _pbip(tmp_path, {"'Fact Table'": ["'Date ID'"], "'Date Dim'": ["'Date ID'"]})
+        tmdl = model / "Sample.SemanticModel" / "definition" / "relationships.tmdl"
+        tmdl.write_text(
+            "relationship 1a2b\n\tfromColumn: 'Fact Table'.'Date ID'\n\ttoColumn: 'Date Dim'.'Date ID'\n",
+            encoding="utf-8",
+        )
+        return model
+
+    def test_id_reference_to_names_with_spaces_passes(self, tmp_path):
+        given = "a foreign key to a column with a space in its name, referenced by id"
+        should = "pass lint against a model that defines the relationship"
+
+        result = _run("lint", self._contract(tmp_path, "schema/date_dim/properties/date_id"), self._model(tmp_path))
+
+        assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
+
+    @pytest.mark.parametrize(
+        "reference",
+        [
+            "Date Dim.Date ID",
+            '"Date Dim"."Date ID"',
+            "[Date Dim].[Date ID]",
+            "`Date Dim`.`Date ID`",
+            r"Date_Dim.Date\ ID",
+            "Date_Dim.Date%20ID",
+        ],
+    )
+    @pytest.mark.parametrize("api_version", ["v3.1.0", "v3.2.0"])
+    def test_escaped_name_fails_with_one_explanation(self, tmp_path, reference, api_version):
+        given = f"the reference {reference!r} in an ODCS {api_version} contract"
+        should = "fail lint with one problem that says there is no escape syntax and shows the id form"
+        path = self._contract(tmp_path, reference)
+        path.write_text(path.read_text(encoding="utf-8").replace("v3.1.0", api_version), encoding="utf-8")
+
+        result = _run("lint", path)
+
+        assert (
+            result.exit_code,
+            "1 problem(s)" in result.output,
+            "no escape syntax" in result.output,
+            "schema/<object id>/properties/<property id>" in result.output,
+        ) == (1, True, True, True), f"{given}: {should}\n{result.output}"
+
+    @pytest.mark.parametrize(
+        ("reference", "says"),
+        [
+            ("schema/date_dim/properties/nope", "has no property with the id 'nope'"),
+            ("schema/nope/properties/date_id", "no schema object has the id 'nope'"),
+            ("Date_Dim.Date_ID", "names no column property"),
+        ],
+    )
+    def test_reference_that_names_nothing_fails(self, tmp_path, reference, says):
+        given = f"the well-formed reference {reference!r}, which names nothing in the contract"
+        should = "fail lint, saying what is missing, because lint claims every name resolves"
+
+        result = _run("lint", self._contract(tmp_path, reference))
+
+        assert (result.exit_code, says in result.output) == (1, True), f"{given}: {should}\n{result.output}"
+
+    @pytest.mark.parametrize(
+        ("api_version", "target", "reference"),
+        [
+            ("v3.1.0", prop("y", "object", properties=[prop("z")]), "b.y"),
+            ("v3.2.0", prop("y", "object", properties=[prop("z")]), "b.y.z"),
+        ],
+    )
+    def test_reference_to_a_non_column_property_passes(self, tmp_path, api_version, target, reference):
+        given = f"the valid {api_version} reference {reference!r} to an object property"
+        should = "pass lint, because it names something; mapping reports the rule as skipped"
+        a = schema_object("a", [prop("x", relationships=[{"to": reference}])])
+        contract = contract_dict(api_version, schema=[a, schema_object("b", [target])])
+
+        result = _run("lint", _write_contract(tmp_path, contract))
+
+        assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
+
+    def test_a_typo_key_beside_a_rejected_reference_is_still_reported(self, tmp_path):
+        given = "a relationship with a rejected reference and an unknown key 'too'"
+        should = "report both: the reference explained, and the unknown key"
+        a = schema_object("a", [prop("x", relationships=[{"to": "b.y z", "too": 1}])])
+        contract = contract_dict(schema=[a, schema_object("b", [prop("y z")])])
+
+        result = _run("lint", _write_contract(tmp_path, contract))
+
+        assert ("no escape syntax" in result.output, "'too'" in result.output) == (True, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_a_rejected_reference_in_a_composite_is_explained(self, tmp_path):
+        given = "a composite relationship with one rejected item"
+        should = "explain that item by its index, instead of the schema's error for the whole list"
+        rel = {"from": ["a.x", "a.y z"], "to": ["b.x", "b.y"]}
+        a = schema_object("a", [prop("x"), prop("y z")], relationships=[rel])
+        contract = contract_dict(schema=[a, schema_object("b", [prop("x"), prop("y")])])
+
+        result = _run("lint", _write_contract(tmp_path, contract))
+
+        assert (
+            "relationships[0].from[1]: 'a.y z' is not a valid ODCS reference" in result.output,
+            "is not valid under any of the given schemas" in result.output,
+        ) == (True, False), f"{given}: {should}\n{result.output}"
+
+    def test_composite_relationship_passes(self, tmp_path):
+        given = "a valid composite (multi-column) relationship, which mapping reports as skipped"
+        should = "pass lint, because it is valid ODCS that resolves"
+        a = schema_object("a", [prop("x"), prop("y")])
+        b = schema_object("b", [prop("x"), prop("y")], relationships=[{"from": ["b.x", "b.y"], "to": ["a.x", "a.y"]}])
+
+        result = _run("lint", _write_contract(tmp_path, contract_dict(schema=[a, b])))
+
+        assert result.exit_code == 0, f"{given}: {should}\n{result.output}"
