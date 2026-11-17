@@ -1,6 +1,6 @@
 # Contract Id References Epic
 
-**Status**: 🔄 IN PROGRESS
+**Status**: ✅ COMPLETED (2026-11-17)
 **Goal**: Let a contract reference any model column, including a name with a space, by using ODCS id references, and say how when a reference fails.
 
 ## Overview
