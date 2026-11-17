@@ -170,7 +170,7 @@
     },
     "suggestions": {
       "type": "array",
-      "description": "ODCS YAML that would cover each uncovered table, column, and measure, and where it goes.",
+      "description": "ODCS YAML that would cover each uncovered table, column, measure, and relationship, and where it goes.",
       "items": {
         "type": "object",
         "required": [
@@ -178,7 +178,8 @@
           "identifier",
           "section",
           "schemaObject",
-          "yaml"
+          "yaml",
+          "ids"
         ],
         "properties": {
           "kind": {
@@ -191,9 +192,10 @@
             "enum": [
               "schema",
               "properties",
-              "quality"
+              "quality",
+              "relationships"
             ],
-            "description": "schema: a new schema object. properties / quality: of the schema object schemaObject."
+            "description": "schema: a new schema object. properties / quality / relationships: of the schema object schemaObject."
           },
           "schemaObject": {
             "type": [
@@ -205,6 +207,34 @@
           "yaml": {
             "type": "string",
             "description": "A YAML list of the entries to add to that section."
+          },
+          "ids": {
+            "type": "array",
+            "description": "Ids to give contract elements before adding the YAML: a relationship whose names a table.property reference cannot hold references them by id. Empty otherwise.",
+            "items": {
+              "type": "object",
+              "required": [
+                "schemaObject",
+                "property",
+                "id"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "schemaObject": {
+                  "type": "string"
+                },
+                "property": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "null: the id goes on the schema object itself."
+                },
+                "id": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

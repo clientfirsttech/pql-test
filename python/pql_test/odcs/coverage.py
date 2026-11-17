@@ -73,6 +73,7 @@ class ModelObject:
     table: str = ""  # tables, columns, measures: the (home) table
     name: str = ""  # columns and measures: the name without the table
     data_type: str | None = None  # columns only: the TMDL dataType, when known
+    ends: tuple[str, ...] = ()  # relationships only: (from table, from column, to table, to column)
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ def inventory_of(tables: Iterable[ModelTable], relationships: Iterable[tuple[str
         if reason:
             excluded.append(Exclusion(Kind.RELATIONSHIP, identifier, f"it joins {reason}"))
         else:
-            objects.append(ModelObject(Kind.RELATIONSHIP, identifier))
+            objects.append(ModelObject(Kind.RELATIONSHIP, identifier, ends=tuple(ends)))
     columns = {t.name: {c.name: c.data_type for c in t.columns} for t in tables}
     return Inventory(tuple(objects), tuple(excluded), columns, relationships)
 
@@ -429,8 +430,9 @@ class Counts:
 class Suggestion:
     """ODCS YAML that would cover one uncovered object, and where in the contract it goes.
 
-    *section* is ``schema`` (a new schema object), or ``properties`` / ``quality`` of the
-    schema object named *schema_object* (None: any schema object).
+    *section* is ``schema`` (a new schema object), or ``properties`` / ``quality`` / ``relationships`` of the
+    schema object named *schema_object* (None: any schema object). *ids* are ``(schema object, property or
+    None, id)``: the ids to give those elements first, for a relationship that references them by id.
     """
 
     kind: Kind
@@ -438,6 +440,7 @@ class Suggestion:
     section: str
     schema_object: str | None
     yaml: str
+    ids: tuple[tuple[str, str | None, str], ...] = ()
 
     @property
     def where(self) -> str:
@@ -482,9 +485,90 @@ def _measure_rule(obj: ModelObject, taken: set[str]) -> dict:
     }
 
 
+NO_RELATIONSHIPS_V30 = (
+    "relationships: ODCS v3.0 has no relationships, so none is suggested; use apiVersion v3.1.0 or later to list them"
+)
+
+
+def _forms(plan: Plan):
+    from pql_test.odcs.loader import reference_forms
+
+    return reference_forms(plan.contract.api_version.rsplit(".", 1)[0])
+
+
+class _Ids:
+    """Ids for the elements an id-form relationship references: an existing id is reused, and a new one is
+    unique within its containing array (the ODCS rule) and the same in every suggestion that needs it."""
+
+    def __init__(self, plan: Plan) -> None:
+        self._objects = plan.contract.schema_objects
+        self._proposed: dict[tuple[str, str | None], str] = {}
+
+    def of(self, owner: str, prop_name: str | None, element: Mapping | None, siblings: list) -> tuple[str, bool]:
+        """``(id, whether the element still needs it)`` for *element* (None: not in the contract yet)."""
+        if element is not None and element.get("id"):
+            return str(element["id"]), False
+        key = (owner, prop_name)
+        if key not in self._proposed:
+            # Ids already proposed for the same array: schema objects, or this schema object's properties.
+            same_array = [
+                v
+                for (o, p), v in self._proposed.items()
+                if (p is None if prop_name is None else (o == owner and p is not None))
+            ]
+            taken = {str(s["id"]) for s in siblings if isinstance(s, Mapping) and s.get("id")} | set(same_array)
+            base = re.sub(r"[^A-Za-z0-9_]+", "_", prop_name or owner).strip("_").lower() or "id"
+            candidates = (base, *(f"{base}_{n}" for n in range(2, len(taken) + 3)))
+            self._proposed[key] = next(i for i in candidates if i not in taken)
+        return self._proposed[key], True
+
+    def reference(self, owner: str, obj: Mapping | None, prop_name: str, prop: Mapping | None) -> tuple[str, list]:
+        """The ``schema/<id>/properties/<id>`` reference, and the ``(owner, property, id)`` ids to add for it."""
+        obj_id, new_obj = self.of(owner, None, obj, self._objects)
+        prop_id, new_prop = self.of(owner, prop_name, prop, (obj or {}).get("properties") or [])
+        to_add = [(owner, None, obj_id)] * new_obj + [(owner, prop_name, prop_id)] * new_prop
+        return f"schema/{obj_id}/properties/{prop_id}", to_add
+
+
+def _contract_end(plan: Plan, table: str, column: str) -> tuple[Mapping | None, Mapping | None]:
+    """The contract schema object and column property whose model names are *table* and *column*."""
+    obj = next((o for o in plan.contract.schema_objects if plan.names.table(o).lower() == table.lower()), None)
+    props = (obj or {}).get("properties") or []
+    prop = next((p for p in props if is_column(p) and plan.names.column(obj, p).lower() == column.lower()), None)
+    return obj, prop
+
+
+def _relationship_suggestion(plan: Plan, o: ModelObject, ids: _Ids) -> Suggestion | None:
+    """A schema-level foreign key for an uncovered relationship: each end as ``table.property`` when both its
+    names fit that form, else by id.
+
+    An end the contract does not list yet is named as the model names it, as the table and column suggestions
+    add it. ODCS v3.0 has no relationships, so it gets none.
+    """
+    forms = _forms(plan)
+    if forms is None:
+        return None
+    refs, to_add, owners = [], [], []
+    for table, column in (o.ends[:2], o.ends[2:]):
+        obj, prop = _contract_end(plan, table, column)
+        owner, prop_name = obj["name"] if obj else table, prop["name"] if prop else column
+        owners.append(owner)
+        # A dot in a name would read as a nested property, so it needs the id form too.
+        if "." not in owner + prop_name and forms.shorthand.fullmatch(f"{owner}.{prop_name}"):
+            refs.append(f"{owner}.{prop_name}")
+            continue
+        ref, added = ids.reference(owner, obj, prop_name, prop)
+        refs.append(ref)
+        to_add.extend(added)
+    entry = {"type": "foreignKey", "from": refs[0], "to": refs[1]}
+    return Suggestion(Kind.RELATIONSHIP, o.identifier, "relationships", owners[0], _yaml([entry]), tuple(to_add))
+
+
 def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, ...]:
-    """YAML for every uncovered table, column, and measure: tables and columns the way `init` writes them,
-    and a rule template per measure (an ODCS schema cannot list a measure, so only a rule covers one)."""
+    """YAML for every uncovered table, column, measure, and relationship: tables and columns the way `init`
+    writes them, a rule template per measure (an ODCS schema cannot list a measure, so only a rule covers one),
+    and a foreign key per relationship (by id when a name has a character a table.property reference cannot hold).
+    """
     from pql_test.odcs.scaffold import starter_object, starter_property
 
     objects = tuple(objects)
@@ -518,6 +602,9 @@ def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, 
             # (a measure table, say) can go under any schema object.
             owner = in_contract.get(o.table.lower())
             found.append(Suggestion(Kind.MEASURE, o.identifier, "quality", owner, _yaml([_measure_rule(o, taken)])))
+    ids = _Ids(plan)
+    relationships = (_relationship_suggestion(plan, o, ids) for o in uncovered if o.kind is Kind.RELATIONSHIP)
+    found.extend(s for s in relationships if s is not None)
     return tuple(found)
 
 
@@ -577,6 +664,7 @@ class CoverageReport:
                     "section": s.section,
                     "schemaObject": s.schema_object,
                     "yaml": s.yaml,
+                    "ids": [{"schemaObject": o, "property": p, "id": i} for o, p, i in s.ids],
                 }
                 for s in self.suggestions
             ],
@@ -603,6 +691,9 @@ def build_coverage(
     evidence = found.evidence + (dax.evidence if dax else ())
     objects = classify(inventory, evidence)
     c = plan.contract
+    no_relationships = _forms(plan) is None and any(
+        o.obj.kind is Kind.RELATIONSHIP and o.level is Level.NOT_COVERED for o in objects
+    )
     return CoverageReport(
         contract={"id": c.id, "name": c.name, "apiVersion": c.api_version, "source": c.source},
         model=model,
@@ -613,5 +704,5 @@ def build_coverage(
         suggestions=suggestions(plan, objects),
         mismatches=tuple(model_problems(plan, inventory.tables, inventory.relationships)),
         live=dax is not None,
-        unavailable=dax.unavailable if dax else (),
+        unavailable=(dax.unavailable if dax else ()) + ((NO_RELATIONSHIPS_V30,) if no_relationships else ()),
     )

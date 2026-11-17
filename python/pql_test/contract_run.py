@@ -664,6 +664,12 @@ def print_coverage(report, verbose: bool, min_coverage: float | None = None) -> 
         click.echo(f"\nTo cover them, add to the contract ({len(report.suggestions)}):")
         for s in report.suggestions:
             click.echo(f"\n  # {s.kind.value} {s.identifier}, {s.where}")
+            if s.ids:
+                click.echo("  # (a name has a character a table.property reference cannot hold, so it references ids)")
+                click.echo("  # first give these elements an id:")
+                for owner, prop_name, element_id in s.ids:
+                    element = f"schema object {owner!r}" if prop_name is None else f"property {prop_name!r} of {owner!r}"
+                    click.echo(f"  #   {element}: id: {element_id}")
             for line in s.yaml.rstrip("\n").splitlines():
                 click.echo(f"  {line}")
     click.echo(f"\n{NOT_COUNTED}")
