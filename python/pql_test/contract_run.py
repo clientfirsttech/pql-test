@@ -231,6 +231,29 @@ def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_mode
     return abs_path, resolve_xmla_connection(abs_path, opts)
 
 
+def isolate_failed_suites(files, results: list[TestResult], conn) -> list[TestResult]:
+    """*results*, with each suite that failed to run as a whole re-run one call at a time.
+
+    A suite runs as one query, so one call that cannot run (a contract DAX expression with a
+    type error, a function the model lacks) fails the query, and every rule in the suite would
+    show that one error. Run alone, each call reports its own result, and the error lands on
+    the call that has it. Suites that ran, and suites of one call, are not run again.
+    """
+    by_name = {f.function_name: f for f in files}
+    isolated: list[TestResult] = []
+    for result in results:
+        suite = by_name.get(result.test_name)
+        if suite is None or result.suite_name != suite.function_name or not result.error or len(suite.calls) < 2:
+            isolated.append(result)
+            continue
+        for test_name, call in suite.calls:
+            alone = PqlTest(name=suite.function_name, file_path="", source=f"EVALUATE {call}\n")
+            for row in run_tests([alone], conn):
+                # A call that cannot run alone either: name its rule instead of the suite.
+                isolated.append(replace(row, test_name=test_name) if row.test_name == suite.function_name else row)
+    return isolated
+
+
 def resolve_model_target(model_path: str, model_dir: str | None) -> tuple[str, str]:
     """``(PBIP folder, connection target)`` for MODEL_PATH.
 
@@ -417,6 +440,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
 
         tests = [suite_test(f) for f in files]
         results = run_tests(tests, conn, skip_message="No XMLA connection available; the suites were not run.")
+        results = isolate_failed_suites(files, results, conn)
         suite = summarise(abs_path, tests, results)
         suite_json = hooks.suite_to_dict(suite)
         report = trace(plan, suite_json, suite_prefix=suite_prefix)
