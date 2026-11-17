@@ -34,32 +34,98 @@ def relationship_entries(contract: Contract) -> Iterator[tuple[Mapping, Mapping 
             yield obj, None, obj["name"], i, rel
 
 
-def _end(contract: Contract, names: NameResolver, ref: object) -> tuple[str, str] | str:
-    """Model ``(table, column)`` for a ``table.property`` reference; otherwise why it cannot resolve."""
+ID_FORM = "schema/<object id>/properties/<property id>"
+
+
+class BrokenReference(str):
+    """Why a well-formed reference resolves to nothing in the contract (a typo, not an unsupported form)."""
+
+
+def _by(items: object, key: str, value: str) -> Mapping | None:
+    return next((i for i in items or [] if isinstance(i, Mapping) and i.get(key) == value), None)
+
+
+def _by_id(contract: Contract, ref: str) -> tuple[Mapping, Mapping] | str:
+    """The elements a fully qualified ``schema/<object id>/properties/<property id>`` reference names.
+
+    ODCS ids are unique only within their containing array, so the property is looked up under its object.
+    """
+    if "#" in ref:
+        return f"{ref!r} references another file, which is not resolved"
+    parts = ref.removeprefix("/").split("/")
+    if len(parts) != 4 or parts[0] != "schema" or parts[2] != "properties":
+        return f"{ref!r} is not a {ID_FORM} reference (other id paths are not resolved)"
+    obj = _by(contract.schema_objects, "id", parts[1])
+    if obj is None:
+        return BrokenReference(f"{ref!r}: no schema object has the id {parts[1]!r}")
+    prop = _by(obj.get("properties"), "id", parts[3])
+    if prop is None:
+        return BrokenReference(f"{ref!r}: schema object {obj['name']!r} has no property with the id {parts[3]!r}")
+    return obj, prop
+
+
+def resolve_reference(contract: Contract, ref: object) -> tuple[Mapping, Mapping] | str:
+    """The contract ``(schema object, property)`` a relationship end names, or why it cannot be resolved.
+
+    A :class:`BrokenReference` reason means the reference is well formed but names nothing.
+    """
     if isinstance(ref, list):
         return "composite (multi-column) relationships are not checked yet"
-    if not isinstance(ref, str) or "/" in ref or "#" in ref:
-        return f"{ref!r} is not a table.property reference (fully qualified id references are not resolved yet)"
-    table_name, _, column_name = ref.partition(".")
-    obj = next((o for o in contract.schema_objects if o["name"] == table_name), None)
-    prop = next((p for p in (obj or {}).get("properties") or [] if p.get("name") == column_name), None)
-    if obj is None or prop is None or not is_column(prop):
-        return f"{ref!r} names no column property in the contract schema"
+    if not isinstance(ref, str):
+        return f"{ref!r} is not a reference"
+    if "/" in ref or "#" in ref:
+        found = _by_id(contract, ref)
+        if isinstance(found, str):
+            return found
+    else:
+        table_name, _, column_name = ref.partition(".")
+        if "." in column_name:  # ODCS 3.2 allows table.property.nested
+            return f"{ref!r} references a nested property, which has no semantic model column"
+        obj = _by(contract.schema_objects, "name", table_name)
+        prop = _by((obj or {}).get("properties"), "name", column_name)
+        if obj is None or prop is None:
+            return BrokenReference(f"{ref!r} names no column property in the contract schema")
+        found = (obj, prop)
+    if not is_column(found[1]):
+        return f"{ref!r} names a property that is not a column"
+    return found
+
+
+def _end(contract: Contract, names: NameResolver, ref: object) -> tuple[str, str] | str:
+    """Model ``(table, column)`` for a relationship end; otherwise why it cannot resolve."""
+    found = ref if isinstance(ref, tuple) else resolve_reference(contract, ref)
+    if isinstance(found, str):
+        return found
+    obj, prop = found
+    if not is_column(prop):  # the property-level source end; resolve_reference checks the referenced ends
+        return f"{obj['name']}.{prop.get('name')} is not a column property"
     return names.table(obj), names.column(obj, prop)
 
 
 def resolve(
     contract: Contract, names: NameResolver, obj: Mapping, prop: Mapping | None, rel: Mapping
 ) -> ModelRelationship | str:
-    """The relationship in model names, or the reason it cannot be resolved."""
+    """The relationship in model names, or the reason it cannot be resolved.
+
+    A :class:`BrokenReference` reason means an end is well formed but names nothing in the contract.
+    """
     if rel.get("type", "foreignKey") != "foreignKey":
         return f"relationship type {rel.get('type')!r} is not a foreign key"
-    source = _end(contract, names, f"{obj['name']}.{prop.get('name')}" if prop is not None else rel.get("from"))
+    source = _end(contract, names, (obj, prop) if prop is not None else rel.get("from"))
     target = _end(contract, names, rel.get("to"))
     for end in (source, target):
         if isinstance(end, str):
             return end
     return ModelRelationship(*source, *target)
+
+
+def broken_references(contract: Contract, names: NameResolver) -> list[str]:
+    """Every relationship whose reference is well formed but names nothing in the contract (for `lint`)."""
+    found = (
+        (f"{scope}.relationships[{index}]", resolve(contract, names, obj, prop, rel))
+        for obj, prop, scope, index, rel in relationship_entries(contract)
+    )
+    return [f"{rule_id}: {reason}" for rule_id, reason in found if isinstance(reason, BrokenReference)]
 
 
 def relationship_rules(

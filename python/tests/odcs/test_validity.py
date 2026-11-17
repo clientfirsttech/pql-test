@@ -8,6 +8,8 @@ import pytest
 
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.ir import Status, Target
+from pql_test.odcs.loader import load_contract
+from pql_test.odcs.mapping.relationships import BrokenReference, resolve_reference
 from tests.odcs.factories import contract_dict, custom, prop, schema_object
 
 
@@ -277,6 +279,98 @@ class TestRelationships:
         outcome = _outcomes(self._schema(relationship))["orders.customer_id.relationships[0]"]
 
         assert (outcome.status, bool(outcome.reason)) == (Status.SKIPPED, True), f"{given}: {should}"
+
+    def _id_schema(self, relationship: dict, where: str = "property") -> list:
+        """The same two tables with ids, and spaces in the names an id reference avoids."""
+        schema = self._schema(relationship, where)
+        schema[0]["id"], schema[0]["properties"][0]["id"] = "orders_id", "fk"
+        schema[1].update(id="customers_id", name="Customer Table")
+        schema[1]["properties"][0].update(id="key", name="Customer ID")
+        return schema
+
+    @pytest.mark.parametrize(
+        ("relationship", "where", "rule_id"),
+        [
+            ({"to": "schema/customers_id/properties/key"}, "property", "orders.customer_id.relationships[0]"),
+            ({"to": "/schema/customers_id/properties/key"}, "property", "orders.customer_id.relationships[0]"),
+            (
+                {"from": "schema/orders_id/properties/fk", "to": "schema/customers_id/properties/key"},
+                "schema",
+                "orders.relationships[0]",
+            ),
+        ],
+    )
+    def test_id_reference_maps_with_model_names(self, relationship, where, rule_id):
+        given = f"a {where}-level foreign key that references {relationship['to']!r} by id"
+        should = "map to Relationship.ShouldExist with the model names of the elements the ids name"
+
+        outcome = _outcomes(self._id_schema(relationship, where))[rule_id]
+
+        assert (outcome.status, _calls(outcome)) == (
+            Status.MAPPED,
+            [
+                (
+                    "rel.exists",
+                    {"fromTable": "Orders", "fromColumn": "CustomerKey", "toTable": "Customer", "toColumn": "Customer ID"},
+                )
+            ],
+        ), f"{given}: {should}"
+
+    def test_property_ids_are_scoped_to_their_schema_object(self):
+        given = "two schema objects whose properties share the id 'key'"
+        should = "resolve the property under the schema object the reference names"
+        schema = self._id_schema({"to": "schema/customers_id/properties/key"})
+        schema[0]["properties"].append(prop("other", "integer", id="key"))
+
+        outcome = _outcomes(schema)["orders.customer_id.relationships[0]"]
+
+        assert _calls(outcome)[0][1]["toColumn"] == "Customer ID", f"{given}: {should}"
+
+    @pytest.mark.parametrize(
+        ("reference", "names"),
+        [
+            ("schema/nope/properties/key", "'nope'"),
+            ("schema/customers_id/properties/nope", "'nope'"),
+            ("customers.nope", "customers.nope"),
+            ("elsewhere.id", "elsewhere.id"),
+        ],
+    )
+    def test_reference_that_names_nothing_is_broken(self, reference, names):
+        given = f"the reference {reference!r}, which names nothing in the contract"
+        should = "be skipped as a broken reference, naming what is missing"
+
+        outcome = _outcomes(self._id_schema({"to": reference}))["orders.customer_id.relationships[0]"]
+        found = resolve_reference(self._contract(self._id_schema({"to": reference})), reference)
+
+        assert (outcome.status, names in outcome.reason, isinstance(found, BrokenReference)) == (
+            Status.SKIPPED,
+            True,
+            True,
+        ), f"{given}: {should}\n{outcome.reason}"
+
+    @pytest.mark.parametrize(
+        ("reference", "says"),
+        [
+            ("other.yaml#/schema/customers_id/properties/key", "another file"),
+            ("schema/customers_id", "schema/<object id>/properties/<property id>"),
+            ("definitions/x/properties/key", "schema/<object id>/properties/<property id>"),
+        ],
+    )
+    def test_unsupported_id_reference_is_skipped(self, reference, says):
+        given = f"the reference {reference!r}"
+        should = "be skipped with a reason, as unsupported rather than broken"
+        contract = self._contract(self._id_schema({"to": reference}))
+
+        found = resolve_reference(contract, reference)
+
+        assert (isinstance(found, str), says in str(found), isinstance(found, BrokenReference)) == (
+            True,
+            True,
+            False,
+        ), f"{given}: {should}\n{found}"
+
+    def _contract(self, schema: list):
+        return load_contract(contract_dict(schema=schema))
 
     def test_relationships_keep_the_0_7_skip(self):
         given = "a relationship under the 0.7 catalog"
