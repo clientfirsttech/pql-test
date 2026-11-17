@@ -59,7 +59,7 @@ The percentage counts the objects with at least one rule that runs (values teste
 - A calculated column's values come from DAX, so the report lists every calculated column no rule checks the values of.
 - Left out, the way `init` leaves them out: Power BI's automatic date tables, measure tables (measures and only hidden placeholder columns, in no relationship; their measures still count), and calculation groups. A fact table that hides every column and shows only measures is not a measure table: it joins its dimensions. Roles and partitions are never counted, because no contract rule targets them.
 
-**What to change.** The report ends with ODCS YAML for each gap: a schema object for a table the contract does not list (written the way `init` writes one, with a rule template for each of its measures), a property for a missing column, and an `engine: pql-test` rule template for every other uncovered measure. Edit each template's comparator to the value the measure must meet. The report also lists contract entries the model lacks or types differently (the checks `lint CONTRACT MODEL_PATH` makes), and names in contract DAX that match nothing in the model.
+**What to change.** The report ends with ODCS YAML for each gap: a schema object for a table the contract does not list (written the way `init` writes one, with a rule template for each of its measures), a property for a missing column, an `engine: pql-test` rule template for every other uncovered measure, and a foreign key for each uncovered relationship. Edit each template's comparator to the value the measure must meet. A relationship end whose name has a character a `table.property` reference cannot hold (a space, usually) is written [by id](#names-with-spaces-reference-by-id): the report lists the `id` to give each element first (the JSON's `ids`), reusing ids the contract already has. ODCS v3.0 has no relationships, so a v3.0 contract gets no relationship suggestion, and the report says so. The report also lists contract entries the model lacks or types differently (the checks `lint CONTRACT MODEL_PATH` makes), and names in contract DAX that match nothing in the model.
 
 **From the files, or from the model.** By default `coverage` reads the PBIP folder's TMDL and finds what contract DAX references with a text scan, so it runs anywhere, Linux CI included. `--live` reads the deployed or open model instead, with `run`'s connection options, and asks the model's engine what each rule's DAX references, through `INFO.CALCDEPENDENCY("QUERY", ...)`. The engine's answer also lists every column a referenced measure uses, so each rule is asked twice, the second time with its measures replaced by `BLANK()`, and only direct references count. `--live` needs XMLA (Windows) and, like `code-coverage`, write permission on the model: its INFO functions and the engine check need it. When the model refuses them, `--live` counts from the PBIP folder and the text scan instead, and the report says why; with no PBIP folder to fall back on, it exits 1. The JSON labels each object's evidence `contract`, `scan`, or `engine`.
 
@@ -155,6 +155,38 @@ schema:
 
 When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchanged. `lint CONTRACT MODEL_PATH` checks that every resolved table and column exists in the model's TMDL, and that each column's data type is one the contract accepts.
 
+### Names with spaces: reference by id
+
+A relationship names its ends with references. ODCS has two forms:
+
+| Form | Example | Names it can hold |
+|---|---|---|
+| `table.property` (shorthand) | `to: Date_Dim.DateKey` | letters, digits, and `_` (ODCS 3.2 also `-`) |
+| fully qualified, by `id` | `to: schema/date_dim/properties/date_id` | any: the ids carry the reference, and the names stay as the model has them |
+
+Power BI names usually contain spaces, which the shorthand form cannot hold, and ODCS has no escape syntax. `Date_Dim.Date ID`, `"Date Dim"."Date ID"`, `[Date Dim].[Date ID]`, backticks, `Date\ ID`, and `Date%20ID` all fail schema validation. To reference such a column, give the schema object and the property an `id` and use the fully qualified form:
+
+```yaml
+schema:
+  - name: Fact_Table
+    properties:
+      - name: Date ID
+        relationships:                  # property level: the foreign key is this property
+          - to: schema/date_dim/properties/date_id
+  - id: date_dim
+    name: Date_Dim
+    properties:
+      - id: date_id
+        name: Date ID
+```
+
+- An id may hold letters, digits, `_`, and `-`. It must be unique within its array (the schema objects, or one schema object's properties), so two tables can each have a property with the id `date_id`. A leading `/` is optional.
+- A schema-level relationship (under the schema object, with `from` and `to`) can use either form for each end.
+- `lint` explains a rejected reference in one problem (in a composite relationship too), and fails on a reference that names nothing: an id no element has, or a `table.property` no property matches. A reference to a property that is not a column, or to a nested property (ODCS 3.2 `table.property.nested`), is valid ODCS: `mapping` reports its rule as skipped.
+- `coverage` suggests the id form, with the ids to add, for an uncovered relationship whose names need it.
+- A reference to an element in another contract file (`other.yaml#/schema/...`) is skipped: `mapping` says it references another file, which pql-test does not resolve.
+- The other way to keep the shorthand form is an ODCS name that fits (`Date_ID`) mapped to the model's name with `pbiColumn` (`Date ID`). The contract's names then differ from the model's.
+
 ## Column types
 
 Each property's `logicalType` becomes a `Tbl.ColumnDataTypeShouldBe` check in the Schema suite. It compares with the type the model reports in `INFO.VIEW.COLUMNS()`:
@@ -219,7 +251,7 @@ PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap pl
 | v3.2 `enum`, and `invalidValues` with `arguments.validValues` and a zero ceiling | `Col.ValuesShouldBeInSet` (null rows are skipped) | mapped; **approximated** for text with letters (DAX compares text without regard to case) |
 | `invalidValues` with `validValues` and a count or percent ceiling | `Tbl.RowCountShouldBeAtMost` / `Tbl.RowRateShouldBeAtMost` over the non-null rows outside the list | as above |
 | `missingValues` (default: null, and `""` on text; or `arguments.missingValues`) | `Tbl.RowCountShouldBeAtMost` / `Tbl.RowRateShouldBeAtMost` over the missing rows | as above |
-| v3.1 `relationships` (`foreignKey`, `table.property` ends) | `Relationship.ShouldExist`, from the foreign key to the key | mapped |
+| v3.1 `relationships` (`foreignKey`; `table.property` or `schema/<id>/properties/<id>` ends, see [Names with spaces](#names-with-spaces-reference-by-id)) | `Relationship.ShouldExist`, from the foreign key to the key | mapped |
 | `slaProperties` `latency` in days or hours, with `table.column` element(s) | `Col.MaxDateShouldBeWithinDays` / `Col.MaxDateShouldBeWithinHours`, one per element | **approximated**: data age, see [Freshness](#freshness-latency-vs-frequency) |
 | `slaProperties` `frequency` in days or hours, with table element(s) | `ShouldBeLessOrEqual` on the hours since `INFO.PARTITIONS()[RefreshedTime]`, in the `RefreshAge` suite | **approximated**: refresh recency, see [Freshness](#freshness-latency-vs-frequency) |
 | `type: custom`, `engine: pql-test` | the contract's DAX, see [DAX rules](#dax-rules-in-the-contract-engine-pql-test) | mapped |
@@ -247,7 +279,7 @@ These rules are reported as **skipped**, with the plan for each:
 | Regular expressions beyond `^literal`, `literal$`, and a bare literal | later |
 | Date and time bounds; a `number`'s `exclusiveMaximum`, or `exclusiveMinimum` other than 0; `multipleOf`; `format` | no PQL.Assert check |
 | Value lists on date and time columns | not planned: the model compares them as locale-formatted text |
-| Composite (multi-column) relationships; fully qualified (`id`-based) relationship references | later |
+| Composite (multi-column) relationships; references to an element in another contract file | later |
 | `slaProperties` `latency` on a table with no column | not planned: refresh time is not source latency (use `frequency`) |
 | `slaProperties` `timeOfAvailability`, `retention`, and other SLA properties | not planned (`retention` could use `Partitions.ShouldExist` later) |
 | Nested (object / array) and v3.2 `map` / `vector` properties | no model column |

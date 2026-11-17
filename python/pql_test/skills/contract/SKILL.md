@@ -173,9 +173,25 @@ With `--pql-assert 0.8` (needs PQL.Assert 0.8.0 or later in the model), more rul
 - simple patterns (`^literal`, `literal$`, a bare literal) use `Col.ShouldStartWith` / `ShouldEndWith` / `ShouldContainString`, case-sensitive like the regex;
 - `logicalTypeOptions` bounds use `Col.ShouldBeInRange` / `MinShouldBeAtLeast` / `MaxShouldBeAtMost` / `ShouldBePositive` (an integer's exclusive bound converts exactly), and `minLength` / `maxLength` use `Col.TextLengthShouldBeInRange`;
 - ODCS 3.2 `enum` and `invalidValues` with `validValues` use `Col.ValuesShouldBeInSet`, or `Tbl.RowCountShouldBeAtMost` / `RowRateShouldBeAtMost` with a threshold; `missingValues` (default null and `""`) uses the same row checks;
-- `relationships` (foreign keys between contract properties) use `Relationship.ShouldExist`, and `lint` checks them against the model's TMDL;
+- `relationships` (foreign keys between contract properties) use `Relationship.ShouldExist`, and `lint` checks them against the model's TMDL. An end is `table.property` or, by id, `schema/<object id>/properties/<property id>` (see below);
 - a `latency` SLA with `table.column` element(s) uses `Col.MaxDateShouldBeWithinDays` / `…Hours` (data age), and a `frequency` SLA with a table element checks the hours since the last refresh (refresh recency); both are approximated;
 - `engine: pql-test` rules can also call any PQL.Assert assertion directly (`implementation: {function, args}`).
+
+A `table.property` reference holds only letters, digits, and `_` (ODCS 3.2 also `-`), and ODCS has no escape syntax: quotes, brackets, backticks, `\ `, and `%20` all fail validation. For a name with a space, as Power BI names often have, give the schema object and property an `id` (unique within its array) and reference the ids. At the property level the foreign key is the property itself, so only the target needs ids:
+```yaml
+schema:
+  - name: Fact_Table
+    properties:
+      - name: Date ID
+        relationships:
+          - to: schema/date_dim/properties/date_id
+  - id: date_dim
+    name: Date_Dim
+    properties:
+      - id: date_id
+        name: Date ID
+```
+`lint` explains a rejected reference and fails on one that names nothing; `coverage` prints this form, with the ids to add, for an uncovered relationship that needs it.
 
 Options shared by `generate`, `mapping`, and `run`:
 - `--env ENV` — environment token for suite names, e.g. `DEV` (generate/run; required).

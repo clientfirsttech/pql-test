@@ -139,6 +139,13 @@ _SKIP_CASES = [
         "slaProperties[0]",
         "refresh time is not source latency",
     ),
+    (
+        contract_dict(
+            schema=[schema_object("T", [prop("a", relationships=[{"to": "other.yaml#/schema/x/properties/y"}])])]
+        ),
+        "T.a.relationships[0]",
+        "references another file",
+    ),
 ]
 
 
