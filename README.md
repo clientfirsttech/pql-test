@@ -1461,11 +1461,12 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 Place these in a `.env` file (git-ignored) at the directory where you invoke
 the CLI — typically the repo root or `python/`. The CLI loads `.env`
 automatically via `python-dotenv` by walking up from the current working
-directory. Copy `python/.env.example` to get started.
+directory, so a `python/.env` is not found when you run from the repo root.
+Copy `python/.env.example` to get started.
 
 > The live integration tests (`@pytest.mark.live`) read `python/.env` too. An
-> optional `python/tests/.env` overrides it for the tests only; the CLI never
-> reads it.
+> optional `python/tests/.env` overrides it for the tests only; the CLI reads
+> it only when run from `python/tests/`.
 
 > **Which dataset runs:** `--dataset-id` on the command line wins. Otherwise a `<name>.SemanticModel` MODEL_PATH runs against the dataset named `<name>` in the workspace, even when `PQL_DATASET_ID` is set, and the CLI prints a note when it sets the variable aside. `PQL_DATASET_ID` (the SampleModel dataset here) applies only to a MODEL_PATH that names no model, such as a PBIP root folder. When a dataset's name differs from its folder, pass its ID, for example `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`. To test the model open in Power BI Desktop instead, use `local/<name>`.
 

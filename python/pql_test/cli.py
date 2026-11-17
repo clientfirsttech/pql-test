@@ -71,8 +71,11 @@ from pathlib import Path
 # subprocess-launched CLI runs).  See run_cli() in tests/test_pql_test_cli.py.
 if not os.environ.get("PQL_TEST_HERMETIC"):
     try:
-        from dotenv import load_dotenv  # type: ignore[import-untyped]
-        load_dotenv()
+        from dotenv import find_dotenv, load_dotenv  # type: ignore[import-untyped]
+        # Search from the working directory, as documented: with no path,
+        # python-dotenv searches from this file's folder, which in a pip
+        # install is site-packages, so a project's .env was never found.
+        load_dotenv(find_dotenv(usecwd=True))
     except ImportError:
         pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
