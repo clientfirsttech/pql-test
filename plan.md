@@ -7,6 +7,7 @@
 - **Enable local execution** — validated 2026-05-21
 - **Enable execution against the Power BI service** — partially validated (CI path proven; local-machine validation deferred pending `.env` credentials)
 - **Provide baseline documentation and usage examples for contributors and early adopters** — see [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Contract Id References** — 🔄 in progress 2026-11-17. Resolve ODCS `schema/<id>/properties/<id>` references so a contract can reference a column with a space in its name, explain rejected references in `lint`, and suggest relationships in `coverage`. Ships in 0.3.0. See [tasks/contract-id-references-epic.md](tasks/contract-id-references-epic.md).
 
 ## Open Items
 
