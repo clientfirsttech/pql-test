@@ -65,6 +65,7 @@ class RunHooks:
 
     conn_options: Callable  # click decorator adding --tenant-id/--client-id/...
     make_conn_opts: Callable  # (tenant, workspace, dataset, client_id, secret) -> options
+    name_dataset: Callable  # (options, model dir): the folder's model, unless --dataset-id was typed
     print_results: Callable  # default human-readable printer
     print_azuredevops: Callable
     print_github: Callable
@@ -220,10 +221,10 @@ def _connect(model_path: str, hooks: RunHooks, credentials: tuple, semantic_mode
     None without looking for a model when XMLA is unavailable here (see ``xmla_unavailable``).
     """
     opts = hooks.make_conn_opts(*credentials)
-    if semantic_model_dir is not None and not opts.dataset_id and not opts.dataset_name:
-        opts.dataset_name = semantic_model_dir.name[: -len(".SemanticModel")]
     # local/<name> stays as is: the resolver connects to that open Desktop model and nothing else.
     is_local = parse_model_identifier(model_path).kind == "local"
+    if semantic_model_dir is not None and not is_local:
+        hooks.name_dataset(opts, semantic_model_dir)
     abs_path = model_path if is_local else str(Path(model_path).resolve())
     if xmla_unavailable():
         return abs_path, None

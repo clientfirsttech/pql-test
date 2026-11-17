@@ -141,6 +141,8 @@ class TestCli:
     @pytest.fixture(autouse=True)
     def _no_connection(self, monkeypatch):
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        # A developer .env can set it; the folder then replaces it with a note on stderr.
+        monkeypatch.delenv("PQL_DATASET_ID", raising=False)
 
     def test_json_format(self):
         given = "doctor --format json on SampleModel"

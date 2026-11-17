@@ -80,6 +80,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 import click
+from click.core import ParameterSource
 
 from pql_test.auth.cert_expiry import CERT_EXPIRY_WARNING_DAYS
 from pql_test.runner import (
@@ -671,6 +672,30 @@ def _make_conn_opts(
     )
 
 
+def _name_dataset_after_folder(opts: XmlaConnectionOptions, model_dir: str | Path) -> None:
+    """Point *opts* at the dataset a ``<name>.SemanticModel`` MODEL_PATH names.
+
+    Precedence: ``--dataset-id`` typed on the command line, then the folder name, then
+    ``PQL_DATASET_ID``. The variable (often loaded from ``.env``) is a default for one model, so it
+    must not redirect a run on another model's folder to that model's dataset.
+    """
+    stem = Path(model_dir).name
+    if opts.dataset_name or not stem.endswith(".SemanticModel"):
+        return
+    name = stem[: -len(".SemanticModel")]
+    if opts.dataset_id:
+        ctx = click.get_current_context(silent=True)
+        if ctx is None or ctx.get_parameter_source("dataset_id") is not ParameterSource.ENVIRONMENT:
+            return
+        click.echo(
+            f"Note: PQL_DATASET_ID is not used: MODEL_PATH names the {name} model. "
+            "Pass --dataset-id to test a different dataset.",
+            err=True,
+        )
+        opts.dataset_id = None
+    opts.dataset_name = name
+
+
 # ---------------------------------------------------------------------------
 # CLI group
 # ---------------------------------------------------------------------------
@@ -807,10 +832,7 @@ def cmd_retrieve_tests(
         # Derive dataset display name from the .SemanticModel directory so
         # the service path can look it up by name when no --dataset-id is
         # supplied (see cmd_run_tests for the rationale).
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
 
         # Always attempt connection resolution so local Power BI Desktop is
         # auto-detected even when no flags are supplied — matches cmd_run_tests
@@ -928,10 +950,7 @@ def cmd_retrieve_test(
         # connection can be built without --dataset-id, and attempt
         # connection resolution so tests declared only in functions.tmdl
         # (no *.Tests.dax file) are still discoverable via live XMLA.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
         conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
@@ -1108,12 +1127,9 @@ def cmd_run_tests(
         # stem so the resolver can look it up by name when no --dataset-id
         # is provided.  Keeps callers from having to store dataset GUIDs as
         # secrets when the deployed dataset's display name matches the
-        # local directory.  dataset_id (if supplied) still takes precedence
-        # inside the resolver.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        # local directory.  A --dataset-id typed on the command line still
+        # wins; PQL_DATASET_ID from the environment does not.
+        _name_dataset_after_folder(opts, abs_path)
 
         conn = resolve_xmla_connection(abs_path, opts)
         if conn:
@@ -1352,10 +1368,7 @@ def cmd_code_coverage(
         # Derive the dataset display name from the .SemanticModel directory
         # stem, same as cmd_run_tests, so the resolver can look it up by
         # name when no --dataset-id is provided.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
 
     report = collect_coverage(abs_path, opts)
     if report is None:
@@ -2117,6 +2130,7 @@ register_contract_commands(
     RunHooks(
         conn_options=conn_options,
         make_conn_opts=_make_conn_opts,
+        name_dataset=_name_dataset_after_folder,
         print_results=_print_results,
         print_azuredevops=_print_results_azuredevops,
         print_github=_print_results_github,

@@ -22,6 +22,8 @@ FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
 def _xmla_available(monkeypatch):
     """Act as if pyadomd were installed (it is not on Linux CI); the tests stub the connection itself."""
     monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: None)
+    # A developer .env can set it; the folder then replaces it with a note on stderr.
+    monkeypatch.delenv("PQL_DATASET_ID", raising=False)
 
 
 def _result(suite: str, passed: bool = True, skipped: bool = False) -> TestResult:

@@ -1451,7 +1451,7 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 |---|---|---|
 | `--tenant-id` | `PQL_TENANT_ID` | Azure AD tenant ID |
 | `--workspace-id` | `PQL_WORKSPACE_ID` | Power BI workspace GUID |
-| `--dataset-id` | `PQL_DATASET_ID` | Dataset / semantic model GUID (SampleModel) |
+| `--dataset-id` | `PQL_DATASET_ID` | Dataset / semantic model GUID (SampleModel). A `<name>.SemanticModel` MODEL_PATH runs against `<name>` instead (see the note below) |
 |  | `PQL_DATASET_ID_RLS` | Dataset GUID for RLS_Model (optional) |
 |  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
 | `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
@@ -1467,7 +1467,7 @@ directory. Copy `python/.env.example` to get started.
 > optional `python/tests/.env` overrides it for the tests only; the CLI never
 > reads it.
 
-> **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
+> **Which dataset runs:** `--dataset-id` on the command line wins. Otherwise a `<name>.SemanticModel` MODEL_PATH runs against the dataset named `<name>` in the workspace, even when `PQL_DATASET_ID` is set, and the CLI prints a note when it sets the variable aside. `PQL_DATASET_ID` (the SampleModel dataset here) applies only to a MODEL_PATH that names no model, such as a PBIP root folder. When a dataset's name differs from its folder, pass its ID, for example `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`. To test the model open in Power BI Desktop instead, use `local/<name>`.
 
 The CLI uses a **service-principal OAuth2 client-credentials flow** (via MSAL)
 to acquire a bearer token, then calls the Power BI REST API to resolve names,
