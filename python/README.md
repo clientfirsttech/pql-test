@@ -1231,7 +1231,7 @@ pql-test skills version 0.1.13
 **Install skills to AI assistant harnesses:**
 
 ```bash
-# Install to GitHub Copilot (.github/copilot-instructions.md)
+# Install to GitHub Copilot (.github/skills/<skill>/)
 pql-test skill --install copilot
 
 # Install to Anthropic Claude (.claude/skills/pql-test/)
@@ -1247,10 +1247,20 @@ pql-test skill --install windsurf
 pql-test skill --all
 ```
 
-Each install adds a version marker for tracking:
+Each skill is installed as its own `SKILL.md`. The install adds a version marker right after the frontmatter:
+
 ```markdown
-<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+---
+name: run-tests
+description: Execute all DAX test suites in a PBIP semantic model ...
+version: 0.3.0
+---
+<!-- Installed by pql-test skill v0.3.0 -->
 ```
+
+Copilot reads project skills from `.github/skills/<skill>/SKILL.md`, so pql-test skills sit next to your own Copilot skills there. pql-test never writes `.github/copilot-instructions.md`.
+
+> **Upgrading from 0.2.x:** earlier releases installed Copilot skills as a generated `.github/copilot-instructions.md` summary. `pql-test skill --install copilot` and `--show` point out that file if it is still there, and `pql-test skill --uninstall` removes it. A `copilot-instructions.md` you wrote yourself (one that does not start with the pql-test marker) is never touched.
 
 **Preview installation without writing files:**
 
@@ -1259,10 +1269,14 @@ pql-test skill --install copilot --dry-run
 ```
 
 ```
-Would update (10 changes):
-  • .github/copilot-instructions.md (CREATE)
+Would create: .github\skills\check-prereqs\SKILL.md
+Would create: .github\skills\code-coverage\SKILL.md
+Would create: .github\skills\contract\SKILL.md
+Would create: .github\skills\retrieve-test\SKILL.md
+Would create: .github\skills\retrieve-tests\SKILL.md
+Would create: .github\skills\run-tests\SKILL.md
 
-Run without --dry-run to apply changes.
+Dry run summary: 6 would be created, 0 would be updated, 0 would be preserved
 ```
 
 **Show installation status:**
@@ -1272,21 +1286,21 @@ pql-test skill --show
 ```
 
 ```
-pql-test skill installation status:
+Installation status:
 
-  Copilot:  ✅ v0.1.13 (.github/copilot-instructions.md)
-  Claude:   ✅ v0.1.16 (.claude/skills/pql-test/)
-  Cursor:   ❌ Not installed
-  Windsurf: ❌ Not installed
-
-All installed harnesses are up to date.
+  claude       ❌ not installed
+  copilot      ✅ installed
+  cursor       ❌ not installed
+  windsurf     ❌ not installed
 ```
 
-If a harness has an outdated version, `--show` reports it:
+If an installed skill carries an older version marker, `--show` reports it:
 
 ```
-  Copilot:  ⚠️  v0.1.12 (current: 0.1.13) — run pql-test skill --install copilot to update
+  copilot      ✅ installed (version mismatch detected)
 ```
+
+Run `pql-test skill --install <harness>` to update it.
 
 **Uninstall skills from all harnesses:**
 
@@ -1322,7 +1336,7 @@ pql-test skill --install claude --force
 
 | Harness | Install Location |
 |---|---|
-| Copilot | `.github/copilot-instructions.md` |
+| Copilot | `.github/skills/` (one folder per skill) |
 | Claude | `.claude/skills/pql-test/` |
 | Cursor | `.cursor/skills/pql-test/` |
 | Windsurf | `.windsurf/skills/pql-test/` |

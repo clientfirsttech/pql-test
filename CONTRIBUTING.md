@@ -711,7 +711,7 @@ Skills can be installed to any AI assistant harness:
 
 ```bash
 pql-test skill --install claude       # .claude/skills/pql-test/
-pql-test skill --install copilot      # .github/copilot-instructions.md
+pql-test skill --install copilot      # .github/skills/<skill>/
 pql-test skill --install cursor       # .cursor/skills/pql-test/
 pql-test skill --install windsurf     # .windsurf/skills/pql-test/
 pql-test skill --all                  # Install to all harnesses
@@ -719,9 +719,9 @@ pql-test skill --show                 # Show install status
 pql-test skill --uninstall            # Remove from all harnesses
 ```
 
-Each install adds a version marker comment for tracking:
+Each install adds a version marker comment right after the skill's frontmatter, so harnesses still read the frontmatter on the first line:
 ```markdown
-<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+<!-- Installed by pql-test skill v0.1.13 -->
 ```
 
 ---
