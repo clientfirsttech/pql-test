@@ -5,7 +5,7 @@
 
 ## Overview
 
-An `engine: pql-test` rule can call any PQL.Assert assertion by name. pql-test checks the call against the newest vendored signatures and, so a call cannot reach a function the model lacks, requires a catalog of that release's minor version. That one requirement covers every function: vendoring 0.9.0 made a call to `Col.MeanShouldBeInRange` (unchanged since 0.8.0) need `--pql-assert 0.9`, and vendoring 0.10.0 would do the same again. Like a lock file's minimum versions, each function should carry the oldest release with the signature a call needs, and the call should need only that.
+An `engine: pql-test` rule can call any PQL.Assert assertion by name. pql-test checks the call against the newest vendored signatures and, so a call cannot reach a function the model lacks, requires a catalog of that release's minor version. That one requirement covers every function: vendoring 0.9.0 made a call to `Col.MeanShouldBeInRange` (unchanged since 0.7.1) need `--pql-assert 0.9`, and vendoring 0.10.0 would do the same again. Like a lock file's minimum versions, each function should carry the oldest release with the signature a call needs, and the call should need only that.
 
 `pql_assert_functions.yaml` records, for each function, the first supported release that has it (`since`), and for a function whose arguments grew in a later release, the release each argument count arrived in. The history is read once from the DAX Lib packages 0.7.1 to 0.9.1 (0.7.1, the oldest release pql-test supports, stands for "0.7.1 or earlier"); after that the gap check records each new release's additions.
 
