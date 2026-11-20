@@ -19,7 +19,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from pql_test.odcs.catalog import load_signatures
+from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog, load_signatures
 from pql_test.odcs.emit.dax import dax_literal
 from pql_test.odcs.ir import CONTRACT_DAX, CONTRACT_DAX_SUITE, DIRECT_CALL, Assertion, RuleOutcome, Status, Target
 from pql_test.odcs.mapping.context import MapContext, skipped
@@ -185,19 +185,19 @@ def _comparison(key: str, value: Any) -> tuple[str | None, Any, str | None]:
     return _COMPARATOR_OPS[key], {"threshold": value}, None
 
 
+def _catalog_with(release: str) -> str:
+    """The oldest ``--pql-assert`` choice whose catalog targets *release* or later."""
+    by_version = sorted(PQL_ASSERT_CATALOGS, key=version_key)
+    return next(
+        (c for c in by_version if version_key(load_catalog(PQL_ASSERT_CATALOGS[c]).min_version) >= version_key(release)),
+        by_version[-1],
+    )
+
+
 def _function_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
     name, raw_args = impl["function"], impl.get("args", [])
     description = _describe(rule, scope, str(name))
     signatures = load_signatures()
-    # A patch release adds only optional arguments, so any catalog of the signatures' minor version can call.
-    minor = version_key(signatures.version)[:2]
-    if version_key(ctx.catalog.min_version)[:2] < minor:
-        return skipped(
-            rule_id,
-            f"direct PQL.Assert calls need --pql-assert {'.'.join(map(str, minor))} "
-            f"(signatures from {signatures.version})",
-            description,
-        )
     if not isinstance(name, str):
         return skipped(rule_id, "implementation.function needs a PQL.Assert function name", description)
     signature = signatures.functions.get(name)
@@ -212,6 +212,15 @@ def _function_rule(ctx, rule, rule_id, target, scope, impl) -> RuleOutcome:
             rule_id,
             f"{name} takes {signature.params - signature.optional}-{signature.params} arguments including testName, "
             f"got {count}",
+            description,
+        )
+    # Like a lock file's minimum version: the call needs the release that has this function with this many
+    # arguments, not the newest release pql-test knows.
+    needed = signature.needs(count)
+    if needed and version_key(ctx.catalog.min_version) < version_key(needed):
+        return skipped(
+            rule_id,
+            f"{name} with {count} arguments needs PQL.Assert {needed} or later: use --pql-assert {_catalog_with(needed)}",
             description,
         )
     arguments = []

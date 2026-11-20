@@ -71,11 +71,26 @@ class Signature:
     params: int
     optional: int
     use: str  # mapped | dax | none (see pql_assert_functions.yaml)
+    # (release, parameter count) from the first release that has the function, then each release that
+    # added parameters, oldest first. 0.7.1, the oldest release pql-test supports, means "0.7.1 or earlier".
+    history: tuple[tuple[str, int], ...] = ()
 
     @property
     def callable(self) -> bool:
         """True when a contract may call it directly (``engine: pql-test`` with ``function``)."""
         return self.use != "none"
+
+    def needs(self, arg_count: int) -> str | None:
+        """The oldest PQL.Assert release that takes *arg_count* arguments (testName included), or None."""
+        return next((release for release, params in self.history if params >= arg_count), None)
+
+
+def _history(since: object, params: int) -> tuple[tuple[str, int], ...]:
+    """``since`` from pql_assert_functions.yaml: a release (the current signature since then), or a mapping of
+    release to the parameter count it brought."""
+    if isinstance(since, dict):
+        return tuple((str(release), int(count)) for release, count in since.items())
+    return ((str(since), params),)
 
 
 @dataclass(frozen=True)
@@ -89,7 +104,15 @@ def load_signatures() -> Signatures:
     """Every PQL.Assert function's parameter counts, from the bundled ``pql_assert_functions.yaml``."""
     text = files("pql_test.odcs.catalog").joinpath("pql_assert_functions.yaml").read_text(encoding="utf-8")
     data = yaml.safe_load(text)
-    functions = {name: Signature(**spec) for name, spec in data["functions"].items()}
+    functions = {
+        name: Signature(
+            params=spec["params"],
+            optional=spec["optional"],
+            use=spec["use"],
+            history=_history(spec["since"], spec["params"]),
+        )
+        for name, spec in data["functions"].items()
+    }
     return Signatures(version=str(data["version"]), functions=functions)
 
 

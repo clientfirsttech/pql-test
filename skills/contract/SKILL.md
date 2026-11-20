@@ -50,7 +50,8 @@ Constraints {
     A successful refresh of stale source data passes frequency and fails latency, so recommend both, and a load timestamp,
     never a business date, for latency; latency on a table with no column is skipped (refresh time is not source latency)
   type: custom rules with engine: pql-test carry DAX: implementation {expression, <one comparator>} or {function, args}.
-    pql-test supplies testName; the function form needs --pql-assert 0.8. The DAX must be one expression (no EVALUATE or
+    pql-test supplies testName; the function form needs only the release that has the function (most since 0.7.1;
+    mapping names the --pql-assert a newer one needs). The DAX must be one expression (no EVALUATE or
     DEFINE, balanced brackets and quotes, no comma outside brackets, no control characters but line feed and tab);
     lint reports a rule that breaks this. On --pql-assert 0.7 a BLANK result passes text mustBe and number comparisons
     (approximated). Mapping JSON marks these rules "source": "contract-dax". Never use type: sql for DAX (other tools
@@ -131,7 +132,7 @@ schema:
         implementation:
           expression: CALCULATE([Total Sales], 'Date'[Year] = -1)
           mustBe: 0
-      - id: amount-mean                        # any PQL.Assert check, by name (--pql-assert 0.8)
+      - id: amount-mean                        # any PQL.Assert check, by name
         type: custom
         engine: pql-test
         implementation:

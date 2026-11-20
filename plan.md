@@ -60,6 +60,14 @@
 
 ## Completed Work
 
+### 2026-11-19 — Direct calls need only their function's PQL.Assert release (branch `feat/contract-model-coverage`)
+
+- See [tasks/pql-assert-since-epic.md](tasks/pql-assert-since-epic.md).
+- `pql_assert_functions.yaml` records `since` for every function, read once from the DAX Lib packages 0.7.1 to 0.9.1: 108 functions date from 0.7.1 (or earlier), 18 from 0.8.0, `Tbl.LastRefreshShouldBeWithinHours` from 0.9.0, and `Relationship.ShouldExist` grew from 8 to 10 parameters in 0.9.1. No function was removed or renamed, and none gained a required parameter.
+- An `engine: pql-test` direct call now needs only the release that has its function with that many arguments, like a lock file's minimum versions, instead of the newest vendored minor version. Direct calls to unchanged functions map again under `--pql-assert 0.7` and `0.8` (golden `rule-coverage` and `rule-coverage-0-8` gain `Col.MeanShouldBeInRange`), and vendoring a new release raises the requirement only for the functions it adds or changes.
+- New function-matrix checks: each `since` ends at the function's current parameter count, and each catalog calls its functions with no more arguments than its minimum release takes.
+- Live: `test_contract_live.py` now expects the two direct calls in `rule-coverage-live.odcs.yaml` to run under 0.8 (they pass and fail as planted), and `_committed_catalog` uses `contract_run`'s version-to-catalog mapping. `test_auto_detection_matches_the_committed_library[SampleModel]` fails until the workspace SampleModel is republished on PQL.Assert 0.9.1.
+
 ### 2026-11-19 — `contract init` writes relationships (branch `feat/contract-model-coverage`)
 
 - See [tasks/init-relationships-epic.md](tasks/init-relationships-epic.md).

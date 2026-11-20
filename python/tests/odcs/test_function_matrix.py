@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog, load_signatures
-from pql_test.odcs.udf import parse_functions
+from pql_test.odcs.udf import parse_functions, version_key
 
 LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.9.1" / "lib"
 OUT_OF_SCOPE_PREFIXES = ("PQL.Assert.BP.", "PQL.Assert.RetrieveTests", "PQL.Assert.LibraryVersion")
@@ -44,6 +46,36 @@ def test_signatures_match_the_vendored_library():
     expected = {name: (len(fn.parameters), sum(1 for p in fn.parameters if p.optional)) for name, fn in library.items()}
 
     assert actual == expected, f"{given}: {should}"
+
+
+def test_since_ends_at_the_current_signature():
+    given = "each function's since history"
+    should = "end at its current parameter count, at or before the vendored release"
+    signatures = load_signatures()
+
+    wrong = [
+        name
+        for name, s in signatures.functions.items()
+        if s.history[-1][1] != s.params or version_key(s.history[-1][0]) > version_key(signatures.version)
+    ]
+
+    assert wrong == [], f"{given}: {should}"
+
+
+@pytest.mark.parametrize("choice", sorted(PQL_ASSERT_CATALOGS))
+def test_every_catalog_op_is_available_at_the_catalogs_version(choice):
+    given = f"the {choice} catalog"
+    should = "call each function with no more arguments than its minimum PQL.Assert release has"
+    catalog = load_catalog(PQL_ASSERT_CATALOGS[choice])
+    signatures = load_signatures().functions
+
+    too_new = [
+        f"{key}: {spec.fn} with {len(spec.args)} arguments needs {signatures[spec.fn].needs(len(spec.args))}"
+        for key, spec in sorted(catalog.ops.items())
+        if version_key(signatures[spec.fn].needs(len(spec.args)) or "99") > version_key(catalog.min_version)
+    ]
+
+    assert too_new == [], f"{given}: {should}\n" + "\n".join(too_new)
 
 
 def test_mapped_means_a_catalog_calls_it():

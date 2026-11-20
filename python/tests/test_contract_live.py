@@ -131,9 +131,9 @@ EXPECTED_RULE_COVERAGE = {
     "date_dim_rows_over_2000_dax": "failed",
     "date_dim_rows_between_dax": "passed",
     "date_dim_rows_not_between_dax": "failed",
-    # date_years_at_least_two / date_years_at_most_one (engine: pql-test direct calls) are
-    # skipped here: direct calls always need --pql-assert LATEST_PQL_ASSERT (now 0.9), and this
-    # test patches the model back to 0.8. `actual` filters out skipped rules, so they're absent.
+    # engine: pql-test direct calls: each needs only the release that has its function (0.7.1 here).
+    "date_years_at_least_two": "passed",
+    "date_years_at_most_one": "failed",
     "no_data_year_returns_zero": "failed",
     "AlignmentDim.exists": "passed",
     "AlignmentDim.columns": "passed",
@@ -249,12 +249,12 @@ def _run(contract: str, model: Path, out: Path, pql_assert: str):
 
 def _committed_catalog(model: str) -> str:
     """The `--pql-assert` catalog matching the PQL.Assert version committed in examples/<model>."""
-    from pql_test.odcs.udf import library_versions, model_functions, version_key
+    from pql_test.contract_run import _catalog_for_version
+    from pql_test.odcs.udf import library_versions, model_functions
 
     versions = library_versions(model_functions(EXAMPLES / f"{model}.SemanticModel"))
     assert len(versions) == 1, f"examples/{model} mixes PQL.Assert versions: {versions}"
-    version = version_key(next(iter(versions)))
-    return "0.9" if version >= (0, 9) else "0.8" if version >= (0, 8) else "0.7"
+    return _catalog_for_version(next(iter(versions)))
 
 
 # SampleModel's DataTypes table has one column of each type (INFO.VIEW.COLUMNS, 2026-10-28).
