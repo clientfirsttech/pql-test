@@ -19,10 +19,10 @@
     task: Before generating anything, how can I see which rules in orders.odcs.yaml will actually be tested and which won't?
   assert:
     - type: contains
-      value: pql-test contract coverage orders.odcs.yaml
+      value: pql-test contract mapping orders.odcs.yaml
     - type: llm-rubric
       value: |
-        The response should recommend `pql-test contract coverage` and explain that every
+        The response should recommend `pql-test contract mapping` and explain that every
         rule is listed as mapped, approximated, or skipped with a reason.
 
 - description: Strict CI on unmappable rules
@@ -47,3 +47,16 @@
         The response must say that the <workspace>.Workspace/<model>.SemanticModel form is
         not accepted yet, and suggest a PBIP folder (with PQL_* service credentials for the
         workspace) or local/<name> for the model open in Power BI Desktop instead.
+
+- description: Relationship to a column whose name has a space
+  vars:
+    skill: contract
+    task: "My contract has `relationships: [{to: Date_Dim.Date ID}]` and lint fails with \"'Date_Dim.Date ID' is not valid under any of the given schemas\". Can I escape the space with quotes or brackets?"
+  assert:
+    - type: contains
+      value: schema/
+    - type: llm-rubric
+      value: |
+        The response should say ODCS has no escape syntax (quotes, brackets, and similar do not work),
+        and should show giving the schema object and property an `id` and referencing them as
+        schema/<object id>/properties/<property id>. It should not suggest renaming the model's column.

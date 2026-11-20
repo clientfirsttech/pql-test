@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from pql_test.odcs.api import plan_contract, render
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures"
@@ -31,6 +31,7 @@ CASES = {
     "rule-coverage": {"contract": "rule-coverage.odcs.yaml"},
     "rule-coverage-0-8": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.8"},
     "rule-coverage-0-9": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.9"},
+    "rule-coverage-0-9-1": {"contract": "rule-coverage.odcs.yaml", "pql_assert": "0.9.1"},
 }
 
 

@@ -1,6 +1,6 @@
 ---
 name: pql-test-version-bump
-description: Bump the pql-test release version consistently across pyproject.toml, uv.lock, plugin.json, and every source and packaged SKILL.md. Use when shipping a user-visible change, adding or editing a skill, preparing a release tag, or when the version-alignment test or CI check fails.
+description: Bump the pql-test release version consistently across pyproject.toml, uv.lock, plugin.json, and every source and packaged SKILL.md, and publish tagged releases to PyPI. Use when shipping a user-visible change, adding or editing a skill, preparing or pushing a release tag, publishing to PyPI, or when the version-alignment test or CI check fails.
 allowed-tools: Bash(git:*)
 ---
 
@@ -49,6 +49,32 @@ Constraints {
   Keep old version numbers in CONTRIBUTING.md examples as-is; they are illustrative.
 }
 ```
+
+## Publishing a release
+
+A version bump is not a published release. Complete these steps when the user
+authorizes a release tag or PyPI publishing:
+
+1. Complete the version-bump process above, including `uv lock` and
+  `uv lock --check`. Confirm the intended committed release revision contains
+  the matching package, lockfile, plugin, and skill versions and has passing CI.
+2. Fetch the intended release branch (normally `rtk git fetch origin main`) and
+  verify its exact commit and committed `python/pyproject.toml` version. Do not
+  tag an unrelated branch or assume uncommitted changes will be included.
+3. Check for an existing `vX.Y.Z` tag locally and remotely. Never move or overwrite
+  a release tag. If it already exists, verify its target before proceeding.
+4. Create `vX.Y.Z` on the verified commit and push that tag explicitly with
+  `rtk git push origin refs/tags/vX.Y.Z`. The tag version must match the committed
+  package version. Pushing a branch or only changing `uv.lock` does not publish.
+5. Inspect the release workflow run for that tag. Report publishing as successful
+  only when the actual "Publish to PyPI" job succeeds, not merely the build or
+  overall workflow. Report skipped jobs, failures, or pending environment approval
+  explicitly; never treat them as a completed upload.
+
+Real PyPI requires a `v*` tag. A manual run from `main` or another branch cannot
+publish there; the manual default target is TestPyPI, not real PyPI. To manually
+publish an existing tag, select that tag as the workflow ref and `pypi` as the
+target. Do not dispatch from a branch and expect its package version to create a tag.
 
 ## Pre-release (beta) versions
 

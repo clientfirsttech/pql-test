@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.catalog import catalog_for
 from pql_test.odcs.cli import contract as cli
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 from pql_test.odcs.ir import Status, Target
 from tests.odcs.factories import contract_dict, prop, schema_object
 
@@ -105,9 +105,9 @@ class TestFrequency:
 
 
 class TestDirectCalls:
-    def test_direct_calls_now_need_0_9(self):
+    def test_direct_calls_to_older_functions_still_map_on_0_8(self):
         given = "a direct engine: pql-test function call under 0.8"
-        should = "be skipped, naming --pql-assert 0.9 (the signatures moved with the vendored library)"
+        should = "map: the function is unchanged since 0.7.1, so vendoring 0.9 does not raise what it needs"
         rule = {
             "type": "custom",
             "engine": "pql-test",
@@ -117,7 +117,7 @@ class TestDirectCalls:
         plan = plan_contract(contract_dict(schema=[schema_object("T", [prop("a")], quality=[rule])]), pql_assert="0.8")
         outcome = next(o for o in plan.outcomes if o.rule_id == "T.quality[0]")
 
-        assert (outcome.status, "--pql-assert 0.9" in outcome.reason) == (Status.SKIPPED, True), f"{given}: {should}"
+        assert outcome.status is Status.MAPPED, f"{given}: {should}\n{outcome.reason}"
 
     def test_direct_calls_work_on_0_9(self):
         given = "the same direct call under 0.9"
@@ -163,11 +163,11 @@ class TestCli:
 
         assert "Col.NullCountShouldBeAtMost" in result.output, f"{given}: {should}"
 
-    def test_coverage_json_names_the_0_9_catalog_version(self, tmp_path):
-        given = "coverage --format json --pql-assert 0.9"
+    def test_mapping_json_names_the_0_9_catalog_version(self, tmp_path):
+        given = "mapping --format json --pql-assert 0.9"
         should = "report minVersion 0.9.0"
 
-        result = self._run(tmp_path, "coverage", "--format", "json", "--pql-assert", "0.9")
+        result = self._run(tmp_path, "mapping", "--format", "json", "--pql-assert", "0.9")
 
         data = json.loads(result.output)
         assert data["catalog"]["minVersion"] == "0.9.0", f"{given}: {should}"

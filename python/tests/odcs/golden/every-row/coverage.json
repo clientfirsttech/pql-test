@@ -258,7 +258,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
     },
     {
       "ruleId": "orders.quality[0]",

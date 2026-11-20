@@ -58,7 +58,7 @@
               "ruleId": { "type": "string" },
               "status": {
                 "enum": ["failed", "error", "not_executed", "passed", "skipped"],
-                "description": "failed: an assertion failed. error: a test could not run. not_executed: the suite did not run (no connection). passed. skipped: the rule maps to no DAX (see `contract coverage`)."
+                "description": "failed: an assertion failed. error: a test could not run. not_executed: the suite did not run (no connection). passed. skipped: the rule maps to no DAX (see `contract mapping`)."
               },
               "severity": { "type": ["string", "null"], "description": "'warning' rules never fail the run." },
               "description": { "type": "string" },

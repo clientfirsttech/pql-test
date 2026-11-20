@@ -7,8 +7,12 @@ step) before any job starts, so the run fails with only "workflow file issue" an
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,3 +95,61 @@ def test_security_checks_lockfile_before_exporting_frozen_dependencies():
     ]
     assert export_indices, "Expected the locked dependency audit export"
     assert all(lock_index < index for index in export_indices), should
+
+
+@pytest.mark.parametrize(
+    ("event_name", "target", "ref", "expected_code"),
+    [
+        ("workflow_dispatch", "pypi", "refs/heads/main", 1),
+        ("workflow_dispatch", "pypi", "refs/heads/dev", 1),
+        ("workflow_dispatch", "pypi", "refs/tags/0.2.1", 1),
+        ("workflow_dispatch", "pypi", "refs/tags/v0.2.1", 0),
+        ("workflow_dispatch", "testpypi", "refs/heads/main", 0),
+        ("workflow_dispatch", "testpypi", "refs/tags/v0.2.1", 0),
+        ("push", "", "refs/tags/v0.2.1", 0),
+    ],
+)
+def test_release_validates_publish_target_before_building(
+    event_name: str, target: str, ref: str, expected_code: int
+):
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["build"]["steps"]
+    validations = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Validate publish target and ref"
+    ]
+    assert len(validations) == 1, "Release must validate the requested publish target"
+    validation_index, validation = validations[0]
+    assert validation["shell"] == "python"
+    assert validation["env"]["PUBLISH_TARGET"] == "${{ inputs.target }}"
+    assert "if" not in validation
+    assert not validation.get("continue-on-error", False)
+    build_indices = [
+        index
+        for index, step in enumerate(steps)
+        if step.get("name")
+        in {"Install build tooling", "Build sdist + wheel", "Upload distribution artifacts"}
+    ]
+    assert build_indices and all(validation_index < index for index in build_indices)
+
+    result = subprocess.run(
+        [sys.executable, "-c", validation["run"]],
+        env={
+            **os.environ,
+            "GITHUB_EVENT_NAME": event_name,
+            "PUBLISH_TARGET": target,
+            "GITHUB_REF": ref,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == expected_code, result.stdout + result.stderr
+    if expected_code:
+        assert "::error::" in result.stdout
+        assert "release tag" in result.stdout
+        assert "python/pyproject.toml" in result.stdout

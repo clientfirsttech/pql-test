@@ -45,6 +45,9 @@ class SuiteFile:
     suite: str  # SCHEMA_SUITE | DATA_QUALITY_SUITE
     blocking: bool  # False for <ENV>WARN suites (warning-severity rules)
     content: str
+    # (test name, DAX call) for each assertion in content, so a suite that fails to run
+    # can be re-run one call at a time; not written to the file.
+    calls: tuple[tuple[str, str], ...] = ()
 
     @property
     def file_name(self) -> str:
@@ -283,6 +286,7 @@ def render_suites(
             ]
             if not blocking:
                 header.append("// Warning-severity rules: run separately; failures here should not fail the build.")
-            calls = [render_call(a, names[id(a)], catalog) for a in group]
-            files.append(SuiteFile(function_name, suite, blocking, _suite_content(function_name, calls, header)))
+            named = tuple((names[id(a)], render_call(a, names[id(a)], catalog)) for a in group)
+            content = _suite_content(function_name, [call for _, call in named], header)
+            files.append(SuiteFile(function_name, suite, blocking, content, named))
     return files

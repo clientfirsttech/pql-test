@@ -68,6 +68,27 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Validate publish target and ref
+        shell: python
+        env:
+          PUBLISH_TARGET: ${{ inputs.target }}
+        run: |
+          import os
+
+          if (
+              os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch"
+              and os.environ["PUBLISH_TARGET"] == "pypi"
+              and not os.environ["GITHUB_REF"].startswith("refs/tags/v")
+          ):
+              print(
+                  "::error::Real PyPI publishing requires a v* release tag. "
+                  "Create and push a tag matching python/pyproject.toml, "
+                  "or rerun this workflow from that tag."
+              )
+              raise SystemExit(1)
+
+          print("Publish target/ref validation passed.")
+
       - name: Install build tooling
         run: pip install build==1.6.1 twine==7.0.0
 

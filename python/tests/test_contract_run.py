@@ -22,6 +22,8 @@ FIXTURES = REPO_ROOT / "python" / "tests" / "odcs" / "fixtures"
 def _xmla_available(monkeypatch):
     """Act as if pyadomd were installed (it is not on Linux CI); the tests stub the connection itself."""
     monkeypatch.setattr("pql_test.contract_run.xmla_unavailable", lambda: None)
+    # A developer .env can set it; the folder then replaces it with a note on stderr.
+    monkeypatch.delenv("PQL_DATASET_ID", raising=False)
 
 
 def _result(suite: str, passed: bool = True, skipped: bool = False) -> TestResult:
@@ -54,7 +56,14 @@ class TestExitCode:
 class TestDetectPqlAssert:
     @pytest.mark.parametrize(
         "reported, expected",
-        [("0.9.0", "0.9"), ("0.8.0", "0.8"), ("0.10.2", "0.9"), ("1.0.0", "0.9"), ("0.7.9", "0.7")],
+        [
+            ("0.9.1", "0.9.1"),
+            ("0.9.0", "0.9"),
+            ("0.8.0", "0.8"),
+            ("0.10.2", "0.9.1"),
+            ("1.0.0", "0.9.1"),
+            ("0.7.9", "0.7"),
+        ],
     )
     def test_version_reported_by_the_model_picks_the_catalog(self, monkeypatch, reported, expected):
         given = f"a model whose PQL.Assert.LibraryVersion() returns {reported}"
@@ -85,11 +94,14 @@ class TestPqlAssertVersionWarning:
     @pytest.mark.parametrize(
         "deployed, selected, mentions",
         [
-            ("0.9.0", "0.9", None),
+            ("0.9.1", "0.9.1", None),
+            ("1.0.0", "0.9.1", None),
             ("1.0.0", "0.9", None),
-            ("0.8.0", "0.8", "supports up to 0.9"),
-            (None, "0.7", "supports up to 0.9"),
+            ("0.9.0", "0.9", "supports up to 0.9.1"),
+            ("0.8.0", "0.8", "supports up to 0.9.1"),
+            (None, "0.7", "supports up to 0.9.1"),
             ("0.8.0", "0.9", "--pql-assert 0.9 needs"),
+            ("0.9.0", "0.9.1", "--pql-assert 0.9.1 needs"),
             (None, "0.8", "use --pql-assert 0.7"),
         ],
     )
@@ -109,9 +121,27 @@ class TestContractGroup:
         should = "offer the file-only commands plus run and doctor in one group"
         from pql_test.cli import cli
 
-        assert set(cli.commands["contract"].commands) == {"init", "lint", "coverage", "generate", "trace", "run", "doctor"}, (
+        assert set(cli.commands["contract"].commands) == {"init", "lint", "mapping", "coverage", "generate", "trace", "run", "doctor"}, (
             f"{given}: {should}"
         )
+
+    def test_coverage_without_a_model_points_to_mapping(self):
+        given = "contract coverage CONTRACT with no MODEL_PATH (the rule report's old spelling)"
+        should = "fail as a usage error that names `contract mapping`, so old scripts fail loudly"
+        from pql_test.cli import cli
+
+        result = CliRunner().invoke(cli, ["contract", "coverage", str(FIXTURES / "marvel.odcs.yaml")])
+
+        assert (result.exit_code, "pql-test contract mapping" in result.output) == (2, True), (
+            f"{given}: {should}\n{result.output}"
+        )
+
+    def test_old_python_api_is_gone(self):
+        given = "code importing build_report from pql_test.odcs.coverage (the rule report's old module)"
+        should = "fail with ImportError instead of returning a different report"
+
+        with pytest.raises(ImportError):
+            from pql_test.odcs.coverage import build_report  # noqa: F401
 
 
 class TestContractRunCommand:
@@ -183,7 +213,7 @@ class TestContractRunCommand:
 
     @pytest.mark.parametrize(
         "args, reported, warned",
-        [([], "0.9.0", False), ([], "0.8.0", True), (["--pql-assert", "0.9"], "0.8.0", True)],
+        [([], "0.9.1", False), ([], "0.9.0", True), ([], "0.8.0", True), (["--pql-assert", "0.9"], "0.8.0", True)],
     )
     def test_warns_when_the_deployed_pql_assert_is_too_old(self, tmp_path, monkeypatch, args, reported, warned):
         given = f"contract run {args or 'with auto'} on a model reporting PQL.Assert {reported}"
@@ -264,7 +294,7 @@ class TestTraceAnnotations:
 class TestContractDoctor:
     @staticmethod
     def _doctor(monkeypatch, conn, reported, *args):
-        """Run `pql-test contract doctor` on examples/SampleModel (PQL.Assert 0.9.0) with a stubbed connection."""
+        """Run `pql-test contract doctor` on examples/SampleModel (PQL.Assert 0.9.1) with a stubbed connection."""
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: conn)
 
         def query(_conn, dax):
@@ -300,15 +330,15 @@ class TestContractDoctor:
         ) == (0, "ok", True, "warn"), f"{given}: {should}\n{result.output}"
 
     def test_matching_deployed_library(self, monkeypatch):
-        given = "a deployed model reporting PQL.Assert 0.9.0, like the folder"
+        given = "a deployed model reporting PQL.Assert 0.9.1, like the folder"
         should = "report the deployed version and no drift"
         from types import SimpleNamespace
 
-        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "0.9.0")
+        result = self._doctor(monkeypatch, SimpleNamespace(server="s", catalog="c"), "0.9.1")
 
         checks = {c["name"]: c for c in json.loads(result.output)["checks"]}
         assert (checks["Deployed PQL.Assert"]["detail"], checks["Deployed vs. model folder"]["status"]) == (
-            "0.9.0",
+            "0.9.1",
             "ok",
         ), f"{given}: {should}\n{result.output}"
 

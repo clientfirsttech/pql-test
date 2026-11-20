@@ -131,9 +131,9 @@ EXPECTED_RULE_COVERAGE = {
     "date_dim_rows_over_2000_dax": "failed",
     "date_dim_rows_between_dax": "passed",
     "date_dim_rows_not_between_dax": "failed",
-    # date_years_at_least_two / date_years_at_most_one (engine: pql-test direct calls) are
-    # skipped here: direct calls always need --pql-assert LATEST_PQL_ASSERT (now 0.9), and this
-    # test patches the model back to 0.8. `actual` filters out skipped rules, so they're absent.
+    # engine: pql-test direct calls: each needs only the release that has its function (0.7.1 here).
+    "date_years_at_least_two": "passed",
+    "date_years_at_most_one": "failed",
     "no_data_year_returns_zero": "failed",
     "AlignmentDim.exists": "passed",
     "AlignmentDim.columns": "passed",
@@ -249,12 +249,12 @@ def _run(contract: str, model: Path, out: Path, pql_assert: str):
 
 def _committed_catalog(model: str) -> str:
     """The `--pql-assert` catalog matching the PQL.Assert version committed in examples/<model>."""
-    from pql_test.odcs.udf import library_versions, model_functions, version_key
+    from pql_test.contract_run import _catalog_for_version
+    from pql_test.odcs.udf import library_versions, model_functions
 
     versions = library_versions(model_functions(EXAMPLES / f"{model}.SemanticModel"))
     assert len(versions) == 1, f"examples/{model} mixes PQL.Assert versions: {versions}"
-    version = version_key(next(iter(versions)))
-    return "0.9" if version >= (0, 9) else "0.8" if version >= (0, 8) else "0.7"
+    return _catalog_for_version(next(iter(versions)))
 
 
 # SampleModel's DataTypes table has one column of each type (INFO.VIEW.COLUMNS, 2026-10-28).
@@ -478,3 +478,44 @@ def _library_rows(model_copy: Path, calls: list[str]) -> list[tuple[bool, str]]:
         rows = _execute_dax_query(conn, with_definitions(query, missing_definitions(query, model_names, library)))
         out.append((bool(field(rows[0], "Passed")), str(field(rows[0], "Actual"))))
     return out
+
+
+def _model_snapshot(conn) -> tuple:
+    """The model's function count and dependency-row count: unchanged means nothing was written."""
+    from pql_test.runner import _execute_dax_query
+
+    queries = ("EVALUATE ROW(\"n\", COUNTROWS(INFO.USERDEFINEDFUNCTIONS()))", "EVALUATE ROW(\"n\", COUNTROWS(INFO.CALCDEPENDENCY()))")
+    return tuple(next(iter(_execute_dax_query(conn, q)[0].values())) for q in queries)
+
+
+def test_coverage_live_counts_only_direct_references_and_changes_nothing(sample_model_copy):
+    given = (
+        "contract coverage --live on the scenario-tests example, whose running-total rule compares a measure that "
+        "itself filters on MarvelFact[DateID] and DateDim[DateID]"
+    )
+    should = (
+        "credit the measure and MarvelFact to that rule from the engine, not the DateID columns the measure uses, "
+        "and leave the model's functions and dependencies as they were"
+    )
+    from pql_test.cli import cli
+
+    conn = _connect(sample_model_copy / "SampleModel.SemanticModel")
+    if conn is None:
+        pytest.fail("No XMLA connection to SampleModel, although credentials or Desktop were detected.")
+    before = _model_snapshot(conn)
+    contract = EXAMPLE_CONTRACTS / "scenario-tests.odcs.yaml"
+
+    result = CliRunner().invoke(cli, ["contract", "coverage", str(contract), str(sample_model_copy), "--live", "--format", "json"])
+
+    report = json.loads(result.stdout)
+    rule = "running-total-does-not-exceed-row-count"
+    credited = {o["identifier"] for o in report["objects"] if rule in o["rules"]}
+    engine = {o["identifier"] for o in report["objects"] if "engine" in o["sources"]}
+    assert (
+        report["source"],
+        report["unavailable"],
+        {"MarvelFact[Running Total of Character Appearances]", "MarvelFact"} <= credited,
+        credited & {"MarvelFact[DateID]", "DateDim[DateID]", "DateDim"},
+        "MarvelFact[Appearances]" in engine,
+        _model_snapshot(conn) == before,
+    ) == ("model", [], True, set(), True, True), f"{given}: {should}\n{result.output}"

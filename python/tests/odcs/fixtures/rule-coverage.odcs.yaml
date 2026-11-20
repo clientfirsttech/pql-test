@@ -1,7 +1,7 @@
 # Exercises every mapping added for PQL.Assert 0.8 rule coverage: value bounds, text
 # length, allowed values, missing and invalid values, relationships, latency vs
-# frequency, and `engine: pql-test` DAX rules. Rendered for 0.7 (mostly skipped)
-# and 0.8 (mapped) by test_golden.py.
+# frequency, relationship settings, and `engine: pql-test` DAX rules. Rendered for
+# 0.7 (mostly skipped), 0.8 (mapped), 0.9, and 0.9.1 by test_golden.py.
 apiVersion: v3.2.0
 kind: DataContract
 id: rule-coverage
@@ -117,6 +117,18 @@ schema:
         implementation:
           expression: EVALUATE ROW("x", 1)
           mustBe: 1
+    relationships:
+      # Settings: one ShouldExist call under 0.9.1; 0.8 and 0.9 check the cardinality and
+      # report the cross-filter direction and active state as not checked.
+      - from: orders.customer_id
+        to: customers.customer_id
+        customProperties:
+          - property: pbiCardinality
+            value: manyToOne
+          - property: pbiCrossFilteringBehavior
+            value: single
+          - property: pbiIsActive
+            value: true
   - name: customers
     physicalType: table
     customProperties:

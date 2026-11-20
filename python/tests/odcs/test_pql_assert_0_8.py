@@ -13,7 +13,7 @@ from click.testing import CliRunner
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.catalog import CatalogError, catalog_for
 from pql_test.odcs.cli import contract as cli
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 from pql_test.odcs.ir import Status, Target
 from tests.odcs.factories import contract_dict, prop, schema_object
 
@@ -489,11 +489,11 @@ class TestCli:
 
         assert "Col.NullRateShouldBeAtMost" in result.output, f"{given}: {should}"
 
-    def test_coverage_json_names_the_catalog_version(self, tmp_path):
-        given = "coverage --format json --pql-assert 0.8"
+    def test_mapping_json_names_the_catalog_version(self, tmp_path):
+        given = "mapping --format json --pql-assert 0.8"
         should = "report minVersion 0.8.0 and no approximated rules"
 
-        result = self._run(tmp_path, "coverage", "--format", "json", "--pql-assert", "0.8")
+        result = self._run(tmp_path, "mapping", "--format", "json", "--pql-assert", "0.8")
 
         data = json.loads(result.output)
         assert (data["catalog"]["minVersion"], data["summary"]["approximated"]) == ("0.8.0", 0), f"{given}: {should}"
@@ -502,6 +502,6 @@ class TestCli:
         given = "--pql-assert 0.10"
         should = "exit 2"
 
-        result = self._run(tmp_path, "coverage", "--pql-assert", "0.10")
+        result = self._run(tmp_path, "mapping", "--pql-assert", "0.10")
 
         assert result.exit_code == 2, f"{given}: {should}"

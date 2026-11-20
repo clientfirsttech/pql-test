@@ -60,6 +60,47 @@
 
 ## Completed Work
 
+### 2026-11-19 — Direct calls need only their function's PQL.Assert release (branch `feat/contract-model-coverage`)
+
+- See [tasks/pql-assert-since-epic.md](tasks/pql-assert-since-epic.md).
+- `pql_assert_functions.yaml` records `since` for every function, read once from the DAX Lib packages 0.7.1 to 0.9.1: 108 functions date from 0.7.1 (or earlier), 18 from 0.8.0, `Tbl.LastRefreshShouldBeWithinHours` from 0.9.0, and `Relationship.ShouldExist` grew from 8 to 10 parameters in 0.9.1. No function was removed or renamed, and none gained a required parameter.
+- An `engine: pql-test` direct call now needs only the release that has its function with that many arguments, like a lock file's minimum versions, instead of the newest vendored minor version. Direct calls to unchanged functions map again under `--pql-assert 0.7` and `0.8` (golden `rule-coverage` and `rule-coverage-0-8` gain `Col.MeanShouldBeInRange`), and vendoring a new release raises the requirement only for the functions it adds or changes.
+- New function-matrix checks: each `since` ends at the function's current parameter count, and each catalog calls its functions with no more arguments than its minimum release takes.
+- Live: `test_contract_live.py` now expects the two direct calls in `rule-coverage-live.odcs.yaml` to run under 0.8 (they pass and fail as planted), and `_committed_catalog` uses `contract_run`'s version-to-catalog mapping. `test_auto_detection_matches_the_committed_library[SampleModel]` fails until the workspace SampleModel is republished on PQL.Assert 0.9.1.
+
+### 2026-11-19 — `contract init` writes relationships (branch `feat/contract-model-coverage`)
+
+- See [tasks/init-relationships-epic.md](tasks/init-relationships-epic.md).
+- The starter now writes each relationship between two of its tables as a schema-level foreign key under its `from` table, with its four settings, by `table.property` when the names allow and by id otherwise (ids added to the elements, reused across relationships). Relationships to left-out tables are not written.
+- The id helper (`ReferenceIds`) and `settings_properties` moved from `coverage.py` to `mapping/relationships.py`, so `init` and `coverage` suggestions write relationships the same way.
+- The starter test now plans with the newest catalog: `--pql-assert 0.7` skips relationship rules.
+
+### 2026-11-19 — Contract relationship settings (branch `feat/contract-model-coverage`)
+
+- See [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md) and [docs/contracts.md](docs/contracts.md#relationship-settings).
+- Relationship `customProperties` `pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, `pbiSecurityFilteringBehavior`, named after the TMDL property each checks. New `--pql-assert 0.9.1` catalog (`pql_assert_0_9_1.yaml`) passes all four to one `Relationship.ShouldExist` call; 0.8 and 0.9 pass cardinality and the security filter (`rel.settings` op) and approximate the rest, naming each setting. Relationships without settings generate what they did before.
+- `lint` reports an unknown value or `pbi*` property on a relationship, and (with MODEL_PATH) a setting that differs from the TMDL; `coverage` reports the same drift and suggests uncovered relationships with their settings (TMDL, or `INFO.RELATIONSHIPS()` with `--live`).
+- Catalog choice counts patch versions: `auto` picks 0.9.1 from `LibraryVersion()`, and `doctor` compares parameter counts, so a folder whose `ShouldExist` takes 8 arguments gets 0.9. `--pql-assert` choices now come from `PQL_ASSERT_CATALOGS`.
+- **Found in review:** coverage credited a relationship only for `rel.exists`, so one checked with settings would have shown as not enforced; it now counts `rel.settings` too. The 0.7 skip reason no longer says relationship checks are "planned".
+- `init` still writes no relationships (out of scope); `coverage` suggestions are the way to add them.
+- **Live validation (maintainer, 2026-11-19):** CodeCoverage open in Power BI Desktop on PQL.Assert 0.9.1; `contract run` with `auto` selected the 0.9.1 catalog. A contract pinning the relationship's settings with `pbiCrossFilteringBehavior: both` passed 7 of 7; the same contract with `single` failed only the relationship rule (`CrossFiltering: OneDirection` expected, `BothDirections` actual).
+
+### 2026-11-19 — Contract gap check: PQL.Assert 0.9.1 (branch `feat/contract-model-coverage`)
+
+- Bitol ODCS: no new release. PQL.Assert: 0.9.1 on DAX Lib (patch release; `Relationship.ShouldExist` gains optional `crossFilteringBehavior` and `isActive`, and reports security filter value 3 as `None`).
+- Vendored fixture replaced: `python/tests/odcs/fixtures/pql-assert-0.9.1/` is the DAX Lib package as released (one `lib/functions.tmdl`); `Relationship.ShouldExist` recorded as 10 parameters, 5 optional, in `pql_assert_functions.yaml`.
+- **Found while vendoring:** the direct-call gate compared the full catalog version with the signatures' version, so the patch release would have skipped every `engine: pql-test` direct call under `--pql-assert 0.9`. It now compares major.minor (`pql_test/odcs/mapping/dax_rules.py`), since a patch adds only optional arguments.
+- Example models CodeCoverage and SampleModel updated to PQL.Assert 0.9.1 by the maintainer.
+- Using the new arguments is [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md).
+
+### 2026-11-16 — `contract coverage`: which parts of the model a contract covers, version 0.3.0 (branch `feat/contract-model-coverage`)
+
+- **Breaking:** the rule report is now `pql-test contract mapping CONTRACT` (Python: `pql_test.odcs.mapping_report`); `contract coverage CONTRACT` without a model, or with `--fail-on-skipped` / `--closed-schema`, fails pointing to it.
+- `pql-test contract coverage CONTRACT MODEL_PATH` counts every table, column, relationship, and measure as values tested, listed, listed but not enforced, or not covered, with the rules behind each, direct references only. It lists calculated columns no rule checks, contract entries the model lacks (lint's checks, now in `odcs/model_check.py`), and ODCS YAML for every gap; `--min-coverage` gates CI; JSON follows `contract-coverage.schema.json`. It reads only the contract and TMDL (Linux CI smoke test added).
+- `--live` reads the deployed or open model's INFO functions and asks its engine (`INFO.CALCDEPENDENCY("QUERY", ...)`, twice per rule, measures masked the second time) what contract DAX references. It never writes to the model: checked against SampleModel in Desktop and in the service. Without write permission it falls back to the PBIP folder and the text scan.
+- A measure table must now also be in no relationship, so `init` and `coverage` keep a fact table that hides every column.
+- Epic: [tasks/archive/2026-11-16-contract-model-coverage.md](tasks/archive/2026-11-16-contract-model-coverage.md). Not yet checked: `--live` with an identity that lacks write permission (the test service principal is a workspace Member or Admin).
+
 ### 2026-11-12 — Faster local Power BI Desktop discovery, version 0.2.1
 
 `get_pbi_files_opened()` now makes one `process_iter(["pid", "name"])` pass and reads `cmdline()` / `ppid()` only for `PBIDesktop.exe` / `msmdsrv.exe`, instead of prefetching both for every process. Benchmarked with two models open (378 processes): 54.9 ms → 3.8 ms median. Version bumped to 0.2.1. Epic: [tasks/archive/2026-11-12-fast-local-pbi-process-discovery.md](tasks/archive/2026-11-12-fast-local-pbi-process-discovery.md).

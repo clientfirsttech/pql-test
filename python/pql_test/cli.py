@@ -61,7 +61,6 @@ Environment variables (loaded from .env when python-dotenv is installed):
 from __future__ import annotations
 
 import json
-import math
 import os
 import sys
 from dataclasses import replace
@@ -72,8 +71,11 @@ from pathlib import Path
 # subprocess-launched CLI runs).  See run_cli() in tests/test_pql_test_cli.py.
 if not os.environ.get("PQL_TEST_HERMETIC"):
     try:
-        from dotenv import load_dotenv  # type: ignore[import-untyped]
-        load_dotenv()
+        from dotenv import find_dotenv, load_dotenv  # type: ignore[import-untyped]
+        # Search from the working directory, as documented: with no path,
+        # python-dotenv searches from this file's folder, which in a pip
+        # install is site-packages, so a project's .env was never found.
+        load_dotenv(find_dotenv(usecwd=True))
     except ImportError:
         pass  # env vars may be set externally (e.g. CI pipeline secrets)
 
@@ -81,6 +83,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
 import click
+from click.core import ParameterSource
 
 from pql_test.auth.cert_expiry import CERT_EXPIRY_WARNING_DAYS
 from pql_test.runner import (
@@ -123,6 +126,7 @@ from pql_test.cli_options import (
     deprecated_alias,
     emit_result,
     format_option,
+    min_coverage_option,
     output_option,
     record_summary,
     verbosity_options,
@@ -671,6 +675,30 @@ def _make_conn_opts(
     )
 
 
+def _name_dataset_after_folder(opts: XmlaConnectionOptions, model_dir: str | Path) -> None:
+    """Point *opts* at the dataset a ``<name>.SemanticModel`` MODEL_PATH names.
+
+    Precedence: ``--dataset-id`` typed on the command line, then the folder name, then
+    ``PQL_DATASET_ID``. The variable (often loaded from ``.env``) is a default for one model, so it
+    must not redirect a run on another model's folder to that model's dataset.
+    """
+    stem = Path(model_dir).name
+    if opts.dataset_name or not stem.endswith(".SemanticModel"):
+        return
+    name = stem[: -len(".SemanticModel")]
+    if opts.dataset_id:
+        ctx = click.get_current_context(silent=True)
+        if ctx is None or ctx.get_parameter_source("dataset_id") is not ParameterSource.ENVIRONMENT:
+            return
+        click.echo(
+            f"Note: PQL_DATASET_ID is not used: MODEL_PATH names the {name} model. "
+            "Pass --dataset-id to test a different dataset.",
+            err=True,
+        )
+        opts.dataset_id = None
+    opts.dataset_name = name
+
+
 # ---------------------------------------------------------------------------
 # CLI group
 # ---------------------------------------------------------------------------
@@ -807,10 +835,7 @@ def cmd_retrieve_tests(
         # Derive dataset display name from the .SemanticModel directory so
         # the service path can look it up by name when no --dataset-id is
         # supplied (see cmd_run_tests for the rationale).
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
 
         # Always attempt connection resolution so local Power BI Desktop is
         # auto-detected even when no flags are supplied — matches cmd_run_tests
@@ -928,10 +953,7 @@ def cmd_retrieve_test(
         # connection can be built without --dataset-id, and attempt
         # connection resolution so tests declared only in functions.tmdl
         # (no *.Tests.dax file) are still discoverable via live XMLA.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
         conn = resolve_xmla_connection(abs_path, opts) if sys.platform == "win32" else None
 
     test = retrieve_test_by_name(abs_path, name, connection=conn)
@@ -1108,12 +1130,9 @@ def cmd_run_tests(
         # stem so the resolver can look it up by name when no --dataset-id
         # is provided.  Keeps callers from having to store dataset GUIDs as
         # secrets when the deployed dataset's display name matches the
-        # local directory.  dataset_id (if supplied) still takes precedence
-        # inside the resolver.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        # local directory.  A --dataset-id typed on the command line still
+        # wins; PQL_DATASET_ID from the environment does not.
+        _name_dataset_after_folder(opts, abs_path)
 
         conn = resolve_xmla_connection(abs_path, opts)
         if conn:
@@ -1290,21 +1309,6 @@ def _print_coverage_report(
                 click.echo(f"  {ex.object_type.value} {ex.identifier} — {ex.reason}")
 
 
-def _validate_finite_min_coverage(
-    ctx: click.Context, param: click.Parameter, value: float | None
-) -> float | None:
-    """Reject non-finite --min-coverage values that FloatRange(0, 100) lets through.
-
-    math.nan compares False against both bounds, so click.FloatRange(0, 100)
-    accepts "nan" even though the skill promises malformed thresholds fail
-    before any XMLA query; the later ``summary.percent < min_coverage``
-    check is also False for NaN, which would silently report success.
-    """
-    if value is not None and math.isnan(value):
-        raise click.BadParameter("must be a finite number between 0 and 100", ctx=ctx, param=param)
-    return value
-
-
 @cli.command("code-coverage")
 @click.argument("model_path", metavar="MODEL_PATH")
 @format_option(help="Output format: human-readable text (default) or a stable JSON report.")
@@ -1312,12 +1316,7 @@ def _validate_finite_min_coverage(
     verbose_help="List covered objects with their direct test-UDF evidence and uncovered objects with AI-ready test targets.",
 )
 @output_option("Write the JSON report to FILE, as well as the report.")
-@click.option(
-    "--min-coverage", "min_coverage",
-    type=click.FloatRange(0, 100), default=None, metavar="PERCENT",
-    callback=_validate_finite_min_coverage,
-    help="Exit non-zero when overall eligible coverage is below PERCENT.",
-)
+@min_coverage_option("Exit non-zero when overall eligible coverage is below PERCENT.")
 @conn_options
 def cmd_code_coverage(
     model_path: str,
@@ -1372,10 +1371,7 @@ def cmd_code_coverage(
         # Derive the dataset display name from the .SemanticModel directory
         # stem, same as cmd_run_tests, so the resolver can look it up by
         # name when no --dataset-id is provided.
-        if not opts.dataset_id and not opts.dataset_name:
-            _sem_name = Path(abs_path).name
-            if _sem_name.endswith(".SemanticModel"):
-                opts.dataset_name = _sem_name[: -len(".SemanticModel")]
+        _name_dataset_after_folder(opts, abs_path)
 
     report = collect_coverage(abs_path, opts)
     if report is None:
@@ -1765,13 +1761,36 @@ def _certificate_days_remaining(expires_at) -> int | None:
 # ---------------------------------------------------------------------------
 
 def _get_harness_paths() -> dict[str, Path]:
-    """Return the target paths for each harness."""
+    """Return the directory each harness installs skill folders into.
+
+    Every skill lands at ``<path>/<skill-name>/SKILL.md``. Copilot reads
+    project skills one level under ``.github/skills/`` and requires the
+    folder name to match the skill's frontmatter ``name``, so it gets no
+    ``pql-test/`` grouping folder.
+    """
     return {
         'claude': Path('.claude/skills/pql-test'),
-        'copilot': Path('.github'),  # Copilot uses copilot-instructions.md
+        'copilot': Path('.github/skills'),
         'cursor': Path('.cursor/skills/pql-test'),
         'windsurf': Path('.windsurf/skills/pql-test'),
     }
+
+
+# Releases before 0.3.0 installed Copilot skills as a generated summary in
+# this file instead of as SKILL.md folders.
+_LEGACY_COPILOT_FILE = Path('.github/copilot-instructions.md')
+_INSTALL_MARKER_PREFIX = '<!-- Installed by pql-test skill v'
+
+
+def _is_legacy_copilot_file(path: Path) -> bool:
+    """Return True if *path* is a summary file generated by pql-test < 0.3.0.
+
+    Only a file that starts with the install marker counts: that is the whole
+    file pql-test wrote, never a user's own instructions file.
+    """
+    if not path.is_file():
+        return False
+    return path.read_text(encoding='utf-8').startswith(_INSTALL_MARKER_PREFIX)
 
 
 def _install_skills(harness: str | None, install_all: bool, dry_run: bool, force: bool = False) -> None:
@@ -1824,115 +1843,61 @@ def _install_skills(harness: str | None, install_all: bool, dry_run: bool, force
 
     for target_harness in targets:
         target_path = harnesses[target_harness]
-        
-        if target_harness == 'copilot':
-            # Copilot uses a single copilot-instructions.md file
-            instructions_file = target_path / 'copilot-instructions.md'
-            content = _generate_copilot_instructions(skills)
-            decision = _write_decision(instructions_file, content)
+
+        if target_harness == 'copilot' and _is_legacy_copilot_file(_LEGACY_COPILOT_FILE):
+            click.echo(
+                f"Note: {_LEGACY_COPILOT_FILE} was generated by an older pql-test. "
+                f"Copilot skills now install to {target_path}. "
+                f"Run `pql-test skill --uninstall` or delete that file to remove it."
+            )
+
+        for skill in skills:
+            from pql_test.skills_resolver import resolve_skill_dir
+            skill_dir = resolve_skill_dir(skill['name'])
+            skill_md = skill_dir / 'SKILL.md'
             
+            target_skill_dir = target_path / skill['name']
+            target_skill_file = target_skill_dir / 'SKILL.md'
+            
+            content = _add_install_marker(skill_md.read_text(encoding='utf-8'))
+            decision = _write_decision(target_skill_file, content)
+
             if dry_run:
                 if decision == "create":
-                    click.echo(f"Would create: {instructions_file}")
+                    click.echo(f"Would create: {target_skill_file}")
                     created_count += 1
                 elif decision == "update":
-                    click.echo(f"Would update: {instructions_file}")
+                    click.echo(f"Would update: {target_skill_file}")
                     updated_count += 1
                 elif decision == "unchanged":
-                    click.echo(f"Unchanged: {instructions_file}")
                     unchanged_count += 1
                 else:
-                    click.echo(f"Would preserve: {instructions_file} (use --force to overwrite)")
+                    click.echo(f"Would preserve: {target_skill_file} (use --force to overwrite)")
                     preserved_count += 1
             else:
                 if decision in ("create", "update"):
-                    instructions_file.parent.mkdir(parents=True, exist_ok=True)
-                    instructions_file.write_text(content, encoding='utf-8')
+                    target_skill_dir.mkdir(parents=True, exist_ok=True)
+                    target_skill_file.write_text(content, encoding='utf-8')
                 if decision == "create":
-                    click.echo(f"Created: {instructions_file}")
+                    click.echo(f"Created: {target_skill_file}")
                     created_count += 1
                 elif decision == "update":
-                    click.echo(f"Updated: {instructions_file}")
+                    click.echo(f"Updated: {target_skill_file}")
                     updated_count += 1
                 elif decision == "unchanged":
-                    click.echo(f"Unchanged: {instructions_file}")
                     unchanged_count += 1
                 elif decision == "preserve-customized":
                     click.echo(
-                        f"Preserved (customized, v{_VERSION} marker present): {instructions_file} "
+                        f"Preserved (customized, v{_VERSION} marker present): {target_skill_file} "
                         f"— use --force to overwrite"
                     )
                     preserved_count += 1
                 else:  # preserve-unmanaged
                     click.echo(
-                        f"Preserved (no pql-test marker found): {instructions_file} "
+                        f"Preserved (no pql-test marker found): {target_skill_file} "
                         f"— use --force to overwrite"
                     )
                     preserved_count += 1
-        else:
-            # Claude, Cursor, Windsurf use skill directories
-            for skill in skills:
-                from pql_test.skills_resolver import resolve_skill_dir
-                skill_dir = resolve_skill_dir(skill['name'])
-                skill_md = skill_dir / 'SKILL.md'
-                
-                target_skill_dir = target_path / skill['name']
-                target_skill_file = target_skill_dir / 'SKILL.md'
-                
-                content = skill_md.read_text(encoding='utf-8')
-                # Add installation marker
-                marker = f"<!-- Installed by pql-test skill v{_VERSION} -->\n"
-                if not content.startswith('<!--'):
-                    content = marker + content
-                elif 'Installed by pql-test skill' not in content:
-                    # Insert marker after existing frontmatter comment
-                    lines = content.split('\n')
-                    insert_idx = 0
-                    for i, line in enumerate(lines):
-                        if line.strip().endswith('-->'):
-                            insert_idx = i + 1
-                            break
-                    lines.insert(insert_idx, marker.rstrip())
-                    content = '\n'.join(lines)
-                
-                decision = _write_decision(target_skill_file, content)
-
-                if dry_run:
-                    if decision == "create":
-                        click.echo(f"Would create: {target_skill_file}")
-                        created_count += 1
-                    elif decision == "update":
-                        click.echo(f"Would update: {target_skill_file}")
-                        updated_count += 1
-                    elif decision == "unchanged":
-                        unchanged_count += 1
-                    else:
-                        click.echo(f"Would preserve: {target_skill_file} (use --force to overwrite)")
-                        preserved_count += 1
-                else:
-                    if decision in ("create", "update"):
-                        target_skill_dir.mkdir(parents=True, exist_ok=True)
-                        target_skill_file.write_text(content, encoding='utf-8')
-                    if decision == "create":
-                        click.echo(f"Created: {target_skill_file}")
-                        created_count += 1
-                    elif decision == "update":
-                        click.echo(f"Updated: {target_skill_file}")
-                        updated_count += 1
-                    elif decision == "unchanged":
-                        unchanged_count += 1
-                    elif decision == "preserve-customized":
-                        click.echo(
-                            f"Preserved (customized, v{_VERSION} marker present): {target_skill_file} "
-                            f"— use --force to overwrite"
-                        )
-                        preserved_count += 1
-                    else:  # preserve-unmanaged
-                        click.echo(
-                            f"Preserved (no pql-test marker found): {target_skill_file} "
-                            f"— use --force to overwrite"
-                        )
-                        preserved_count += 1
     
     # Summary
     if dry_run:
@@ -1947,124 +1912,97 @@ def _install_skills(harness: str | None, install_all: bool, dry_run: bool, force
         )
 
 
-def _generate_copilot_instructions(skills: list[dict[str, str]]) -> str:
-    """Generate copilot-instructions.md content from skills."""
-    lines = [
-        f"<!-- Installed by pql-test skill v{_VERSION} -->",
-        "",
-        "# pql-test Skills",
-        "",
-        "This workspace has pql-test skills installed for DAX testing with Power BI semantic models.",
-        "",
-        "## Available Skills",
-        "",
-    ]
-    
-    for skill in skills:
-        lines.append(f"### {skill['name']}")
-        lines.append(f"{skill['description']}")
-        lines.append("")
-    
-    lines.extend([
-        "## Usage",
-        "",
-        "Use these skills when working with:",
-        "- Power BI semantic model testing",
-        "- DAX query execution",
-        "- PBIP project structure",
-        "- XMLA endpoint connections",
-        "",
-        "Run `pql-test --help` for CLI documentation.",
-    ])
-    
-    return '\n'.join(lines)
+def _add_install_marker(content: str) -> str:
+    """Return skill *content* with the pql-test install marker added.
+
+    The marker goes right after the YAML frontmatter, because harnesses
+    (Copilot, Claude, Cursor) only read frontmatter that starts on the first
+    line. A file without frontmatter gets the marker as its first line.
+    """
+    if 'Installed by pql-test skill' in content:
+        return content
+    marker = f"{_INSTALL_MARKER_PREFIX}{_VERSION} -->"
+    if content.startswith('---\n'):
+        end = content.find('\n---\n', 4)
+        if end != -1:
+            split = end + len('\n---\n')
+            return f"{content[:split]}{marker}\n{content[split:]}"
+    return f"{marker}\n{content}"
 
 
 def _show_install_status() -> None:
     """Show installation status for all harnesses."""
     from pql_test.skills_resolver import list_available_skills
-    
+
     harnesses = _get_harness_paths()
     skills = list_available_skills()
-    
+
     click.echo("Installation status:\n")
-    
+
     for harness_name, harness_path in harnesses.items():
-        if harness_name == 'copilot':
-            instructions_file = harness_path / 'copilot-instructions.md'
-            if instructions_file.exists():
-                content = instructions_file.read_text(encoding='utf-8')
+        installed_skills = 0
+        mismatched = False
+        for skill in skills:
+            skill_file = harness_path / skill['name'] / 'SKILL.md'
+            if skill_file.exists():
+                installed_skills += 1
+                content = skill_file.read_text(encoding='utf-8')
                 version = _extract_version_from_marker(content)
-                status = "✅ installed" if version else "⚠️  installed (no version marker)"
                 if version and version != _VERSION:
-                    status += f" (version mismatch: {version} vs {_VERSION})"
-                click.echo(f"  {harness_name:<12} {status}")
-            else:
-                click.echo(f"  {harness_name:<12} ❌ not installed")
+                    mismatched = True
+
+        if installed_skills == len(skills):
+            status = "✅ installed"
+            if mismatched:
+                status += " (version mismatch detected)"
+            click.echo(f"  {harness_name:<12} {status}")
+        elif installed_skills > 0:
+            click.echo(f"  {harness_name:<12} ⚠️  partially installed ({installed_skills}/{len(skills)} skills)")
         else:
-            # Check if any skills are installed
-            installed_skills = 0
-            mismatched = False
-            for skill in skills:
-                skill_file = harness_path / skill['name'] / 'SKILL.md'
-                if skill_file.exists():
-                    installed_skills += 1
-                    content = skill_file.read_text(encoding='utf-8')
-                    version = _extract_version_from_marker(content)
-                    if version and version != _VERSION:
-                        mismatched = True
-            
-            if installed_skills == len(skills):
-                status = "✅ installed"
-                if mismatched:
-                    status += " (version mismatch detected)"
-                click.echo(f"  {harness_name:<12} {status}")
-            elif installed_skills > 0:
-                click.echo(f"  {harness_name:<12} ⚠️  partially installed ({installed_skills}/{len(skills)} skills)")
-            else:
-                click.echo(f"  {harness_name:<12} ❌ not installed")
+            click.echo(f"  {harness_name:<12} ❌ not installed")
+
+    if _is_legacy_copilot_file(_LEGACY_COPILOT_FILE):
+        click.echo(
+            f"\nNote: {_LEGACY_COPILOT_FILE} was generated by an older pql-test and is no "
+            f"longer used. `pql-test skill --uninstall` removes it."
+        )
 
 
 def _uninstall_skills(dry_run: bool) -> None:
     """Uninstall all pql-test skills."""
     harnesses = _get_harness_paths()
     removed_count = 0
-    
-    for harness_name, harness_path in harnesses.items():
-        if harness_name == 'copilot':
-            instructions_file = harness_path / 'copilot-instructions.md'
-            if instructions_file.exists():
-                content = instructions_file.read_text(encoding='utf-8')
-                if 'Installed by pql-test skill' in content:
-                    if dry_run:
-                        click.echo(f"Would remove: {instructions_file}")
-                        removed_count += 1
-                    else:
-                        instructions_file.unlink()
-                        click.echo(f"Removed: {instructions_file}")
-                        removed_count += 1
+
+    if _is_legacy_copilot_file(_LEGACY_COPILOT_FILE):
+        if dry_run:
+            click.echo(f"Would remove: {_LEGACY_COPILOT_FILE}")
         else:
-            if harness_path.exists():
-                for skill_dir in harness_path.iterdir():
-                    if skill_dir.is_dir():
-                        skill_file = skill_dir / 'SKILL.md'
-                        if skill_file.exists():
-                            content = skill_file.read_text(encoding='utf-8')
-                            if 'Installed by pql-test skill' in content:
-                                if dry_run:
-                                    click.echo(f"Would remove: {skill_file}")
-                                    removed_count += 1
-                                else:
-                                    skill_file.unlink()
-                                    click.echo(f"Removed: {skill_file}")
-                                    removed_count += 1
-                                    # Remove empty directories
-                                    if not any(skill_dir.iterdir()):
-                                        skill_dir.rmdir()
-                # Remove pql-test directory if empty
-                if harness_path.exists() and not any(harness_path.iterdir()) and not dry_run:
-                    harness_path.rmdir()
-    
+            _LEGACY_COPILOT_FILE.unlink()
+            click.echo(f"Removed: {_LEGACY_COPILOT_FILE}")
+        removed_count += 1
+
+    for harness_path in harnesses.values():
+        if harness_path.exists():
+            for skill_dir in harness_path.iterdir():
+                if skill_dir.is_dir():
+                    skill_file = skill_dir / 'SKILL.md'
+                    if skill_file.exists():
+                        content = skill_file.read_text(encoding='utf-8')
+                        if 'Installed by pql-test skill' in content:
+                            if dry_run:
+                                click.echo(f"Would remove: {skill_file}")
+                                removed_count += 1
+                            else:
+                                skill_file.unlink()
+                                click.echo(f"Removed: {skill_file}")
+                                removed_count += 1
+                                # Remove empty directories
+                                if not any(skill_dir.iterdir()):
+                                    skill_dir.rmdir()
+            # Remove the harness skills directory if it is now empty
+            if harness_path.exists() and not any(harness_path.iterdir()) and not dry_run:
+                harness_path.rmdir()
+
     if dry_run:
         click.echo(f"\nDry run summary: {removed_count} files would be removed")
     else:
@@ -2195,6 +2133,7 @@ register_contract_commands(
     RunHooks(
         conn_options=conn_options,
         make_conn_opts=_make_conn_opts,
+        name_dataset=_name_dataset_after_folder,
         print_results=_print_results,
         print_azuredevops=_print_results_azuredevops,
         print_github=_print_results_github,

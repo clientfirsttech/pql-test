@@ -39,7 +39,7 @@ pql-test is licensed under AGPL-3.0-only (Client First Technologies).
 
 ## Architecture
 
-- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`, and `contract` (`lint`, `coverage`, `generate`, `trace` from `python/pql_test/odcs/cli.py`; `run` and `doctor` from `python/pql_test/contract_run.py`)
+- **CLI Layer** (`python/pql_test/cli.py`) — Click-based CLI entry point with commands: `check-prereqs`, `retrieve-tests`, `retrieve-test`, `run-tests`, `code-coverage`, `skill`, `auth`, and `contract` (`init`, `lint`, `mapping`, `generate`, `trace` from `python/pql_test/odcs/cli.py`; `run`, `doctor`, and `coverage` from `python/pql_test/contract_run.py`)
 - **Core Runner** (`python/pql_test/runner/`) — Refactored module package for test discovery and execution via XMLA/ADOMD.NET
 - **Skill Distribution** (`python/pql_test/skills/`, `python/pql_test/skills_resolver.py`) — Version-matched skills packaged in wheel, installable to any harness (Claude, Copilot, Cursor, Windsurf)
 - **Plugin Skills** (`skills/`) — Source skills with YAML frontmatter (name, description, version), SudoLang behavioral contracts
@@ -55,7 +55,7 @@ pql-test is licensed under AGPL-3.0-only (Client First Technologies).
 - Python >= 3.10 is the minimum supported version (3.9 is end of life, and dependency security fixes need 3.10)
 - DAX test files must follow `*.Tests.dax` naming convention in `DAXQueries/` directory
 - **One license** — Everything is AGPL-3.0-only, except unmodified third-party files that keep their own license (the Bitol ODCS JSON schemas, the vendored PQL.Assert test fixture). Runtime dependencies must be AGPL-compatible.
-- The file-only contract commands (`lint`, `coverage`, `generate`, `trace`) need no ADOMD.NET and should run on Linux for CI pipelines. XMLA commands stay Windows-only.
+- The file-only contract commands (`init`, `lint`, `mapping`, `generate`, `trace`), and `coverage` without `--live`, need no ADOMD.NET and should run on Linux for CI pipelines. XMLA commands stay Windows-only.
 
 ## Success Criteria
 
@@ -67,5 +67,5 @@ pql-test is licensed under AGPL-3.0-only (Client First Technologies).
 - Source and packaged skill content remains byte-for-byte identical
 - CI guards prevent skill format drift or missing frontmatter
 - Developers can discover and run tests with a single CLI command
-- An ODCS contract generates byte-identical PQL.Assert suites on every run, and every contract rule appears in the coverage report
+- An ODCS contract generates byte-identical PQL.Assert suites on every run, and every contract rule appears in the mapping report
 - Every source file carries the AGPL-3.0-only SPDX header

@@ -1231,7 +1231,7 @@ pql-test skills version 0.1.13
 **Install skills to AI assistant harnesses:**
 
 ```bash
-# Install to GitHub Copilot (.github/copilot-instructions.md)
+# Install to GitHub Copilot (.github/skills/<skill>/)
 pql-test skill --install copilot
 
 # Install to Anthropic Claude (.claude/skills/pql-test/)
@@ -1247,10 +1247,20 @@ pql-test skill --install windsurf
 pql-test skill --all
 ```
 
-Each install adds a version marker for tracking:
+Each skill is installed as its own `SKILL.md`. The install adds a version marker right after the frontmatter:
+
 ```markdown
-<!-- pql-test skills v0.1.13 installed by pql-test CLI -->
+---
+name: run-tests
+description: Execute all DAX test suites in a PBIP semantic model ...
+version: 0.3.0
+---
+<!-- Installed by pql-test skill v0.3.0 -->
 ```
+
+Copilot reads project skills from `.github/skills/<skill>/SKILL.md`, so pql-test skills sit next to your own Copilot skills there. pql-test never writes `.github/copilot-instructions.md`.
+
+> **Upgrading from 0.2.x:** earlier releases installed Copilot skills as a generated `.github/copilot-instructions.md` summary. `pql-test skill --install copilot` and `--show` point out that file if it is still there, and `pql-test skill --uninstall` removes it. A `copilot-instructions.md` you wrote yourself (one that does not start with the pql-test marker) is never touched.
 
 **Preview installation without writing files:**
 
@@ -1259,10 +1269,14 @@ pql-test skill --install copilot --dry-run
 ```
 
 ```
-Would update (10 changes):
-  • .github/copilot-instructions.md (CREATE)
+Would create: .github\skills\check-prereqs\SKILL.md
+Would create: .github\skills\code-coverage\SKILL.md
+Would create: .github\skills\contract\SKILL.md
+Would create: .github\skills\retrieve-test\SKILL.md
+Would create: .github\skills\retrieve-tests\SKILL.md
+Would create: .github\skills\run-tests\SKILL.md
 
-Run without --dry-run to apply changes.
+Dry run summary: 6 would be created, 0 would be updated, 0 would be preserved
 ```
 
 **Show installation status:**
@@ -1272,21 +1286,21 @@ pql-test skill --show
 ```
 
 ```
-pql-test skill installation status:
+Installation status:
 
-  Copilot:  ✅ v0.1.13 (.github/copilot-instructions.md)
-  Claude:   ✅ v0.1.16 (.claude/skills/pql-test/)
-  Cursor:   ❌ Not installed
-  Windsurf: ❌ Not installed
-
-All installed harnesses are up to date.
+  claude       ❌ not installed
+  copilot      ✅ installed
+  cursor       ❌ not installed
+  windsurf     ❌ not installed
 ```
 
-If a harness has an outdated version, `--show` reports it:
+If an installed skill carries an older version marker, `--show` reports it:
 
 ```
-  Copilot:  ⚠️  v0.1.12 (current: 0.1.13) — run pql-test skill --install copilot to update
+  copilot      ✅ installed (version mismatch detected)
 ```
+
+Run `pql-test skill --install <harness>` to update it.
 
 **Uninstall skills from all harnesses:**
 
@@ -1322,7 +1336,7 @@ pql-test skill --install claude --force
 
 | Harness | Install Location |
 |---|---|
-| Copilot | `.github/copilot-instructions.md` |
+| Copilot | `.github/skills/` (one folder per skill) |
 | Claude | `.claude/skills/pql-test/` |
 | Cursor | `.cursor/skills/pql-test/` |
 | Windsurf | `.windsurf/skills/pql-test/` |
@@ -1340,8 +1354,9 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 | Command | What it does |
 |---|---|
 | `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
-| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
-| `pql-test contract coverage CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
+| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type, and each relationship with its settings. It passes as is; add the quality rules the data must meet |
+| `pql-test contract mapping CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
+| `pql-test contract coverage CONTRACT MODEL_PATH` | Shows which tables, columns, relationships, and measures of the model the contract covers (values tested, listed, or not covered), with the ODCS YAML that would cover the rest. `--live` asks the deployed or open model instead of reading its files; neither changes the model |
 | `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table, column, and relationship resolves in the model |
 | `pql-test contract generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` files into the PBIP model's `DAXQueries/` folder |
 | `pql-test contract run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them, and traces every failure back to its contract rule id. It writes no files and never changes the model; `--write` also saves the suites into `DAXQueries/` |
@@ -1351,13 +1366,14 @@ MODEL_PATH means the same in every contract command: a PBIP folder, its `.pbip` 
 
 ```bash
 pql-test contract init local/SalesModel --output orders.odcs.yaml                    # start from the model
-pql-test contract coverage orders.odcs.yaml
+pql-test contract mapping orders.odcs.yaml
+pql-test contract coverage orders.odcs.yaml local/SalesModel                    # what the contract does not cover yet
 pql-test contract lint orders.odcs.yaml local/SalesModel
 pql-test contract run orders.odcs.yaml local/SalesModel --env DEV                    # the model open in Power BI Desktop
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # the workspace, with PQL_* credentials
 ```
 
-`lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA (Windows).
+`lint`, `mapping`, `generate`, `trace`, and `coverage` (without `--live`) only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, `coverage --live`, and `doctor`'s live checks need XMLA (Windows).
 
 The generated files follow the rules below:
 - Test names are `ODCS <contractId> <ruleId>: <description>`.
@@ -1367,6 +1383,8 @@ The generated files follow the rules below:
 You can regenerate the suites in CI on every run, or commit them to the PBIP repo and fail CI when they drift from the contract. [docs/contracts.md](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md) compares the two workflows, and documents the full rule mapping and name resolution (`pbiTable` / `pbiColumn` custom properties on the contract).
 
 Each property's `logicalType` is checked against the column's model data type (for example `integer` → `Integer`, TMDL `int64`); the ODCS-to-model type table and the `pbiDataType` override are in [Column types](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#column-types).
+
+A relationship can also pin the settings on Power BI's Edit relationship dialog that change results: cardinality, cross-filter direction, active state, and the row-level security filter (`pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, `pbiSecurityFilteringBehavior`). `--pql-assert 0.9.1` checks all four in one `Relationship.ShouldExist` call. See [Relationship settings](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#relationship-settings).
 
 Scenario tests, such as a measure's value in a given filter context, can live in the contract too: an ODCS `type: custom` rule with `engine: pql-test` holds a DAX expression and a comparator, or calls any PQL.Assert assertion by name. See [DAX rules in the contract](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#dax-rules-in-the-contract-engine-pql-test).
 
@@ -1435,7 +1453,7 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 |---|---|---|
 | `--tenant-id` | `PQL_TENANT_ID` | Azure AD tenant ID |
 | `--workspace-id` | `PQL_WORKSPACE_ID` | Power BI workspace GUID |
-| `--dataset-id` | `PQL_DATASET_ID` | Dataset / semantic model GUID (SampleModel) |
+| `--dataset-id` | `PQL_DATASET_ID` | Dataset / semantic model GUID (SampleModel). A `<name>.SemanticModel` MODEL_PATH runs against `<name>` instead (see the note below) |
 |  | `PQL_DATASET_ID_RLS` | Dataset GUID for RLS_Model (optional) |
 |  | `PQL_DATASET_ID_OLS` | Dataset GUID for OLS_Model (optional) |
 | `--client-id` | `PQL_CLIENT_ID` | Service principal client ID |
@@ -1445,13 +1463,14 @@ All flags can be supplied via environment variables instead (useful for CI/CD):
 Place these in a `.env` file (git-ignored) at the directory where you invoke
 the CLI — typically the repo root or `python/`. The CLI loads `.env`
 automatically via `python-dotenv` by walking up from the current working
-directory. Copy `python/.env.example` to get started.
+directory, so a `python/.env` is not found when you run from the repo root.
+Copy `python/.env.example` to get started.
 
 > The live integration tests (`@pytest.mark.live`) read `python/.env` too. An
-> optional `python/tests/.env` overrides it for the tests only; the CLI never
-> reads it.
+> optional `python/tests/.env` overrides it for the tests only; the CLI reads
+> it only when run from `python/tests/`.
 
-> **Note:** The `PQL_DATASET_ID` variable defaults to the SampleModel dataset. Use `PQL_DATASET_ID_RLS` and `PQL_DATASET_ID_OLS` when running tests against RLS_Model or OLS_Model respectively by passing `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`.
+> **Which dataset runs:** `--dataset-id` on the command line wins. Otherwise a `<name>.SemanticModel` MODEL_PATH runs against the dataset named `<name>` in the workspace, even when `PQL_DATASET_ID` is set, and the CLI prints a note when it sets the variable aside. `PQL_DATASET_ID` (the SampleModel dataset here) applies only to a MODEL_PATH that names no model, such as a PBIP root folder. When a dataset's name differs from its folder, pass its ID, for example `--dataset-id $PQL_DATASET_ID_RLS` or `--dataset-id $PQL_DATASET_ID_OLS`. To test the model open in Power BI Desktop instead, use `local/<name>`.
 
 The CLI uses a **service-principal OAuth2 client-credentials flow** (via MSAL)
 to acquire a bearer token, then calls the Power BI REST API to resolve names,

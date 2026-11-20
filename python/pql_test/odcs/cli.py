@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The file-only commands of ``pql-test contract``: init, generate, coverage, lint, trace.
+"""The file-only commands of ``pql-test contract``: init, generate, mapping, lint, trace.
 
-``run`` and ``doctor`` connect to a model, so they live in ``pql_test.contract_run`` and are
-added to this group by ``pql_test.cli``. Exit codes: 0 success; 1 contract invalid, lint
+``run``, ``doctor``, and ``coverage`` can connect to a model, so they live in ``pql_test.contract_run``
+and are added to this group by ``pql_test.cli``. Exit codes: 0 success; 1 contract invalid, lint
 problems, or ``--fail-on-skipped`` triggered; 2 usage error (bad option, MODEL_PATH, or a suite
 file pql-test would overwrite).
 """
@@ -21,6 +21,7 @@ from pql_test.cli_options import (
     record_summary,
     verbosity_options,
 )
+from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS
 
 _CONTRACT = click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
 _CLOSED = click.option(
@@ -29,23 +30,25 @@ _CLOSED = click.option(
 _PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8", "0.9"]),
+    type=click.Choice(list(PQL_ASSERT_CATALOGS)),
     default="0.7",
     show_default=True,
     help=(
         "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
-        "refresh check. Needs a model with that PQL.Assert version or later."
+        "refresh check; 0.9.1 also checks a relationship's cross-filter direction and active state. Needs a model "
+        "with that PQL.Assert version or later."
     ),
 )
 _GENERATE_PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8", "0.9", "auto"]),
+    type=click.Choice([*PQL_ASSERT_CATALOGS, "auto"]),
     default="0.7",
     show_default=True,
     help=(
         "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
-        "refresh check. Needs a model with that PQL.Assert version or later. "
+        "refresh check; 0.9.1 also checks a relationship's cross-filter direction and active state. Needs a model "
+        "with that PQL.Assert version or later. "
         "auto reads the model folder's functions.tmdl (see `pql-test contract doctor`)."
     ),
 )
@@ -66,7 +69,7 @@ def _plan(contract_path: str, closed_schema: bool, pql_assert: str = "0.7"):
 
 
 def _report(plan) -> dict:
-    from pql_test.odcs.coverage import build_report
+    from pql_test.odcs.mapping_report import build_report
 
     return build_report(plan.contract, plan.outcomes, catalog=plan.catalog)
 
@@ -143,8 +146,8 @@ def generate_cmd(
     report = _report(plan)
     s = report["summary"]
     click.echo(
-        f"Coverage: {s['mapped']} mapped, {s['approximated']} approximated, {s['skipped']} skipped "
-        f"of {s['total']} rules (run `coverage` for details).",
+        f"Rules: {s['mapped']} mapped, {s['approximated']} approximated, {s['skipped']} skipped "
+        f"of {s['total']} (run `mapping` for details).",
         err=True,
     )
     _fail_if_skipped(report, fail_on_skipped)
@@ -195,16 +198,16 @@ def init_cmd(model_path, tables, contract_id, output, force):
     click.echo(f"wrote   {path}", err=True)
 
 
-@contract.command("coverage")
+@contract.command("mapping")
 @_CONTRACT
 @format_option()
 @_CLOSED
 @_PQL_ASSERT
 @_FAIL_ON_SKIPPED
 @verbosity_options()
-def coverage_cmd(contract_path, output_format, closed_schema, pql_assert, fail_on_skipped):
+def mapping_cmd(contract_path, output_format, closed_schema, pql_assert, fail_on_skipped):
     """List every rule in CONTRACT as mapped, approximated, or skipped."""
-    from pql_test.odcs.coverage import format_text
+    from pql_test.odcs.mapping_report import format_text
 
     report = _report(_plan(contract_path, closed_schema, pql_assert))
     if output_format == "json":
@@ -225,14 +228,15 @@ def lint_cmd(contract_path, model_path, output_format):
     """Schema-validate CONTRACT and check that its names resolve (in MODEL_PATH, when given)."""
     from pql_test.odcs.api import plan_contract
     from pql_test.odcs.catalog import LATEST_PQL_ASSERT
-    from pql_test.odcs.datatypes import tmdl_model_type
     from pql_test.odcs.ir import CONTRACT_DAX, Status
     from pql_test.odcs.loader import ContractError
-    from pql_test.odcs.mapping.context import is_column
+    from pql_test.odcs.mapping.relationships import broken_references, setting_problems
+    from pql_test.odcs.model_check import model_problems
     from pql_test.odcs.naming import DATA_TYPE_KEY
     from pql_test.odcs.pbip import (
         ModelPathError,
         model_columns,
+        model_relationship_settings,
         model_relationships,
         require_semantic_model_dir,
     )
@@ -245,6 +249,8 @@ def lint_cmd(contract_path, model_path, output_format):
         plan, problems = None, exc.problems or [str(exc)]
     if plan is not None:
         problems.extend(plan.names.problems())
+        problems.extend(broken_references(plan.contract, plan.names))
+        problems.extend(setting_problems(plan.contract))
         problems.extend(
             f"{o.rule_id}: {o.reason}" for o in plan.outcomes if o.source == CONTRACT_DAX and o.status is Status.SKIPPED
         )
@@ -255,24 +261,17 @@ def lint_cmd(contract_path, model_path, output_format):
         )
         if model_path:
             try:
-                model = model_columns(require_semantic_model_dir(model_path))
+                semantic_model_dir = require_semantic_model_dir(model_path)
             except ModelPathError as exc:
                 raise click.UsageError(str(exc)) from None
-            # DAX object names are case-insensitive.
-            model_ci = {t.lower(): {c.lower(): dt for c, dt in cols.items()} for t, cols in model.items()}
-            for obj in plan.contract.schema_objects:
-                table = plan.names.table(obj)
-                if table.lower() not in model_ci:
-                    problems.append(f"{obj['name']}: table {table!r} not found in model")
-                    continue
-                for prop in obj.get("properties") or []:
-                    column = plan.names.column(obj, prop)
-                    if is_column(prop) and column.lower() not in model_ci[table.lower()]:
-                        problems.append(
-                            f"{obj['name']}.{prop['name']}: column {column!r} not found in model table {table!r}"
-                        )
-            problems.extend(_type_problems(plan, model_ci, tmdl_model_type))
-            problems.extend(_relationship_problems(plan, model_relationships(require_semantic_model_dir(model_path))))
+            problems.extend(
+                model_problems(
+                    plan,
+                    model_columns(semantic_model_dir),
+                    model_relationships(semantic_model_dir),
+                    model_relationship_settings(semantic_model_dir),
+                )
+            )
     name = Path(contract_path).name
     if output_format == "json":
         emit_result(
@@ -298,45 +297,6 @@ def lint_cmd(contract_path, model_path, output_format):
     summary = f"{name}: valid ODCS v{plan.contract.api_version}, {len(plan.outcomes)} rules, names resolve."
     record_summary(summary)
     click.echo(summary)
-
-
-def _type_problems(plan, model_ci: dict, tmdl_model_type) -> list[str]:
-    """Type checks whose column has a different data type in the model's TMDL."""
-    problems = []
-    for outcome in plan.outcomes:
-        for a in outcome.assertions:
-            if a.op != "tbl.column_type":
-                continue
-            tmdl = model_ci.get(a.target.table.lower(), {}).get((a.target.column or "").lower())
-            actual = tmdl_model_type(tmdl) if tmdl else None
-            if actual and actual not in a.args["types"]:
-                expected = " or ".join(a.args["types"])
-                problems.append(
-                    f"{outcome.rule_id}: column {a.target.column!r} is {actual} in the model, the contract expects "
-                    f"{expected} (set pbiDataType to pin another model type)"
-                )
-    return problems
-
-
-def _relationship_problems(plan, model: set[tuple[str, str, str, str]]) -> list[str]:
-    """Contract relationships (any catalog) that the model's TMDL does not define, from foreign key to key."""
-    from pql_test.odcs.mapping.relationships import relationship_entries, resolve
-
-    defined = {tuple(n.lower() for n in r) for r in model}
-    problems = []
-    for obj, prop, scope, index, rel in relationship_entries(plan.contract):
-        found = resolve(plan.contract, plan.names, obj, prop, rel)
-        if isinstance(found, str):
-            continue  # reported as skipped by `coverage`
-        key = tuple(n.lower() for n in found)
-        if key in defined:
-            continue
-        where = "is defined from the key side in the model" if key[2:] + key[:2] in defined else "is not in the model"
-        problems.append(
-            f"{scope}.relationships[{index}]: relationship {found.from_table}[{found.from_column}] -> "
-            f"{found.to_table}[{found.to_column}] {where}"
-        )
-    return problems
 
 
 @contract.command("trace")

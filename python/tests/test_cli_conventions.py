@@ -22,7 +22,7 @@ SAMPLE = Path(__file__).resolve().parents[2] / "examples" / "SampleModel.Semanti
 # Commands that print a report: -v/--verbose and -q/--quiet.
 REPORT_COMMANDS = {
     "check-prereqs", "retrieve-tests", "retrieve-test", "run-tests", "code-coverage", "auth status",
-    "contract init", "contract lint", "contract coverage", "contract generate", "contract trace",
+    "contract init", "contract lint", "contract mapping", "contract coverage", "contract generate", "contract trace",
     "contract run", "contract doctor",
 }  # fmt: skip
 # Commands that print no report: everything else must be in REPORT_COMMANDS.

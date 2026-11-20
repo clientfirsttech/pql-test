@@ -51,15 +51,18 @@ jobs:
           # init starts a contract from the TMDL; the starter lints clean against the same model.
           pql-test contract init $M --output /tmp/starter.odcs.yaml
           pql-test contract lint /tmp/starter.odcs.yaml $M
+          # coverage without --live reads only the PBIP folder, so it runs here; the starter lists every table and column.
+          pql-test contract coverage /tmp/starter.odcs.yaml $M --format json > /tmp/coverage.json
+          python -c "import json; r = json.load(open('/tmp/coverage.json')); c = r['categories']; assert r['source'] == 'files' and c['TABLE']['covered'] == c['TABLE']['eligible'] > 0 and c['COLUMN']['covered'] == c['COLUMN']['eligible'], r['summary']"
           pql-test contract lint $F/marvel.odcs.yaml local/SampleModel
-          pql-test contract coverage $F/every-row.odcs.yaml --format json > /tmp/coverage.json
-          python -c "import json; r = json.load(open('/tmp/coverage.json')); assert r['summary']['total'] == len(r['rules']) > 0"
+          pql-test contract mapping $F/every-row.odcs.yaml --format json > /tmp/mapping.json
+          python -c "import json; r = json.load(open('/tmp/mapping.json')); assert r['summary']['total'] == len(r['rules']) > 0"
           pql-test contract generate $F/marvel.odcs.yaml $M --env DEV --dry-run | grep -q "EVALUATE Marvel.Schema.DEV.Tests()"
-          # doctor reads SampleModel's PQL.Assert 0.9.0 from its TMDL; with no XMLA here the live checks only warn.
+          # doctor reads SampleModel's PQL.Assert 0.9.1 from its TMDL; with no XMLA here the live checks only warn.
           pql-test contract doctor $M --format json > /tmp/doctor.json
-          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.9', r"
+          python -c "import json; r = json.load(open('/tmp/doctor.json')); assert r['ok'] and r['recommendedPqlAssert'] == '0.9.1', r"
           # Exit code 1 is the contract: every-row has rules the 0.7 catalog skips.
-          if pql-test contract coverage $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
+          if pql-test contract mapping $F/every-row.odcs.yaml --fail-on-skipped > /dev/null; then
             echo "::error::--fail-on-skipped should exit 1 for every-row.odcs.yaml"; exit 1
           fi
 

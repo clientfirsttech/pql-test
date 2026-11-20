@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """``pql-test contract init``: a starter ODCS contract read from a PBIP model's TMDL.
 
-The starter states what the model already is (tables, columns, types) and adds no quality
-rules, so it lints clean and passes against the model. Its types are the inverse of the
+The starter states what the model already is (tables, columns, types, and relationships with
+their settings) and adds no quality rules, so it lints clean and passes against the model. Its types are the inverse of the
 column type check, so every ``logicalType`` maps back to the column's own model type.
 """
 
@@ -14,12 +14,17 @@ from pathlib import Path
 import yaml
 
 from pql_test.odcs.datatypes import CURRENCY
+from pql_test.odcs.loader import reference_forms
+from pql_test.odcs.mapping.relationships import ReferenceIds, settings_properties
 from pql_test.odcs.naming import DATA_TYPE_KEY
-from pql_test.odcs.pbip import measure_tables, model_columns
+from pql_test.odcs.pbip import (
+    AUTO_DATE_TABLE_RE,
+    measure_tables,
+    model_columns,
+    model_relationship_settings,
+)
 
 API_VERSION = "v3.1.0"
-# Power BI's automatic date/time tables: not part of the model anyone wrote.
-_AUTO_TABLE_RE = re.compile(r"^(LocalDateTable_|DateTableTemplate_)")
 
 # TMDL dataType -> (ODCS logicalType, pbiDataType to pin, or None).
 TMDL_LOGICAL_TYPES = {
@@ -47,7 +52,8 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "contract"
 
 
-def _property(column: str, data_type: str | None) -> dict:
+def starter_property(column: str, data_type: str | None) -> dict:
+    """The ODCS property `init` writes for a column with this TMDL dataType."""
     prop: dict = {"name": column}
     if data_type is None:
         prop["description"] = NO_TMDL_TYPE
@@ -62,6 +68,11 @@ def _property(column: str, data_type: str | None) -> dict:
     return prop
 
 
+def starter_object(table: str, columns: dict[str, str | None]) -> dict:
+    """The ODCS schema object `init` writes for a table: ``columns`` is ``{column: TMDL dataType or None}``."""
+    return {"name": table, "physicalType": "table", "properties": [starter_property(c, dt) for c, dt in columns.items()]}
+
+
 def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), contract_id: str | None = None) -> dict:
     """The starter contract for *semantic_model_dir* as an ODCS dict (only *tables*, when given)."""
     model = semantic_model_dir.name.removesuffix(".SemanticModel")
@@ -69,7 +80,7 @@ def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), con
     columns = {
         t: cols
         for t, cols in model_columns(semantic_model_dir).items()
-        if cols and t not in skip and not _AUTO_TABLE_RE.match(t)
+        if cols and t not in skip and not AUTO_DATE_TABLE_RE.match(t)
     }
     if tables:
         by_lower = {t.lower(): t for t in columns}
@@ -79,6 +90,8 @@ def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), con
         columns = {by_lower[t.lower()]: columns[by_lower[t.lower()]] for t in tables}
     if not columns:
         raise InitError(f"The model {model} has no tables with columns to describe.")
+    schema = [starter_object(table, cols) for table, cols in columns.items()]
+    add_relationships(schema, model_relationship_settings(semantic_model_dir))
     return {
         "apiVersion": API_VERSION,
         "kind": "DataContract",
@@ -86,18 +99,55 @@ def starter_contract(semantic_model_dir: Path, tables: tuple[str, ...] = (), con
         "name": model,
         "version": "1.0.0",
         "status": "draft",
-        "schema": [
-            {"name": table, "physicalType": "table", "properties": [_property(c, dt) for c, dt in cols.items()]}
-            for table, cols in columns.items()
-        ],
+        "schema": schema,
     }
+
+
+def _with_id(element: dict, element_id: str) -> None:
+    """Give *element* an ``id``, first among its keys."""
+    rest = dict(element)
+    element.clear()
+    element["id"] = element_id
+    element.update(rest)
+
+
+def add_relationships(schema: list[dict], settings: dict[tuple[str, str, str, str], dict[str, str]]) -> None:
+    """Add each model relationship whose two ends are in *schema* as a schema-level foreign key under its
+    ``from`` table, with its settings, the way ``coverage`` suggests one.
+
+    An end is ``table.property`` when its names fit that form, else by id; the ids are added to the elements.
+    """
+    forms = reference_forms(API_VERSION.removeprefix("v").rsplit(".", 1)[0])
+    ids = ReferenceIds(schema)
+    objects = {obj["name"].lower(): obj for obj in schema}
+    for ends, rel_settings in sorted(settings.items()):
+        found = []
+        for table, column in (ends[:2], ends[2:]):
+            obj = objects.get(table.lower())
+            prop = next((p for p in (obj or {}).get("properties", []) if p["name"].lower() == column.lower()), None)
+            found.append((obj, prop))
+        if any(prop is None for _obj, prop in found):
+            continue  # an end is in a table the starter leaves out
+        refs = []
+        for obj, prop in found:
+            name = f"{obj['name']}.{prop['name']}"
+            # A dot in a name would read as a nested property, so it needs the id form too.
+            if name.count(".") == 1 and forms.shorthand.fullmatch(name):
+                refs.append(name)
+                continue
+            ref, to_add = ids.reference(obj["name"], obj, prop["name"], prop)
+            for _owner, prop_name, element_id in to_add:
+                _with_id(obj if prop_name is None else prop, element_id)
+            refs.append(ref)
+        entry = {"type": "foreignKey", "from": refs[0], "to": refs[1], "customProperties": settings_properties(rel_settings)}
+        found[0][0].setdefault("relationships", []).append(entry)
 
 
 def render_starter(contract: dict, source: str) -> str:
     """The contract as YAML, with a header saying where it came from and what to add."""
     header = (
         f"# Starter ODCS contract generated by `pql-test contract init` from {_CONTROL_RE.sub(' ', source)}.\n"
-        "# It states what the model is today (tables, columns, types), so it passes as is.\n"
+        "# It states what the model is today (tables, columns, types, relationships), so it passes as is.\n"
         f"# Add quality rules for what the data must be (required, unique, rowCount, ...): {DOCS_URL}\n"
     )
     return header + yaml.safe_dump(contract, sort_keys=False, allow_unicode=True, width=120)

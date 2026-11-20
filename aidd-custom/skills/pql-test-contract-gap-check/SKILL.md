@@ -17,7 +17,7 @@ GapCheck() {
        (bundled schemas: python/pql_test/odcs/schemas/odcs-json-schema-v*.json)
      - PQL.Assert (DAX Lib registry; the PQL.Assert repo publishes no GitHub releases):
        https://github.com/daxlib/daxlib/tree/main/packages/p/pql.assert
-       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.9.0/)
+       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.9.1/)
      // If neither moved since the last gap check (see plan.md), skip to step 4.
 
   2. On a new ODCS release:
@@ -34,7 +34,10 @@ GapCheck() {
      - cd python && pytest tests/odcs/test_function_matrix.py tests/odcs/test_library_conformance.py
      - Every failure names an unclassified function: add it to
        pql_test/odcs/catalog/pql_assert_functions.yaml (mapped / dax / none; see that
-       file's header for what each means) and, if it fixes a known gap, update a catalog
+       file's header for what each means), with `since` set to the new release; for a
+       function whose parameters grew, add `release: count` to its `since` instead (direct
+       calls need only that release, so never raise `since` for an unchanged function).
+       If it fixes a known gap, update a catalog
        in pql_test/odcs/catalog/pql_assert_*.yaml per docs/pql-assert-gap-plan.md
      - A genuinely new PQL.Assert minor version (not a patch) may need a new
        pql_assert_0_X.yaml catalog: see docs/contracts.md's "PQL.Assert 0.8" section

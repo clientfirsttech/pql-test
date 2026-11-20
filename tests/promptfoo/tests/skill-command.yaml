@@ -12,7 +12,7 @@
     - type: llm-rubric
       value: |
         The response should invoke `pql-test skill --install copilot` (or similar),
-        which installs the skill markdown to .github/copilot-instructions.md.
+        which installs each skill to .github/skills/<skill>/SKILL.md.
         It should NOT invent unrelated flags or point to a manual copy step.
 
 - description: Check which harnesses have the skills installed

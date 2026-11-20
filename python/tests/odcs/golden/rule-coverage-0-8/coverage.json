@@ -12,10 +12,10 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 46,
-    "mapped": 30,
-    "approximated": 9,
-    "skipped": 7
+    "total": 47,
+    "mapped": 31,
+    "approximated": 10,
+    "skipped": 6
   },
   "rules": [
     {
@@ -348,6 +348,17 @@
       "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
+      "ruleId": "orders.relationships[0]",
+      "status": "approximated",
+      "description": "orders relationship to customers.customer_id",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Relationship.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": "not checked: pbiCrossFilteringBehavior, pbiIsActive, which need --pql-assert 0.9.1 (PQL.Assert 0.9.1 or later)"
+    },
+    {
       "ruleId": "orders.quality[0]",
       "status": "mapped",
       "description": "Order count is 0, not blank, for a year with no data",
@@ -385,12 +396,14 @@
     },
     {
       "ruleId": "orders.quality[3]",
-      "status": "skipped",
+      "status": "mapped",
       "description": "Quantity mean is in range",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "direct PQL.Assert calls need --pql-assert 0.9 (signatures from 0.9.0)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.MeanShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null,
       "source": "contract-dax"
     },
     {
