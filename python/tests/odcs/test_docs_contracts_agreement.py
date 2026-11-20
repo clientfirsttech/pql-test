@@ -68,7 +68,7 @@ def test_every_function_docs_name_is_a_real_pql_assert_function():
 
 
 def test_every_catalog_generated_function_is_named_in_docs():
-    given = "every function some catalog op (0.7, 0.8, or 0.9) actually calls"
+    given = "every function some catalog op (any --pql-assert version) actually calls"
     should = "be named in docs/contracts.md somewhere (full or bare form)"
     catalog_functions = {
         spec.fn.removeprefix("PQL.Assert.")

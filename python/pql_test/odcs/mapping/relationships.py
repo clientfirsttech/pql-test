@@ -1,17 +1,130 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""ODCS v3.1 ``relationships`` (foreign keys) -> ``Relationship.ShouldExist`` (PQL.Assert 0.8)."""
+"""ODCS v3.1 ``relationships`` (foreign keys) -> ``Relationship.ShouldExist`` (PQL.Assert 0.8).
+
+A relationship's ``customProperties`` can pin the settings on Power BI's Edit relationship dialog
+that change results. Each is named after the TMDL property it checks, and becomes the
+``ShouldExist`` argument of the same name.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
+from pql_test.odcs.catalog import Catalog
 from pql_test.odcs.ir import SCHEMA_SUITE, Assertion, RuleOutcome, Target
 from pql_test.odcs.loader import Contract
-from pql_test.odcs.mapping.context import MapContext, is_column, mapped, skipped
+from pql_test.odcs.mapping.context import (
+    MapContext,
+    approximated,
+    is_column,
+    mapped,
+    skipped,
+)
 from pql_test.odcs.naming import NameResolver
+from pql_test.odcs.udf import version_key
 
-RELATIONSHIP_REASON = "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+RELATIONSHIP_REASON = "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
+
+CARDINALITY_KEY = "pbiCardinality"
+CROSS_FILTER_KEY = "pbiCrossFilteringBehavior"
+IS_ACTIVE_KEY = "pbiIsActive"
+SECURITY_FILTER_KEY = "pbiSecurityFilteringBehavior"  # the RLS checkbox, not the cross-filter direction
+SETTING_KEYS = (CARDINALITY_KEY, CROSS_FILTER_KEY, IS_ACTIVE_KEY, SECURITY_FILTER_KEY)
+# The first PQL.Assert whose ShouldExist checks every setting: 0.9.1 added crossFilteringBehavior
+# and isActive, and reports a limited relationship's security filter as None (0.9.0: Unknown).
+SETTINGS_PQL_ASSERT = "0.9.1"
+
+_ONE_DIRECTION, _BOTH = {"crossFilteringBehavior": "OneDirection"}, {"crossFilteringBehavior": "BothDirections"}
+# Contract value -> ShouldExist arguments (TMDL names). Values compare case-insensitively.
+SETTING_VALUES: dict[str, dict[str, dict[str, str]]] = {
+    CARDINALITY_KEY: {
+        "manyToOne": {"fromCardinality": "Many", "toCardinality": "One"},
+        "oneToMany": {"fromCardinality": "One", "toCardinality": "Many"},
+        "oneToOne": {"fromCardinality": "One", "toCardinality": "One"},
+        "manyToMany": {"fromCardinality": "Many", "toCardinality": "Many"},
+    },
+    # The dialog's words, then the TMDL names; automatic is set outside Power BI Desktop.
+    CROSS_FILTER_KEY: {
+        "single": _ONE_DIRECTION,
+        "both": _BOTH,
+        "oneDirection": _ONE_DIRECTION,
+        "bothDirections": _BOTH,
+        "automatic": {"crossFilteringBehavior": "Automatic"},
+    },
+    IS_ACTIVE_KEY: {"true": {"isActive": "TRUE"}, "false": {"isActive": "FALSE"}},
+    # TMDL names only: single/both are the cross-filter dropdown's words, and this is a checkbox.
+    SECURITY_FILTER_KEY: {
+        "oneDirection": {"securityFilteringBehavior": "OneDirection"},
+        "bothDirections": {"securityFilteringBehavior": "BothDirections"},
+        "none": {"securityFilteringBehavior": "None"},
+    },
+}
+
+
+class Setting(NamedTuple):
+    """One relationship setting a contract states: its value as written, and the ShouldExist arguments."""
+
+    value: str
+    args: dict[str, str]
+
+
+def _custom_items(element: Mapping) -> Iterator[tuple[Any, Any]]:
+    props = element.get("customProperties")
+    if isinstance(props, Mapping):
+        yield from props.items()
+        return
+    for item in props or []:
+        if isinstance(item, Mapping):
+            yield item.get("property"), item.get("value")
+
+
+def stated_settings(rel: Mapping) -> dict[str, Setting] | str:
+    """The settings *rel* pins, by contract property, or why one of them cannot be checked.
+
+    Any ``pbi*`` property that is not a setting, or a value not in its list, is a problem, so a typo
+    cannot quietly check less than the contract says.
+    """
+    found: dict[str, Setting] = {}
+    for key, value in _custom_items(rel):
+        if not (isinstance(key, str) and key.startswith("pbi")):
+            continue
+        if key not in SETTING_VALUES:
+            return f"{key} is not a relationship property; use {', '.join(SETTING_KEYS)}"
+        allowed = SETTING_VALUES[key]
+        text = str(value).lower() if isinstance(value, (str, bool)) else None
+        match = next((v for v in allowed if v.lower() == text), None)
+        if match is None:
+            return f"{key} {value!r} is not one of {', '.join(allowed)}"
+        found[key] = Setting(str(value).lower() if isinstance(value, bool) else str(value), allowed[match])
+    return found
+
+
+def contract_value(key: str, settings: Mapping[str, str]) -> str:
+    """How a contract writes the model *settings* (ShouldExist names) for property *key*: the dialog's
+    words where it has them (``single``, ``both``), else the TMDL name."""
+    for value, args in SETTING_VALUES[key].items():
+        if all(str(settings.get(arg, "")).upper() == expected.upper() for arg, expected in args.items()):
+            return value
+    return "/".join(str(settings.get(arg)) for arg in next(iter(SETTING_VALUES[key].values())))
+
+
+def setting_problems(contract: Contract) -> list[str]:
+    """Every relationship with a setting that is not a known property or value (for `lint`)."""
+    found = (
+        (f"{scope}.relationships[{index}]", stated_settings(rel)) for _o, _p, scope, index, rel in relationship_entries(contract)
+    )
+    return [f"{rule_id}: {reason}" for rule_id, reason in found if isinstance(reason, str)]
+
+
+def _not_checked(catalog: Catalog, op_args: tuple[str, ...], key: str, setting: Setting) -> str | None:
+    """How to name *setting* when the selected catalog's PQL.Assert cannot check it, else None."""
+    if any(arg not in op_args for arg in setting.args):
+        return key
+    older = version_key(catalog.min_version) < version_key(SETTINGS_PQL_ASSERT)
+    if older and setting.args.get("securityFilteringBehavior") == "None":
+        return f"{key}: none"
+    return None
 
 
 class ModelRelationship(NamedTuple):
@@ -142,13 +255,37 @@ def _rule(ctx: MapContext, obj, prop, scope: str, index: int, rel: Mapping, top_
         return skipped(rule_id, RELATIONSHIP_REASON, description)
     if not top_level:
         return skipped(rule_id, "a nested property has no semantic model column", description)
+    settings = stated_settings(rel)
+    if isinstance(settings, str):
+        return skipped(rule_id, settings, description)
     found = resolve(ctx.contract, ctx.names, obj, prop, rel)
     if isinstance(found, str):
         return skipped(rule_id, found, description)
-    args = {
+    ends = {
         "fromTable": found.from_table,
         "fromColumn": found.from_column,
         "toTable": found.to_table,
         "toColumn": found.to_column,
     }
-    return mapped(rule_id, Assertion(rule_id, SCHEMA_SUITE, "rel.exists", Target(found.from_table), args, description))
+    op_args = ctx.catalog.op("rel.settings").args if ctx.supports("rel.settings") else ()
+    checked: dict[str, str] = {}
+    unchecked: list[str] = []
+    for key, setting in settings.items():
+        why = _not_checked(ctx.catalog, op_args, key, setting)
+        if why:
+            unchecked.append(why)
+        else:
+            checked.update(setting.args)
+    if checked:
+        # ShouldExist skips a setting passed as "", so unstated ones are passed empty.
+        args = {**ends, **{arg: checked.get(arg, "") for arg in op_args if arg != "testName" and arg not in ends}}
+        assertion = Assertion(rule_id, SCHEMA_SUITE, "rel.settings", Target(found.from_table), args, description)
+    else:
+        assertion = Assertion(rule_id, SCHEMA_SUITE, "rel.exists", Target(found.from_table), ends, description)
+    if unchecked:
+        reason = (
+            f"not checked: {', '.join(unchecked)}, which need --pql-assert {SETTINGS_PQL_ASSERT} "
+            f"(PQL.Assert {SETTINGS_PQL_ASSERT} or later)"
+        )
+        return approximated(rule_id, reason, assertion)
+    return mapped(rule_id, assertion)

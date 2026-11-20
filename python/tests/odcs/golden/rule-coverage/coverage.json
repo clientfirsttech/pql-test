@@ -12,10 +12,10 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 44,
+    "total": 45,
     "mapped": 16,
     "approximated": 7,
-    "skipped": 21
+    "skipped": 22
   },
   "rules": [
     {
@@ -80,7 +80,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
     },
     {
       "ruleId": "orders.quantity.type",
@@ -303,6 +303,15 @@
       "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
+      "ruleId": "orders.relationships[0]",
+      "status": "skipped",
+      "description": "orders relationship to customers.customer_id",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
+    },
+    {
       "ruleId": "orders.quality[0]",
       "status": "mapped",
       "description": "Order count is 0, not blank, for a year with no data",
@@ -409,7 +418,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
     },
     {
       "ruleId": "slaProperties[0]",

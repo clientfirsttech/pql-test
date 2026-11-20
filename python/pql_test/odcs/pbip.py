@@ -217,23 +217,52 @@ def _tmdl_column_ref(raw: str) -> tuple[str, str]:
     return table, _tmdl_name(rest[1:])
 
 
-def model_relationships(semantic_model_dir: Path) -> set[tuple[str, str, str, str]]:
-    """``(from table, from column, to table, to column)`` per relationship in ``definition/relationships.tmdl``."""
+# A relationship's settings as Relationship.ShouldExist names them, with Power BI's value when TMDL omits the line.
+RELATIONSHIP_DEFAULTS = {
+    "fromCardinality": "Many",
+    "toCardinality": "One",
+    "securityFilteringBehavior": "OneDirection",
+    "crossFilteringBehavior": "OneDirection",
+    "isActive": "TRUE",
+}
+# TMDL enum value (any case) -> the name Relationship.ShouldExist reports.
+_TMDL_SETTING_VALUES = {
+    v.lower(): v for v in ("Many", "One", "OneDirection", "BothDirections", "Automatic", "None", "TRUE", "FALSE")
+}
+
+RelationshipEnds = tuple[str, str, str, str]
+
+
+def _tmdl_relationships(semantic_model_dir: Path) -> list[tuple[RelationshipEnds, dict[str, str]]]:
+    """``(ends, settings)`` per relationship in ``definition/relationships.tmdl``; absent settings get defaults."""
     tmdl = semantic_model_dir / "definition" / "relationships.tmdl"
     if not tmdl.is_file():
-        return set()
-    found, ends = set(), {}
+        return []
+    found, ends, settings = [], {}, {}
     for line in [*tmdl.read_text(encoding="utf-8-sig").splitlines(), "relationship"]:
         stripped = line.strip()
         if stripped.startswith("relationship") and not line.startswith("\t"):
             if "fromColumn" in ends and "toColumn" in ends:
-                found.add((*ends["fromColumn"], *ends["toColumn"]))
-            ends = {}
+                found.append(((*ends["fromColumn"], *ends["toColumn"]), {**RELATIONSHIP_DEFAULTS, **settings}))
+            ends, settings = {}, {}
             continue
         key, _, value = stripped.partition(":")
         if key in ("fromColumn", "toColumn"):
             ends[key] = _tmdl_column_ref(value)
+        elif key in RELATIONSHIP_DEFAULTS:
+            value = value.strip()
+            settings[key] = _TMDL_SETTING_VALUES.get(value.lower(), value)
     return found
+
+
+def model_relationships(semantic_model_dir: Path) -> set[RelationshipEnds]:
+    """``(from table, from column, to table, to column)`` per relationship in ``definition/relationships.tmdl``."""
+    return {ends for ends, _settings in _tmdl_relationships(semantic_model_dir)}
+
+
+def model_relationship_settings(semantic_model_dir: Path) -> dict[RelationshipEnds, dict[str, str]]:
+    """Each relationship's settings (``fromCardinality``, ..., ``isActive``), by its ends, as ShouldExist names them."""
+    return dict(_tmdl_relationships(semantic_model_dir))
 
 
 def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:

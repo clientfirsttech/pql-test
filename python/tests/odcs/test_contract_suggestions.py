@@ -182,6 +182,13 @@ def _related_model(tmp_path: Path) -> Path:
     return sm
 
 
+# The settings a relationship TMDL leaves at Power BI's defaults, as a suggestion writes them.
+DEFAULT_SETTINGS = [
+    {"property": "pbiCardinality", "value": "manyToOne"},
+    {"property": "pbiCrossFilteringBehavior", "value": "single"},
+    {"property": "pbiIsActive", "value": True},
+    {"property": "pbiSecurityFilteringBehavior", "value": "oneDirection"},
+]
 RELATED = contract_dict(
     schema=[
         schema_object("Orders", [prop("CustomerId", "integer")]),
@@ -218,7 +225,14 @@ class TestRelationshipSuggestions:
             "relationships",
             "Orders",
             (),
-            [{"type": "foreignKey", "from": "Orders.CustomerId", "to": "Customer.Id"}],
+            [
+                {
+                    "type": "foreignKey",
+                    "from": "Orders.CustomerId",
+                    "to": "Customer.Id",
+                    "customProperties": DEFAULT_SETTINGS,
+                }
+            ],
         ), f"{given}: {should}"
 
     def test_names_with_spaces_get_the_id_form(self, tmp_path):
@@ -235,6 +249,7 @@ class TestRelationshipSuggestions:
                     "type": "foreignKey",
                     "from": "schema/fact_table/properties/date_id",
                     "to": "schema/date_dim/properties/date_id",
+                    "customProperties": DEFAULT_SETTINGS,
                 }
             ],
         ), f"{given}: {should}"

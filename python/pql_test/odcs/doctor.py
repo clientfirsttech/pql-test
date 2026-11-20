@@ -78,13 +78,26 @@ def environment_checks() -> list[Check]:
     return checks
 
 
+def _catalog_gaps(catalog: str, params: dict[str, int]) -> list[str]:
+    """The functions *catalog* calls that the model lacks, or has with fewer parameters than the catalog passes."""
+    needed: dict[str, int] = {}
+    for spec in load_catalog(catalog).ops.values():
+        needed[spec.fn] = max(needed.get(spec.fn, 0), len(spec.args))
+    gaps = []
+    for name, count in sorted(needed.items()):
+        if name not in params:
+            gaps.append(name)
+        elif params[name] < count:
+            # Same name, older release: a patch release can add arguments (0.9.1's Relationship.ShouldExist).
+            gaps.append(f"{name} (the model's takes {params[name]} arguments; the catalog passes {count})")
+    return gaps
+
+
 def recommend_catalog(functions: list[UdfFunction]) -> tuple[str | None, dict[str, list[str]]]:
-    """The newest ``--pql-assert`` catalog the model fully supports, and each catalog's missing functions."""
-    names = {fn.name for fn in functions}
-    missing = {
-        choice: sorted({spec.fn for spec in load_catalog(catalog).ops.values()} - names)
-        for choice, catalog in PQL_ASSERT_CATALOGS.items()
-    }
+    """The newest ``--pql-assert`` catalog the model fully supports, and what each catalog needs that the model
+    lacks: a function's name, or the name and its argument counts when the model's version is too old."""
+    params = {fn.name: len(fn.parameters) for fn in functions}
+    missing = {choice: _catalog_gaps(catalog, params) for choice, catalog in PQL_ASSERT_CATALOGS.items()}
     for choice in sorted(missing, key=version_key, reverse=True):
         if not missing[choice]:
             return choice, missing
@@ -140,8 +153,8 @@ def model_checks(model_path: str | Path) -> tuple[list[Check], str | None]:
     if newer:
         catalog = load_catalog(PQL_ASSERT_CATALOGS[newer[0]])
         detail += (
-            f" ({newer[0]} needs {catalog.library} {catalog.min_version} or later; the model lacks "
-            f"{len(missing[newer[0]])} of its functions, e.g. {_short(missing[newer[0]], 2)})"
+            f" ({newer[0]} needs {catalog.library} {catalog.min_version} or later; the model lacks, or has an older "
+            f"version of, {len(missing[newer[0]])} of its functions, e.g. {_short(missing[newer[0]], 2)})"
         )
     checks.append(Check("--pql-assert", OK, detail))
     return checks, choice

@@ -90,6 +90,12 @@ ops:
   rel.exists:
     fn: PQL.Assert.Relationship.ShouldExist
     args: [testName, fromTable, fromColumn, toTable, toColumn]
+  rel.settings:
+    # A relationship that pins settings (pbiCardinality, pbiSecurityFilteringBehavior). The
+    # mapper passes "" for each one the contract leaves out, which ShouldExist skips; the
+    # settings 0.8 cannot check are reported, not dropped (mapping/relationships.py).
+    fn: PQL.Assert.Relationship.ShouldExist
+    args: [testName, fromTable, fromColumn, toTable, toColumn, fromCardinality, toCardinality, securityFilteringBehavior]
   tbl.refresh_age_at_most:
     # ODCS frequency: hours since the table last refreshed. PQL.Assert 0.8 has no refresh
     # function, so this compares an inline INFO.PARTITIONS() expression.

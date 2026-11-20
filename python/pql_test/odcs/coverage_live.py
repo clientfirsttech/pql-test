@@ -208,11 +208,13 @@ def live_inventory(query: Callable[[str], list[dict]]) -> Inventory:
             "columns": [],
             "measures": [],
         }
+    column_names: dict[int, tuple[str, str]] = {}  # column ID -> (table, column), for relationship ends
     for row in query("EVALUATE INFO.COLUMNS()"):
         table, kind = tables.get(_int(_cell(row, "TableID"))), _int(_cell(row, "Type"))
         if table is None or kind == _ROW_NUMBER:
             continue
         name = _cell(row, "ExplicitName") or _cell(row, "InferredName")
+        column_names[_int(_cell(row, "ID"))] = (table["name"], name)
         calculated = kind in (_CALCULATED, _CALCULATED_TABLE_COLUMN)
         table["columns"].append(ModelColumn(name, _data_type(row), bool(_cell(row, "IsHidden")), calculated))
     for row in query("EVALUATE INFO.MEASURES()"):
@@ -233,4 +235,30 @@ def live_inventory(query: Callable[[str], list[dict]]) -> Inventory:
         )
         for t in sorted(tables.values(), key=lambda t: str(t["name"]).lower())
     ]
-    return inventory_of(model, relationships)
+    return inventory_of(model, relationships, _relationship_settings(query, column_names))
+
+
+# INFO.RELATIONSHIPS() enum values (TOM) -> the names Relationship.ShouldExist reports.
+_CARDINALITY = {1: "One", 2: "Many"}
+_CROSS_FILTERING = {1: "OneDirection", 2: "BothDirections", 3: "Automatic"}
+_SECURITY_FILTERING = {1: "OneDirection", 2: "BothDirections", 3: "None"}
+
+
+def _relationship_settings(
+    query: Callable[[str], list[dict]], column_names: dict[int, tuple[str, str]]
+) -> dict[tuple[str, str, str, str], dict[str, str]]:
+    """Each relationship's settings by its ends, read from INFO.RELATIONSHIPS() (numeric values, column IDs)."""
+    found = {}
+    for r in query("EVALUATE INFO.RELATIONSHIPS()"):
+        source, target = column_names.get(_int(_cell(r, "FromColumnID"))), column_names.get(_int(_cell(r, "ToColumnID")))
+        if source is None or target is None:
+            continue
+        found[(*source, *target)] = {
+            "fromCardinality": _CARDINALITY.get(_int(_cell(r, "FromCardinality")), "Unknown"),
+            "toCardinality": _CARDINALITY.get(_int(_cell(r, "ToCardinality")), "Unknown"),
+            "securityFilteringBehavior": _SECURITY_FILTERING.get(_int(_cell(r, "SecurityFilteringBehavior")), "Unknown"),
+            "crossFilteringBehavior": _CROSS_FILTERING.get(_int(_cell(r, "CrossFilteringBehavior")), "Unknown"),
+            # A driver may hand back a bool or its text, so "False" must not read as true.
+            "isActive": "TRUE" if str(_cell(r, "IsActive")).lower() in ("true", "1") else "FALSE",
+        }
+    return found

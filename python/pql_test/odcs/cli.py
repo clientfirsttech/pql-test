@@ -21,6 +21,7 @@ from pql_test.cli_options import (
     record_summary,
     verbosity_options,
 )
+from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS
 
 _CONTRACT = click.argument("contract_path", metavar="CONTRACT", type=click.Path(exists=True, dir_okay=False))
 _CLOSED = click.option(
@@ -29,23 +30,25 @@ _CLOSED = click.option(
 _PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8", "0.9"]),
+    type=click.Choice(list(PQL_ASSERT_CATALOGS)),
     default="0.7",
     show_default=True,
     help=(
         "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
-        "refresh check. Needs a model with that PQL.Assert version or later."
+        "refresh check; 0.9.1 also checks a relationship's cross-filter direction and active state. Needs a model "
+        "with that PQL.Assert version or later."
     ),
 )
 _GENERATE_PQL_ASSERT = click.option(
     "--pql-assert",
     "pql_assert",
-    type=click.Choice(["0.7", "0.8", "0.9", "auto"]),
+    type=click.Choice([*PQL_ASSERT_CATALOGS, "auto"]),
     default="0.7",
     show_default=True,
     help=(
         "PQL.Assert version to target. 0.8 maps more rules exactly; 0.9 also gives frequency SLAs a native "
-        "refresh check. Needs a model with that PQL.Assert version or later. "
+        "refresh check; 0.9.1 also checks a relationship's cross-filter direction and active state. Needs a model "
+        "with that PQL.Assert version or later. "
         "auto reads the model folder's functions.tmdl (see `pql-test contract doctor`)."
     ),
 )
@@ -227,12 +230,13 @@ def lint_cmd(contract_path, model_path, output_format):
     from pql_test.odcs.catalog import LATEST_PQL_ASSERT
     from pql_test.odcs.ir import CONTRACT_DAX, Status
     from pql_test.odcs.loader import ContractError
-    from pql_test.odcs.mapping.relationships import broken_references
+    from pql_test.odcs.mapping.relationships import broken_references, setting_problems
     from pql_test.odcs.model_check import model_problems
     from pql_test.odcs.naming import DATA_TYPE_KEY
     from pql_test.odcs.pbip import (
         ModelPathError,
         model_columns,
+        model_relationship_settings,
         model_relationships,
         require_semantic_model_dir,
     )
@@ -246,6 +250,7 @@ def lint_cmd(contract_path, model_path, output_format):
     if plan is not None:
         problems.extend(plan.names.problems())
         problems.extend(broken_references(plan.contract, plan.names))
+        problems.extend(setting_problems(plan.contract))
         problems.extend(
             f"{o.rule_id}: {o.reason}" for o in plan.outcomes if o.source == CONTRACT_DAX and o.status is Status.SKIPPED
         )
@@ -260,7 +265,12 @@ def lint_cmd(contract_path, model_path, output_format):
             except ModelPathError as exc:
                 raise click.UsageError(str(exc)) from None
             problems.extend(
-                model_problems(plan, model_columns(semantic_model_dir), model_relationships(semantic_model_dir))
+                model_problems(
+                    plan,
+                    model_columns(semantic_model_dir),
+                    model_relationships(semantic_model_dir),
+                    model_relationship_settings(semantic_model_dir),
+                )
             )
     name = Path(contract_path).name
     if output_format == "json":

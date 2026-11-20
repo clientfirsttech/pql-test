@@ -80,7 +80,8 @@
       "enum": [
         "0.7",
         "0.8",
-        "0.9"
+        "0.9",
+        "0.9.1"
       ],
       "description": "The PQL.Assert catalog whose rules count as enforced."
     },

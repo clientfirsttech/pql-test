@@ -38,7 +38,7 @@
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
   - the datacontract-cli side of the integration (a datacontract-cli engine or wrapper that calls `pql-test contract run` and reads its `--output` JSON). It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code. pql-test's half is done: the output is a versioned, tested schema.
 
-- **Contract relationship settings** (planned 2026-11-17, re-planned 2026-11-19): contract relationships pin cardinality, cross-filter direction, active state, and the RLS security filter with `pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, and `pbiSecurityFilteringBehavior`, checked by one `Relationship.ShouldExist` call under a new `--pql-assert 0.9.1` catalog (PQL.Assert 0.9.1 shipped the arguments as a patch release, so the planned 0.10 follow-up epic was merged in) — see [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md).
+- **Contract relationship settings: live check** — run [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md)'s live gate with CodeCoverage open in Power BI Desktop: `pbiCrossFilteringBehavior: both` passes and `single` fails under `--pql-assert 0.9.1`.
 
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
@@ -61,6 +61,15 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-19 — Contract relationship settings (branch `feat/contract-model-coverage`)
+
+- See [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md) and [docs/contracts.md](docs/contracts.md#relationship-settings).
+- Relationship `customProperties` `pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, `pbiSecurityFilteringBehavior`, named after the TMDL property each checks. New `--pql-assert 0.9.1` catalog (`pql_assert_0_9_1.yaml`) passes all four to one `Relationship.ShouldExist` call; 0.8 and 0.9 pass cardinality and the security filter (`rel.settings` op) and approximate the rest, naming each setting. Relationships without settings generate what they did before.
+- `lint` reports an unknown value or `pbi*` property on a relationship, and (with MODEL_PATH) a setting that differs from the TMDL; `coverage` reports the same drift and suggests uncovered relationships with their settings (TMDL, or `INFO.RELATIONSHIPS()` with `--live`).
+- Catalog choice counts patch versions: `auto` picks 0.9.1 from `LibraryVersion()`, and `doctor` compares parameter counts, so a folder whose `ShouldExist` takes 8 arguments gets 0.9. `--pql-assert` choices now come from `PQL_ASSERT_CATALOGS`.
+- **Found in review:** coverage credited a relationship only for `rel.exists`, so one checked with settings would have shown as not enforced; it now counts `rel.settings` too. The 0.7 skip reason no longer says relationship checks are "planned".
+- `init` still writes no relationships (out of scope); `coverage` suggestions are the way to add them.
 
 ### 2026-11-19 — Contract gap check: PQL.Assert 0.9.1 (branch `feat/contract-model-coverage`)
 

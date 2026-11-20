@@ -1384,6 +1384,8 @@ You can regenerate the suites in CI on every run, or commit them to the PBIP rep
 
 Each property's `logicalType` is checked against the column's model data type (for example `integer` → `Integer`, TMDL `int64`); the ODCS-to-model type table and the `pbiDataType` override are in [Column types](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#column-types).
 
+A relationship can also pin the settings on Power BI's Edit relationship dialog that change results: cardinality, cross-filter direction, active state, and the row-level security filter (`pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, `pbiSecurityFilteringBehavior`). `--pql-assert 0.9.1` checks all four in one `Relationship.ShouldExist` call. See [Relationship settings](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#relationship-settings).
+
 Scenario tests, such as a measure's value in a given filter context, can live in the contract too: an ODCS `type: custom` rule with `engine: pql-test` holds a DAX expression and a comparator, or calls any PQL.Assert assertion by name. See [DAX rules in the contract](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#dax-rules-in-the-contract-engine-pql-test).
 
 Freshness is two checks. An ODCS `latency` SLA on a timestamp column checks **data age** (how old the newest row is), and a `frequency` SLA on a table checks **refresh recency** (when the model last refreshed). A refresh that succeeds against stale source data passes the second and fails the first, so a contract usually wants both. See [Freshness: latency vs frequency](https://github.com/clientfirsttech/pql-test/blob/main/docs/contracts.md#freshness-latency-vs-frequency).

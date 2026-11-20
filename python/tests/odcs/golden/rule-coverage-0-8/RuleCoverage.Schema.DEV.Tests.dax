@@ -20,6 +20,7 @@ DEFINE
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.region.type: orders.region is string (Text in the model)", "Orders", "region", "Text"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.loaded_at.type: orders.loaded_at is timestamp (Date in the model)", "Orders", "loaded_at", "Date"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage orders.order_date.type: orders.order_date is date (Date in the model)", "Orders", "order_date", "Date"),
+			PQL.Assert.Relationship.ShouldExist("ODCS rule-coverage orders.relationships[0]: orders relationship to customers.customer_id", "Orders", "customer_id", "Customer", "customer_id", "Many", "One", ""),
 			PQL.Assert.Tbl.ShouldExist("ODCS rule-coverage customers.exists: customers exists", "Customer"),
 			PQL.Assert.Tbl.ShouldHaveColumns("ODCS rule-coverage customers.columns: customers has columns customer_id", "Customer", "customer_id"),
 			PQL.Assert.Tbl.ColumnDataTypeShouldBe("ODCS rule-coverage customers.customer_id.type: customers.customer_id is integer (Integer in the model)", "Customer", "customer_id", "Integer")

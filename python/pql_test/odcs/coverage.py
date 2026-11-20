@@ -29,12 +29,18 @@ import yaml
 from pql_test.odcs.dax_refs import DaxRef, dax_references
 from pql_test.odcs.ir import CONTRACT_DAX_SUITE, DIRECT_CALL, SCHEMA_SUITE, Assertion, Status
 from pql_test.odcs.mapping.context import is_column
-from pql_test.odcs.mapping.relationships import relationship_entries, resolve
+from pql_test.odcs.mapping.relationships import (
+    IS_ACTIVE_KEY,
+    SETTING_KEYS,
+    contract_value,
+    relationship_entries,
+    resolve,
+)
 from pql_test.odcs.pbip import (
     AUTO_DATE_TABLE_RE,
     ModelTable,
     is_measure_table,
-    model_relationships,
+    model_relationship_settings,
     model_tables,
     related_tables,
 )
@@ -74,6 +80,8 @@ class ModelObject:
     name: str = ""  # columns and measures: the name without the table
     data_type: str | None = None  # columns only: the TMDL dataType, when known
     ends: tuple[str, ...] = ()  # relationships only: (from table, from column, to table, to column)
+    # relationships only, when known: (ShouldExist argument, value) per setting, e.g. ("isActive", "TRUE")
+    settings: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,6 +99,8 @@ class Inventory:
     # (``table -> {column: TMDL dataType or None}``), and every relationship's ends.
     tables: Mapping[str, Mapping[str, str | None]] = field(default_factory=dict)
     relationships: tuple[tuple[str, str, str, str], ...] = ()
+    # Each relationship's settings by its ends, as Relationship.ShouldExist names them (fromCardinality, ...).
+    relationship_settings: Mapping[tuple[str, str, str, str], Mapping[str, str]] = field(default_factory=dict)
 
 
 def column_id(table: str, column: str) -> str:
@@ -115,16 +125,23 @@ def _table_exclusion(table: ModelTable, related: set[str]) -> str | None:
 def model_inventory(semantic_model_dir: Path) -> Inventory:
     """Every table, column, measure, and relationship the report counts, and the ones it leaves out (with why)."""
     tables = model_tables(semantic_model_dir)
-    return inventory_of(tables, sorted(model_relationships(semantic_model_dir)))
+    settings = model_relationship_settings(semantic_model_dir)
+    return inventory_of(tables, sorted(settings), settings)
 
 
-def inventory_of(tables: Iterable[ModelTable], relationships: Iterable[tuple[str, str, str, str]]) -> Inventory:
-    """The inventory of a model given as tables and relationship ends, read from TMDL or from a connected model."""
-    tables, relationships = tuple(tables), tuple(relationships)
+def inventory_of(
+    tables: Iterable[ModelTable],
+    relationships: Iterable[tuple[str, str, str, str]],
+    settings: Mapping[tuple[str, str, str, str], Mapping[str, str]] | None = None,
+) -> Inventory:
+    """The inventory of a model given as tables, relationship ends, and (when known) each relationship's settings,
+    read from TMDL or from a connected model."""
+    tables, relationships, settings = tuple(tables), tuple(relationships), dict(settings or {})
     objects: list[ModelObject] = []
     excluded: list[Exclusion] = []
     left_out: dict[str, str] = {}
     related = related_tables(relationships)
+    by_ends = {tuple(n.lower() for n in ends): s for ends, s in settings.items()}  # DAX names are case-insensitive
     for table in tables:
         reason = _table_exclusion(table, related)
         objects.extend(
@@ -153,9 +170,10 @@ def inventory_of(tables: Iterable[ModelTable], relationships: Iterable[tuple[str
         if reason:
             excluded.append(Exclusion(Kind.RELATIONSHIP, identifier, f"it joins {reason}"))
         else:
-            objects.append(ModelObject(Kind.RELATIONSHIP, identifier, ends=tuple(ends)))
+            known = tuple(sorted((by_ends.get(tuple(n.lower() for n in ends)) or {}).items()))
+            objects.append(ModelObject(Kind.RELATIONSHIP, identifier, ends=tuple(ends), settings=known))
     columns = {t.name: {c.name: c.data_type for c in t.columns} for t in tables}
-    return Inventory(tuple(objects), tuple(excluded), columns, relationships)
+    return Inventory(tuple(objects), tuple(excluded), columns, relationships, settings)
 
 
 class Level(IntEnum):
@@ -234,7 +252,7 @@ def _column_and_table(names: ModelNames, table: str, column: str, level: Level, 
 def _assertion_evidence(names: ModelNames, a: Assertion, rule_id: str) -> list[Evidence]:
     """What a translated (not contract-written) assertion covers, from its target and arguments."""
     level = Level.LISTED if a.suite == SCHEMA_SUITE else Level.VALUES_TESTED
-    if a.op == "rel.exists":
+    if a.op in ("rel.exists", "rel.settings"):  # with or without the relationship's settings
         ends = (a.args["fromTable"], a.args["fromColumn"], a.args["toTable"], a.args["toColumn"])
         return [Evidence(Kind.RELATIONSHIP, names.model(Kind.RELATIONSHIP, relationship_id(*ends)), level, rule_id)]
     found = [Evidence(Kind.TABLE, names.model(Kind.TABLE, a.target.table), level, rule_id)]
@@ -560,7 +578,12 @@ def _relationship_suggestion(plan: Plan, o: ModelObject, ids: _Ids) -> Suggestio
         ref, added = ids.reference(owner, obj, prop_name, prop)
         refs.append(ref)
         to_add.extend(added)
-    entry = {"type": "foreignKey", "from": refs[0], "to": refs[1]}
+    entry: dict = {"type": "foreignKey", "from": refs[0], "to": refs[1]}
+    if o.settings:
+        settings = dict(o.settings)
+        values = {key: contract_value(key, settings) for key in SETTING_KEYS}
+        values[IS_ACTIVE_KEY] = values[IS_ACTIVE_KEY] == "true"  # a YAML boolean
+        entry["customProperties"] = [{"property": key, "value": value} for key, value in values.items()]
     return Suggestion(Kind.RELATIONSHIP, o.identifier, "relationships", owners[0], _yaml([entry]), tuple(to_add))
 
 
@@ -702,7 +725,9 @@ def build_coverage(
         excluded=inventory.excluded,
         unresolved=found.unresolved + (dax.unresolved if dax else ()),
         suggestions=suggestions(plan, objects),
-        mismatches=tuple(model_problems(plan, inventory.tables, inventory.relationships)),
+        mismatches=tuple(
+            model_problems(plan, inventory.tables, inventory.relationships, inventory.relationship_settings)
+        ),
         live=dax is not None,
         unavailable=(dax.unavailable if dax else ()) + ((NO_RELATIONSHIPS_V30,) if no_relationships else ()),
     )

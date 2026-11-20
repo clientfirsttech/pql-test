@@ -33,6 +33,7 @@ from pql_test.cli_options import (
     record_summary,
     verbosity_options,
 )
+from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS
 from pql_test.runner import (
     TestResult,
     TestSuite,
@@ -158,14 +159,21 @@ def deployed_library_version(conn) -> str | None:
 
 
 def _catalog_for_version(version: str | None) -> str:
-    """The newest catalog whose minimum version a LibraryVersion() report satisfies, else ``"0.7"``."""
-    try:
-        major, minor = (int(part) for part in (version or "").split(".")[:2])
-    except ValueError:
+    """The newest catalog whose minimum version a LibraryVersion() report satisfies, else ``"0.7"``.
+
+    Patch versions count: 0.9.1 added arguments to a function 0.9.0 already had.
+    """
+    from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog
+    from pql_test.odcs.udf import version_key
+
+    reported = version_key(version or "")
+    if len(reported) < 2:
         return "0.7"
-    if (major, minor) >= (0, 9):
-        return "0.9"
-    return "0.8" if (major, minor) >= (0, 8) else "0.7"
+    reported += (0,) * (3 - len(reported))  # "0.8" is 0.8.0
+    newest_first = sorted(PQL_ASSERT_CATALOGS, key=version_key, reverse=True)
+    return next(
+        (c for c in newest_first if reported >= version_key(load_catalog(PQL_ASSERT_CATALOGS[c]).min_version)), "0.7"
+    )
 
 
 def _version_key(catalog: str) -> tuple[int, ...]:
@@ -313,7 +321,7 @@ def make_run_command(hooks: RunHooks) -> click.Command:
     @click.option(
         "--pql-assert",
         "pql_assert",
-        type=click.Choice(["auto", "0.7", "0.8", "0.9"]),
+        type=click.Choice(["auto", *PQL_ASSERT_CATALOGS]),
         default="auto",
         show_default=True,
         help="PQL.Assert version to generate for. auto asks the model (PQL.Assert.LibraryVersion).",
@@ -819,7 +827,7 @@ def make_coverage_command(hooks: RunHooks) -> click.Command:
     @click.option(
         "--pql-assert",
         "pql_assert",
-        type=click.Choice(["auto", "0.7", "0.8", "0.9"]),
+        type=click.Choice(["auto", *PQL_ASSERT_CATALOGS]),
         default="auto",
         show_default=True,
         help="PQL.Assert version whose rules count as enforced. auto reads the model folder's functions.tmdl "
