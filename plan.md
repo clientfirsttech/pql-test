@@ -38,8 +38,6 @@
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
   - the datacontract-cli side of the integration (a datacontract-cli engine or wrapper that calls `pql-test contract run` and reads its `--output` JSON). It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code. pql-test's half is done: the output is a versioned, tested schema.
 
-- **Contract relationship settings: live check** — run [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md)'s live gate with CodeCoverage open in Power BI Desktop: `pbiCrossFilteringBehavior: both` passes and `single` fails under `--pql-assert 0.9.1`.
-
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
   - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`).
@@ -70,6 +68,7 @@
 - Catalog choice counts patch versions: `auto` picks 0.9.1 from `LibraryVersion()`, and `doctor` compares parameter counts, so a folder whose `ShouldExist` takes 8 arguments gets 0.9. `--pql-assert` choices now come from `PQL_ASSERT_CATALOGS`.
 - **Found in review:** coverage credited a relationship only for `rel.exists`, so one checked with settings would have shown as not enforced; it now counts `rel.settings` too. The 0.7 skip reason no longer says relationship checks are "planned".
 - `init` still writes no relationships (out of scope); `coverage` suggestions are the way to add them.
+- **Live validation (maintainer, 2026-11-19):** CodeCoverage open in Power BI Desktop on PQL.Assert 0.9.1; `contract run` with `auto` selected the 0.9.1 catalog. A contract pinning the relationship's settings with `pbiCrossFilteringBehavior: both` passed 7 of 7; the same contract with `single` failed only the relationship rule (`CrossFiltering: OneDirection` expected, `BothDirections` actual).
 
 ### 2026-11-19 — Contract gap check: PQL.Assert 0.9.1 (branch `feat/contract-model-coverage`)
 

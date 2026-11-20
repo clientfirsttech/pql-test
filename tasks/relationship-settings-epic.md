@@ -1,6 +1,6 @@
 # Relationship Settings Epic
 
-**Status**: ✅ COMPLETED (2026-11-19), except the live quality gate, which waits on CodeCoverage open in Power BI Desktop · planned 2026-11-17, re-planned 2026-11-19 for PQL.Assert 0.9.1
+**Status**: ✅ COMPLETED (2026-11-19; live gate passed in Power BI Desktop) · planned 2026-11-17, re-planned 2026-11-19 for PQL.Assert 0.9.1
 **Goal**: A contract relationship can pin the four settings on Power BI's Edit relationship dialog that change results (cardinality, cross-filter direction, active, security filter), checked by one `Relationship.ShouldExist` call on PQL.Assert 0.9.1
 
 ## Overview
