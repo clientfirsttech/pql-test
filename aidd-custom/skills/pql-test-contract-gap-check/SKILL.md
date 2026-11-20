@@ -17,7 +17,7 @@ GapCheck() {
        (bundled schemas: python/pql_test/odcs/schemas/odcs-json-schema-v*.json)
      - PQL.Assert (DAX Lib registry; the PQL.Assert repo publishes no GitHub releases):
        https://github.com/daxlib/daxlib/tree/main/packages/p/pql.assert
-       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.9.0/)
+       (vendored copy for conformance: python/tests/odcs/fixtures/pql-assert-0.9.1/)
      // If neither moved since the last gap check (see plan.md), skip to step 4.
 
   2. On a new ODCS release:

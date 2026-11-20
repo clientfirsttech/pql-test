@@ -59,7 +59,7 @@ def _named_in(function: str, mentions: set[str]) -> bool:
 
 def test_every_function_docs_name_is_a_real_pql_assert_function():
     given = "every PQL.Assert function docs/contracts.md names in backticks"
-    should = "be a function the bundled PQL.Assert 0.9.0 library actually has (any classification)"
+    should = "be a function the bundled PQL.Assert 0.9.1 library actually has (any classification)"
     all_functions = {name.removeprefix("PQL.Assert.") for name in load_signatures().functions}
 
     unknown = [n for n in _doc_function_mentions() if not _known(n, all_functions)]

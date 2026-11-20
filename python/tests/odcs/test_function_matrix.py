@@ -14,7 +14,7 @@ from pathlib import Path
 from pql_test.odcs.catalog import PQL_ASSERT_CATALOGS, load_catalog, load_signatures
 from pql_test.odcs.udf import parse_functions
 
-LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.9.0" / "lib"
+LIBRARY = Path(__file__).resolve().parent / "fixtures" / "pql-assert-0.9.1" / "lib"
 OUT_OF_SCOPE_PREFIXES = ("PQL.Assert.BP.", "PQL.Assert.RetrieveTests", "PQL.Assert.LibraryVersion")
 
 
@@ -36,7 +36,7 @@ def _rule_functions() -> set[str]:
 
 
 def test_signatures_match_the_vendored_library():
-    given = "the packaged signature list and the vendored PQL.Assert 0.8.0 library"
+    given = "the packaged signature list and the vendored PQL.Assert library"
     should = "list exactly the library's functions with their parameter counts"
     library = _library()
 
