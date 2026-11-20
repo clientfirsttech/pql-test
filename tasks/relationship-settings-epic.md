@@ -1,74 +1,72 @@
 # Relationship Settings Epic
 
-**Status**: 📋 PLANNED (2026-11-17)
-**Goal**: A contract relationship can pin the settings on Power BI's Edit relationship dialog (cardinality, cross-filter direction, active, security filter), checked on PQL.Assert 0.8 and 0.9 today
+**Status**: 📋 PLANNED (2026-11-17, re-planned 2026-11-19 for PQL.Assert 0.9.1)
+**Goal**: A contract relationship can pin the four settings on Power BI's Edit relationship dialog that change results (cardinality, cross-filter direction, active, security filter), checked by one `Relationship.ShouldExist` call on PQL.Assert 0.9.1
 
 ## Overview
 
-A contract relationship maps to `Relationship.ShouldExist` with its four ends only, so it keeps passing when someone makes the relationship inactive, switches it to cross-filter Both, or changes its cardinality, and each of those changes the numbers the model returns.
+A contract relationship checks only that its two columns are related, so it keeps passing when someone makes the relationship inactive, switches it to cross-filter Both, or changes its cardinality, and each of those changes the numbers the model returns. PQL.Assert 0.9.1 (a patch release, now on DAX Lib) gives `Relationship.ShouldExist` optional arguments 9 and 10, `crossFilteringBehavior` and `isActive`, and reports security filter value 3 as `None`; 0.8.0 and 0.9.0 already take cardinality and `securityFilteringBehavior` (arguments 6 to 8). So this epic adds `customProperties` named after the TMDL property each one checks, like `pbiDataType`, and a `--pql-assert 0.9.1` catalog that passes all of them in one call. On older catalogs pql-test passes what the library can check and reports the rest as not checked, rather than querying `INFO.VIEW.RELATIONSHIPS()` itself: updating PQL.Assert is a DAX Lib update, and `doctor` names the version to install.
 
-PQL.Assert 0.9.0's `ShouldExist` already checks cardinality (`fromCardinality`, `toCardinality`) and the RLS checkbox "Apply security filter in both directions" (`securityFilteringBehavior`). It cannot check the cross-filter direction or the active state, and its docs call `securityFilteringBehavior` the "filter direction", which it is not: on CodeCoverage (cross-filter Both, security box unchecked) `ShouldExist(…, "BothDirections")` fails with `SecurityFiltering: OneDirection`. PQL.Assert 0.10.0 adds `crossFilteringBehavior` and `isActive` (PQL.Assert `docs/relationship-settings-plan.md` on `dev`); until it ships, pql-test checks those two from `INFO.VIEW.RELATIONSHIPS()`, which `ShouldExist` already queries. Moving them into the single 0.10 call is [a separate epic](pql-assert-0-10-relationship-epic.md).
+PQL.Assert 0.9.0's docs called `securityFilteringBehavior` the "filter direction": on CodeCoverage (cross-filter Both, security box unchecked) `ShouldExist(…, "BothDirections")` fails with `SecurityFiltering: OneDirection`. 0.9.1 fixed the docs; contracts name the property after TMDL so the two cannot be confused. "Assume referential integrity" (DirectQuery only) is out of scope, and so is `init` writing relationships (it writes none today; `coverage` suggests them).
 
-ODCS has no relationship fields for these settings, so they use `customProperties` on the relationship, like `pbiTable`, `pbiColumn`, and `pbiDataType`:
-
-```yaml
-relationships:
-- to: schema/date_dim/properties/date_id
-  customProperties:
-  - property: pbiCardinality      # manyToOne | oneToOne | oneToMany | manyToMany
-    value: manyToOne
-  - property: pbiCrossFilter      # single | both | automatic (or oneDirection | bothDirections)
-    value: single
-  - property: pbiActive           # true | false
-    value: true
-  - property: pbiSecurityFilter   # single | both (or oneDirection | bothDirections): RLS only
-    value: single
-```
+This epic replaces the 0.10 follow-up epic planned on 2026-11-17: PQL.Assert shipped the change as 0.9.1.
 
 ---
 
 ## Contract Properties
 
+Add four relationship `customProperties`, named after the TMDL property, with dialog words as values where the dialog has words.
+
 **Requirements**:
-- Given a relationship with `pbiCardinality`, `pbiCrossFilter`, `pbiActive`, or `pbiSecurityFilter`, should check that setting of the model relationship
-- Given a relationship without them, should check existence only, as today
+- Given `pbiCardinality`, should accept `manyToOne`, `oneToMany`, `oneToOne`, or `manyToMany`, read from the relationship's `from` to its `to` (one dialog dropdown, two TMDL properties: `fromCardinality`, `toCardinality`)
+- Given `pbiCrossFilteringBehavior`, should accept the dialog words `single` or `both`, the TMDL names `oneDirection` or `bothDirections`, and `automatic` (TMDL only, not on the dialog)
+- Given `pbiIsActive`, should accept `true` or `false`
+- Given `pbiSecurityFilteringBehavior`, should accept only the TMDL names `oneDirection` (unchecked), `bothDirections` (checked), or `none` (limited relationships), never `single`/`both`, because the dialog control is a checkbox and those words belong to the cross-filter dropdown
+- Given a relationship without these properties, should check existence only and generate exactly what it generated before this epic
 - Given a value that is not one of the listed values (in any case), `lint` should report it, so a typo cannot skip the check
-- Given `pbiSecurityFilter`, docs and messages should call it the security filter (RLS), never the filter direction
+- Given `pbiSecurityFilteringBehavior`, docs and messages should call it the security filter (RLS), never the filter direction
 
 ---
 
-## Mapping On PQL.Assert 0.8 And 0.9
+## Mapping
+
+Pass every stated setting the selected catalog's PQL.Assert can check to the one `Relationship.ShouldExist` call.
 
 **Requirements**:
-- Given `pbiCardinality` or `pbiSecurityFilter`, should pass them to the one `Relationship.ShouldExist` call (`manyToOne` as `"Many"`, `"One"`)
-- Given `pbiCrossFilter` or `pbiActive`, should add a check of that setting against `INFO.VIEW.RELATIONSHIPS()`, under the same rule id, with Expected and Actual naming the setting and both values
-- Given a relationship the model lacks, the setting checks should fail saying the relationship was not found
+- Given `--pql-assert 0.9.1`, should pass every stated setting to `ShouldExist`, with `""` for each one the contract leaves out, and TMDL names for values (`manyToOne` as `"Many"`, `"One"`; `single` as `"OneDirection"`; `true` as `"TRUE"`)
+- Given `--pql-assert 0.8` or `0.9`, should pass `pbiCardinality` and `pbiSecurityFilteringBehavior` `oneDirection`/`bothDirections`, and report the rule approximated, naming each setting it did not check and the `--pql-assert 0.9.1` it needs (`pbiCrossFilteringBehavior`, `pbiIsActive`, and `pbiSecurityFilteringBehavior: none`, which 0.9.0 reports as `Unknown`)
 - Given PQL.Assert 0.7, should keep skipping the relationship rule
 - Given the same contract, should generate byte-identical suites on every run
 
 ---
 
+## Tell PQL.Assert 0.9.0 From 0.9.1
+
+Pick the 0.9.1 catalog only for a model whose `ShouldExist` takes the new arguments.
+
+**Requirements**:
+- Given a connected model whose `PQL.Assert.LibraryVersion()` is 0.9.1 or later, `--pql-assert auto` should pick 0.9.1; given 0.9.0, it should pick 0.9 and warn that pql-test supports up to 0.9.1
+- Given a model folder whose functions all exist but with fewer parameters than a catalog passes (`ShouldExist` with 8), `doctor` should not recommend that catalog, and should say which function is too old
+- Given `--pql-assert 0.9.1` on a model with 0.9.0, should warn as for any catalog newer than the model supports
+- Given `engine: pql-test` direct calls, should keep working under `--pql-assert 0.9` (a patch release adds only optional arguments)
+
+---
+
 ## Read And Compare The Model's Settings
+
+Read the settings from TMDL and the live model, using Power BI's defaults for absent lines.
 
 **Requirements**:
 - Given TMDL, should read each relationship's `fromCardinality`, `toCardinality`, `crossFilteringBehavior`, `isActive`, and `securityFilteringBehavior`, with Power BI's defaults when a line is absent (many, one, oneDirection, true, oneDirection)
-- Given `lint CONTRACT MODEL_PATH`, should report a stated setting that differs from the TMDL, with both values
-- Given `coverage --live`, should read the same settings from the connected model
+- Given `lint CONTRACT MODEL_PATH`, should report a stated setting that differs from the TMDL, naming the contract property and both values
+- Given `coverage --live`, should read the same settings from the connected model's `INFO.RELATIONSHIPS()`
 
 ---
 
-## Write The Model's Settings
+## Suggest The Model's Settings
 
 **Requirements**:
-- Given `init`, should write the four settings each relationship has today
-- Given an uncovered relationship, `coverage` should suggest it with its four settings
-
----
-
-## Tell PQL.Assert 0.9 From 0.10
-
-**Requirements**:
-- Given a model whose functions all exist but with fewer parameters than a catalog calls, `--pql-assert auto` and `doctor` should not pick that catalog, and should say which function is too old
+- Given an uncovered relationship, `coverage` should suggest it with its four settings as the model has them, with dialog words where they exist (`single`, `both`)
 
 ---
 
@@ -76,6 +74,6 @@ relationships:
 
 ### Quality Gates (All Must Pass)
 
-- **Tests**: `cd python && pytest` passes, including the ODCS rule matrix, golden suites, and docs-to-code agreement
-- **Live**: on CodeCoverage (cross-filter Both) `pbiCrossFilter: both` passes and `single` fails, in Power BI Desktop
-- **Documentation**: docs/contracts.md has the four properties, the dialog-to-property table, and the mapping rows; the contract skill (source and packaged) describes them, with a version bump
+- **Tests**: `cd python && pytest` passes, including the ODCS rule matrix, the function matrix, the library conformance test (every catalog against the vendored 0.9.1 package), golden suites (unchanged for contracts without settings), and docs-to-code agreement
+- **Live**: on CodeCoverage (cross-filter Both, PQL.Assert 0.9.1) in Power BI Desktop, `pbiCrossFilteringBehavior: both` passes and `single` fails
+- **Documentation**: docs/contracts.md has the four properties, a YAML example, the dialog-to-property table (dialog control, TMDL property, contract property, values), the mapping rows, and a PQL.Assert 0.9.1 section; the contract skill (source and packaged) describes them, with a version bump; `pql-test-contract-gap-check` runs clean

@@ -38,6 +38,8 @@
   - query-scoped XMLA target (`--target query`) and the `<workspace>.Workspace/<model>.SemanticModel` MODEL_PATH;
   - the datacontract-cli side of the integration (a datacontract-cli engine or wrapper that calls `pql-test contract run` and reads its `--output` JSON). It must stay CLI-to-CLI: datacontract-cli is MIT and cannot import AGPL code. pql-test's half is done: the output is a versioned, tested schema.
 
+- **Contract relationship settings** (planned 2026-11-17, re-planned 2026-11-19): contract relationships pin cardinality, cross-filter direction, active state, and the RLS security filter with `pbiCardinality`, `pbiCrossFilteringBehavior`, `pbiIsActive`, and `pbiSecurityFilteringBehavior`, checked by one `Relationship.ShouldExist` call under a new `--pql-assert 0.9.1` catalog (PQL.Assert 0.9.1 shipped the arguments as a patch release, so the planned 0.10 follow-up epic was merged in) — see [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md).
+
 - **Contract commands: later** — Contents:
   - a spike on TOM/TMSL/TMDL UDF scripting over XMLA;
   - then the persistent deploy target (`--target deploy`, `--install-library`, `--clean`, `--allow-production`).
@@ -59,6 +61,14 @@
 - **Document hermetic test mode** — Add `PQL_TEST_HERMETIC` environment variable documentation to CONTRIBUTING.md for test developers. Currently undocumented but used throughout test suite. Estimated 30 minutes.
 
 ## Completed Work
+
+### 2026-11-19 — Contract gap check: PQL.Assert 0.9.1 (branch `feat/contract-model-coverage`)
+
+- Bitol ODCS: no new release. PQL.Assert: 0.9.1 on DAX Lib (patch release; `Relationship.ShouldExist` gains optional `crossFilteringBehavior` and `isActive`, and reports security filter value 3 as `None`).
+- Vendored fixture replaced: `python/tests/odcs/fixtures/pql-assert-0.9.1/` is the DAX Lib package as released (one `lib/functions.tmdl`); `Relationship.ShouldExist` recorded as 10 parameters, 5 optional, in `pql_assert_functions.yaml`.
+- **Found while vendoring:** the direct-call gate compared the full catalog version with the signatures' version, so the patch release would have skipped every `engine: pql-test` direct call under `--pql-assert 0.9`. It now compares major.minor (`pql_test/odcs/mapping/dax_rules.py`), since a patch adds only optional arguments.
+- Example models CodeCoverage and SampleModel updated to PQL.Assert 0.9.1 by the maintainer.
+- Using the new arguments is [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md).
 
 ### 2026-11-16 — `contract coverage`: which parts of the model a contract covers, version 0.3.0 (branch `feat/contract-model-coverage`)
 
