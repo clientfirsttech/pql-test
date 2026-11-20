@@ -60,6 +60,13 @@
 
 ## Completed Work
 
+### 2026-11-19 — `contract init` writes relationships (branch `feat/contract-model-coverage`)
+
+- See [tasks/init-relationships-epic.md](tasks/init-relationships-epic.md).
+- The starter now writes each relationship between two of its tables as a schema-level foreign key under its `from` table, with its four settings, by `table.property` when the names allow and by id otherwise (ids added to the elements, reused across relationships). Relationships to left-out tables are not written.
+- The id helper (`ReferenceIds`) and `settings_properties` moved from `coverage.py` to `mapping/relationships.py`, so `init` and `coverage` suggestions write relationships the same way.
+- The starter test now plans with the newest catalog: `--pql-assert 0.7` skips relationship rules.
+
 ### 2026-11-19 — Contract relationship settings (branch `feat/contract-model-coverage`)
 
 - See [tasks/relationship-settings-epic.md](tasks/relationship-settings-epic.md) and [docs/contracts.md](docs/contracts.md#relationship-settings).

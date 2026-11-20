@@ -10,7 +10,7 @@ version: 0.3.0
 
 ```sudolang
 Interface Contract {
-  init MODEL_PATH [--output FILE]          // starter contract from the model's TMDL: tables, columns, types
+  init MODEL_PATH [--output FILE]          // starter contract from the model's TMDL: tables, columns, types, relationships
   generate CONTRACT MODEL_PATH --env ENV   // writes <Prefix>.<Suite>.<ENV>.Tests.dax into MODEL_PATH/DAXQueries/
   mapping CONTRACT [--format text|json]    // every rule: mapped | approximated | skipped (+ reason)
   coverage CONTRACT MODEL_PATH             // which model tables, columns, relationships, measures the contract covers
@@ -72,7 +72,7 @@ Constraints {
 
 ## Writing a contract
 
-Start from the model instead of a blank file. `init` reads the PBIP model's TMDL and writes a starter contract: one schema object per table, one property per column, and each column's `logicalType`. It only reads the model. The starter states what the model already is, so it lints clean and passes as is; the rules worth having are the ones you add on top.
+Start from the model instead of a blank file. `init` reads the PBIP model's TMDL and writes a starter contract: one schema object per table, one property per column, each column's `logicalType`, and each relationship between its tables with its settings (by id when a name has a space). It only reads the model. The starter states what the model already is, so it lints clean and passes as is; the rules worth having are the ones you add on top.
 
 ```
 pql-test contract init ./MyModel --output mymodel.odcs.yaml                        # every table

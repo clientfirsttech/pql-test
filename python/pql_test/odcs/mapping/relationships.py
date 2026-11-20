@@ -8,6 +8,7 @@ that change results. Each is named after the TMDL property it checks, and become
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
 from typing import Any, NamedTuple
 
@@ -107,6 +108,48 @@ def contract_value(key: str, settings: Mapping[str, str]) -> str:
         if all(str(settings.get(arg, "")).upper() == expected.upper() for arg, expected in args.items()):
             return value
     return "/".join(str(settings.get(arg)) for arg in next(iter(SETTING_VALUES[key].values())))
+
+
+def settings_properties(settings: Mapping[str, str]) -> list[dict]:
+    """A relationship's ``customProperties`` pinning the model *settings* (ShouldExist names) as they are:
+    dialog words where the dialog has them, and ``pbiIsActive`` as a YAML boolean."""
+    values: dict[str, Any] = {key: contract_value(key, settings) for key in SETTING_KEYS}
+    values[IS_ACTIVE_KEY] = values[IS_ACTIVE_KEY] == "true"
+    return [{"property": key, "value": value} for key, value in values.items()]
+
+
+class ReferenceIds:
+    """Ids for the elements an id-form relationship references: an existing id is reused, and a new one is
+    unique within its containing array (the ODCS rule) and the same in every suggestion that needs it."""
+
+    def __init__(self, schema_objects: list) -> None:
+        self._objects = schema_objects
+        self._proposed: dict[tuple[str, str | None], str] = {}
+
+    def of(self, owner: str, prop_name: str | None, element: Mapping | None, siblings: list) -> tuple[str, bool]:
+        """``(id, whether the element still needs it)`` for *element* (None: not in the contract yet)."""
+        if element is not None and element.get("id"):
+            return str(element["id"]), False
+        key = (owner, prop_name)
+        if key not in self._proposed:
+            # Ids already proposed for the same array: schema objects, or this schema object's properties.
+            same_array = [
+                v
+                for (o, p), v in self._proposed.items()
+                if (p is None if prop_name is None else (o == owner and p is not None))
+            ]
+            taken = {str(s["id"]) for s in siblings if isinstance(s, Mapping) and s.get("id")} | set(same_array)
+            base = re.sub(r"[^A-Za-z0-9_]+", "_", prop_name or owner).strip("_").lower() or "id"
+            candidates = (base, *(f"{base}_{n}" for n in range(2, len(taken) + 3)))
+            self._proposed[key] = next(i for i in candidates if i not in taken)
+        return self._proposed[key], True
+
+    def reference(self, owner: str, obj: Mapping | None, prop_name: str, prop: Mapping | None) -> tuple[str, list]:
+        """The ``schema/<id>/properties/<id>`` reference, and the ``(owner, property, id)`` ids to add for it."""
+        obj_id, new_obj = self.of(owner, None, obj, self._objects)
+        prop_id, new_prop = self.of(owner, prop_name, prop, (obj or {}).get("properties") or [])
+        to_add = [(owner, None, obj_id)] * new_obj + [(owner, prop_name, prop_id)] * new_prop
+        return f"schema/{obj_id}/properties/{prop_id}", to_add
 
 
 def setting_problems(contract: Contract) -> list[str]:

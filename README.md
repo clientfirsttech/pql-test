@@ -1354,7 +1354,7 @@ If your team describes data with an [ODCS](https://bitol-io.github.io/open-data-
 | Command | What it does |
 |---|---|
 | `pql-test contract doctor [MODEL_PATH]` | Checks the environment and the model's PQL.Assert library (from its TMDL, then from the deployed or open model), recommends a `--pql-assert` value, and warns when the deployed model is behind the folder |
-| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type. It passes as is; add the quality rules the data must meet |
+| `pql-test contract init MODEL_PATH [--output FILE]` | Starts a contract from the model: one schema object per table, one property per column, with each column's type, and each relationship with its settings. It passes as is; add the quality rules the data must meet |
 | `pql-test contract mapping CONTRACT` | Lists every contract rule as **mapped**, **approximated**, or **skipped** (with a reason), so nothing is dropped silently |
 | `pql-test contract coverage CONTRACT MODEL_PATH` | Shows which tables, columns, relationships, and measures of the model the contract covers (values tested, listed, or not covered), with the ODCS YAML that would cover the rest. `--live` asks the deployed or open model instead of reading its files; neither changes the model |
 | `pql-test contract lint CONTRACT [MODEL_PATH]` | Validates the contract against the ODCS JSON schema, and checks that every table, column, and relationship resolves in the model |

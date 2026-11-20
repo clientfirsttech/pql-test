@@ -27,14 +27,19 @@ from typing import TYPE_CHECKING
 import yaml
 
 from pql_test.odcs.dax_refs import DaxRef, dax_references
-from pql_test.odcs.ir import CONTRACT_DAX_SUITE, DIRECT_CALL, SCHEMA_SUITE, Assertion, Status
+from pql_test.odcs.ir import (
+    CONTRACT_DAX_SUITE,
+    DIRECT_CALL,
+    SCHEMA_SUITE,
+    Assertion,
+    Status,
+)
 from pql_test.odcs.mapping.context import is_column
 from pql_test.odcs.mapping.relationships import (
-    IS_ACTIVE_KEY,
-    SETTING_KEYS,
-    contract_value,
+    ReferenceIds,
     relationship_entries,
     resolve,
+    settings_properties,
 )
 from pql_test.odcs.pbip import (
     AUTO_DATE_TABLE_RE,
@@ -514,40 +519,6 @@ def _forms(plan: Plan):
     return reference_forms(plan.contract.api_version.rsplit(".", 1)[0])
 
 
-class _Ids:
-    """Ids for the elements an id-form relationship references: an existing id is reused, and a new one is
-    unique within its containing array (the ODCS rule) and the same in every suggestion that needs it."""
-
-    def __init__(self, plan: Plan) -> None:
-        self._objects = plan.contract.schema_objects
-        self._proposed: dict[tuple[str, str | None], str] = {}
-
-    def of(self, owner: str, prop_name: str | None, element: Mapping | None, siblings: list) -> tuple[str, bool]:
-        """``(id, whether the element still needs it)`` for *element* (None: not in the contract yet)."""
-        if element is not None and element.get("id"):
-            return str(element["id"]), False
-        key = (owner, prop_name)
-        if key not in self._proposed:
-            # Ids already proposed for the same array: schema objects, or this schema object's properties.
-            same_array = [
-                v
-                for (o, p), v in self._proposed.items()
-                if (p is None if prop_name is None else (o == owner and p is not None))
-            ]
-            taken = {str(s["id"]) for s in siblings if isinstance(s, Mapping) and s.get("id")} | set(same_array)
-            base = re.sub(r"[^A-Za-z0-9_]+", "_", prop_name or owner).strip("_").lower() or "id"
-            candidates = (base, *(f"{base}_{n}" for n in range(2, len(taken) + 3)))
-            self._proposed[key] = next(i for i in candidates if i not in taken)
-        return self._proposed[key], True
-
-    def reference(self, owner: str, obj: Mapping | None, prop_name: str, prop: Mapping | None) -> tuple[str, list]:
-        """The ``schema/<id>/properties/<id>`` reference, and the ``(owner, property, id)`` ids to add for it."""
-        obj_id, new_obj = self.of(owner, None, obj, self._objects)
-        prop_id, new_prop = self.of(owner, prop_name, prop, (obj or {}).get("properties") or [])
-        to_add = [(owner, None, obj_id)] * new_obj + [(owner, prop_name, prop_id)] * new_prop
-        return f"schema/{obj_id}/properties/{prop_id}", to_add
-
-
 def _contract_end(plan: Plan, table: str, column: str) -> tuple[Mapping | None, Mapping | None]:
     """The contract schema object and column property whose model names are *table* and *column*."""
     obj = next((o for o in plan.contract.schema_objects if plan.names.table(o).lower() == table.lower()), None)
@@ -556,7 +527,7 @@ def _contract_end(plan: Plan, table: str, column: str) -> tuple[Mapping | None, 
     return obj, prop
 
 
-def _relationship_suggestion(plan: Plan, o: ModelObject, ids: _Ids) -> Suggestion | None:
+def _relationship_suggestion(plan: Plan, o: ModelObject, ids: ReferenceIds) -> Suggestion | None:
     """A schema-level foreign key for an uncovered relationship: each end as ``table.property`` when both its
     names fit that form, else by id.
 
@@ -580,10 +551,7 @@ def _relationship_suggestion(plan: Plan, o: ModelObject, ids: _Ids) -> Suggestio
         to_add.extend(added)
     entry: dict = {"type": "foreignKey", "from": refs[0], "to": refs[1]}
     if o.settings:
-        settings = dict(o.settings)
-        values = {key: contract_value(key, settings) for key in SETTING_KEYS}
-        values[IS_ACTIVE_KEY] = values[IS_ACTIVE_KEY] == "true"  # a YAML boolean
-        entry["customProperties"] = [{"property": key, "value": value} for key, value in values.items()]
+        entry["customProperties"] = settings_properties(dict(o.settings))
     return Suggestion(Kind.RELATIONSHIP, o.identifier, "relationships", owners[0], _yaml([entry]), tuple(to_add))
 
 
@@ -625,7 +593,7 @@ def suggestions(plan: Plan, objects: Iterable[Classified]) -> tuple[Suggestion, 
             # (a measure table, say) can go under any schema object.
             owner = in_contract.get(o.table.lower())
             found.append(Suggestion(Kind.MEASURE, o.identifier, "quality", owner, _yaml([_measure_rule(o, taken)])))
-    ids = _Ids(plan)
+    ids = ReferenceIds(plan.contract.schema_objects)
     relationships = (_relationship_suggestion(plan, o, ids) for o in uncovered if o.kind is Kind.RELATIONSHIP)
     found.extend(s for s in relationships if s is not None)
     return tuple(found)

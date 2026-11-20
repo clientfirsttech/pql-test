@@ -28,7 +28,7 @@ pql-test contract init ./SalesModel --output sales.odcs.yaml
 pql-test contract init local/SalesModel --table Sales --table Customer -o sales.odcs.yaml
 ```
 
-`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure tables (measures and only hidden placeholder columns, in no relationship) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
+`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). Each relationship between two of its tables becomes a foreign key under its `from` table, with the four settings it has (see [Relationship settings](#relationship-settings)), by `table.property` when the names allow it and by id otherwise (the ids are added to the elements; see [Names with spaces](#names-with-spaces-reference-by-id)). It leaves out measure tables (measures and only hidden placeholder columns, in no relationship) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
 
 The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `mapping CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init --table DateDim --table AlignmentDim`'s own output against SampleModel, unedited except for a comment (so `coverage` shows SampleModel's other tables as not covered).
 
@@ -71,7 +71,7 @@ The percentage counts the objects with at least one rule that runs (values teste
 
 | Command | What it does |
 |---|---|
-| `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, and types (see [above](#start-a-contract-from-the-model)) |
+| `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, types, and relationships with their settings (see [above](#start-a-contract-from-the-model)) |
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
 | `mapping CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
 | `coverage CONTRACT MODEL_PATH [--live]` | Shows which tables, columns, relationships, and measures of the model the contract covers, and the ODCS YAML that would cover the rest (see [below](#which-parts-of-the-model-a-contract-covers)) |
