@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 NOT_PBIP = (
@@ -15,8 +16,46 @@ NOT_PBIP = (
 _SKIP_DIRS = {"node_modules", "__pycache__", "site-packages"}
 _TABLE_RE = re.compile(r"^table\s+(.+?)\s*$")
 # A quoted name ('a = b', with '' for ') is matched whole, so an "=" inside it does not end the name.
-_COLUMN_RE = re.compile(r"^\s+column\s+('(?:[^']|'')*'|[^'=]+?)\s*(?:=.*)?$")
+# The "=" after the name starts a calculated column's DAX (or a measure's).
+_COLUMN_RE = re.compile(r"^\s+column\s+('(?:[^']|'')*'|[^'=]+?)\s*(=.*)?$")
+_MEASURE_RE = re.compile(r"^\s+measure\s+('(?:[^']|'')*'|[^'=]+?)\s*(?:=.*)?$")
+_CALCULATED_PARTITION_RE = re.compile(r"^\s+partition\s+.*=\s*calculated\s*$")
 _DATA_TYPE_RE = re.compile(r"^\t\tdataType:\s*(\S+)\s*$")
+# Power BI's automatic date/time tables: not part of the model anyone wrote.
+AUTO_DATE_TABLE_RE = re.compile(r"^(LocalDateTable_|DateTableTemplate_)")
+
+
+@dataclass(frozen=True)
+class ModelColumn:
+    """One column in a table's TMDL."""
+
+    name: str
+    data_type: str | None = None  # TMDL dataType, None when the file gives none
+    hidden: bool = False
+    calculated: bool = False  # its values come from DAX: `column X = <DAX>`, or a calculated table's column
+
+
+@dataclass(frozen=True)
+class ModelTable:
+    """One ``definition/tables/*.tmdl`` table: its columns, measures, and kind."""
+
+    name: str
+    columns: tuple[ModelColumn, ...] = ()
+    measures: tuple[str, ...] = ()
+    calculated: bool = False  # partition = calculated
+    calculation_group: bool = False
+
+
+def is_measure_table(table: ModelTable, related: set[str]) -> bool:
+    """True for a table that only holds measures, such as a ``_Measures`` table: it has measures and only
+    hidden columns, and no relationship (*related*: lower-case names of tables in one). A fact table that
+    hides its columns and shows only measures still joins its dimensions, so it is not one."""
+    return bool(table.measures) and all(c.hidden for c in table.columns) and table.name.lower() not in related
+
+
+def related_tables(relationships) -> set[str]:
+    """Lower-case names of every table at either end of *relationships* ``(from table, column, to table, column)``."""
+    return {end.lower() for r in relationships for end in (r[0], r[2])}
 
 
 class ModelPathError(Exception):
@@ -113,37 +152,57 @@ def _tmdl_name(raw: str) -> str:
     return raw
 
 
-def _scan_tables(semantic_model_dir: Path) -> dict[str, dict]:
-    """``table -> {"columns": {column: TMDL dataType or None}, "hidden": {columns}, "measures": bool}``.
+def _scan_table(lines: list[str]) -> ModelTable | None:
+    """The table one TMDL file defines, or None when it defines none."""
+    name, columns, measures = None, {}, []
+    column, calculated_table, calculation_group = None, False, False
+    for line in lines:
+        if name is None:
+            match = _TABLE_RE.match(line)
+            if match:
+                name = _tmdl_name(match.group(1))
+            continue
+        if line.startswith("\t") and not line.startswith("\t\t"):
+            # A table-level line: a new column, or a measure/partition/... that ends the current one.
+            match = _COLUMN_RE.match(line)
+            column = _tmdl_name(match.group(1)) if match else None
+            if match:
+                columns[column] = {"data_type": None, "hidden": False, "calculated": match.group(2) is not None}
+            measure = _MEASURE_RE.match(line)
+            if measure:
+                measures.append(_tmdl_name(measure.group(1)))
+            calculated_table = calculated_table or bool(_CALCULATED_PARTITION_RE.match(line))
+            calculation_group = calculation_group or line.strip() == "calculationGroup"
+            continue
+        if column is None:
+            continue
+        data_type = _DATA_TYPE_RE.match(line)
+        if data_type:
+            columns[column]["data_type"] = data_type.group(1)
+        elif line.strip() in ("isHidden", "isHidden: true"):
+            columns[column]["hidden"] = True
+    if name is None:
+        return None
+    return ModelTable(
+        name=name,
+        columns=tuple(
+            ModelColumn(c, f["data_type"], f["hidden"], f["calculated"] or calculated_table) for c, f in columns.items()
+        ),
+        measures=tuple(measures),
+        calculated=calculated_table,
+        calculation_group=calculation_group,
+    )
 
-    Tables come in case-insensitive file-name order, so the order is the same on every OS.
-    """
-    tables: dict[str, dict] = {}
+
+def model_tables(semantic_model_dir: Path) -> tuple[ModelTable, ...]:
+    """Every table in ``definition/tables/*.tmdl``, in case-insensitive file-name order (the same on every OS)."""
     files = sorted((semantic_model_dir / "definition" / "tables").glob("*.tmdl"), key=lambda p: p.name.lower())
-    for tmdl in files:
-        table, column = None, None
-        for line in tmdl.read_text(encoding="utf-8-sig").splitlines():
-            if table is None:
-                match = _TABLE_RE.match(line)
-                if match:
-                    table = tables[_tmdl_name(match.group(1))] = {"columns": {}, "hidden": set(), "measures": False}
-                continue
-            if line.startswith("\t") and not line.startswith("\t\t"):
-                # A table-level line: a new column, or a measure/partition/... that ends the current one.
-                match = _COLUMN_RE.match(line)
-                column = _tmdl_name(match.group(1)) if match else None
-                if column is not None:
-                    table["columns"][column] = None
-                table["measures"] = table["measures"] or line.lstrip().startswith("measure ")
-                continue
-            if column is None:
-                continue
-            data_type = _DATA_TYPE_RE.match(line)
-            if data_type:
-                table["columns"][column] = data_type.group(1)
-            elif line.strip() in ("isHidden", "isHidden: true"):
-                table["hidden"].add(column)
-    return tables
+    scanned = (_scan_table(f.read_text(encoding="utf-8-sig").splitlines()) for f in files)
+    return tuple(t for t in scanned if t is not None)
+
+
+def _scan_tables(semantic_model_dir: Path) -> dict[str, ModelTable]:
+    return {t.name: t for t in model_tables(semantic_model_dir)}
 
 
 def _tmdl_column_ref(raw: str) -> tuple[str, str]:
@@ -158,37 +217,63 @@ def _tmdl_column_ref(raw: str) -> tuple[str, str]:
     return table, _tmdl_name(rest[1:])
 
 
-def model_relationships(semantic_model_dir: Path) -> set[tuple[str, str, str, str]]:
-    """``(from table, from column, to table, to column)`` per relationship in ``definition/relationships.tmdl``."""
+# A relationship's settings as Relationship.ShouldExist names them, with Power BI's value when TMDL omits the line.
+RELATIONSHIP_DEFAULTS = {
+    "fromCardinality": "Many",
+    "toCardinality": "One",
+    "securityFilteringBehavior": "OneDirection",
+    "crossFilteringBehavior": "OneDirection",
+    "isActive": "TRUE",
+}
+# TMDL enum value (any case) -> the name Relationship.ShouldExist reports.
+_TMDL_SETTING_VALUES = {
+    v.lower(): v for v in ("Many", "One", "OneDirection", "BothDirections", "Automatic", "None", "TRUE", "FALSE")
+}
+
+RelationshipEnds = tuple[str, str, str, str]
+
+
+def _tmdl_relationships(semantic_model_dir: Path) -> list[tuple[RelationshipEnds, dict[str, str]]]:
+    """``(ends, settings)`` per relationship in ``definition/relationships.tmdl``; absent settings get defaults."""
     tmdl = semantic_model_dir / "definition" / "relationships.tmdl"
     if not tmdl.is_file():
-        return set()
-    found, ends = set(), {}
+        return []
+    found, ends, settings = [], {}, {}
     for line in [*tmdl.read_text(encoding="utf-8-sig").splitlines(), "relationship"]:
         stripped = line.strip()
         if stripped.startswith("relationship") and not line.startswith("\t"):
             if "fromColumn" in ends and "toColumn" in ends:
-                found.add((*ends["fromColumn"], *ends["toColumn"]))
-            ends = {}
+                found.append(((*ends["fromColumn"], *ends["toColumn"]), {**RELATIONSHIP_DEFAULTS, **settings}))
+            ends, settings = {}, {}
             continue
         key, _, value = stripped.partition(":")
         if key in ("fromColumn", "toColumn"):
             ends[key] = _tmdl_column_ref(value)
+        elif key in RELATIONSHIP_DEFAULTS:
+            value = value.strip()
+            settings[key] = _TMDL_SETTING_VALUES.get(value.lower(), value)
     return found
+
+
+def model_relationships(semantic_model_dir: Path) -> set[RelationshipEnds]:
+    """``(from table, from column, to table, to column)`` per relationship in ``definition/relationships.tmdl``."""
+    return {ends for ends, _settings in _tmdl_relationships(semantic_model_dir)}
+
+
+def model_relationship_settings(semantic_model_dir: Path) -> dict[RelationshipEnds, dict[str, str]]:
+    """Each relationship's settings (``fromCardinality``, ..., ``isActive``), by its ends, as ShouldExist names them."""
+    return dict(_tmdl_relationships(semantic_model_dir))
 
 
 def model_columns(semantic_model_dir: Path) -> dict[str, dict[str, str | None]]:
     """``table -> {column: TMDL dataType or None}`` read from ``definition/tables/*.tmdl`` (measures are ignored)."""
-    return {name: t["columns"] for name, t in _scan_tables(semantic_model_dir).items()}
+    return {name: {c.name: c.data_type for c in t.columns} for name, t in _scan_tables(semantic_model_dir).items()}
 
 
 def measure_tables(semantic_model_dir: Path) -> set[str]:
-    """Tables that hold measures and only hidden columns, such as a ``_Measures`` table's placeholder column."""
-    return {
-        name
-        for name, t in _scan_tables(semantic_model_dir).items()
-        if t["measures"] and set(t["columns"]) <= t["hidden"]
-    }
+    """Tables that only hold measures (and hidden placeholder columns), such as a ``_Measures`` table."""
+    related = related_tables(model_relationships(semantic_model_dir))
+    return {name for name, t in _scan_tables(semantic_model_dir).items() if is_measure_table(t, related)}
 
 
 def model_names(semantic_model_dir: Path) -> dict[str, set[str]]:

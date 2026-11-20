@@ -52,13 +52,13 @@ class TestEnvironment:
 
 
 class TestModel:
-    def test_sample_model_on_0_9_0(self):
-        given = "examples/SampleModel (PQL.Assert 0.9.0)"
-        should = "recommend --pql-assert 0.9"
+    def test_sample_model_on_0_9_1(self):
+        given = "examples/SampleModel (PQL.Assert 0.9.1)"
+        should = "recommend --pql-assert 0.9.1"
 
         report = run_doctor(EXAMPLES / "SampleModel.SemanticModel")
 
-        assert (report.ok, report.recommended) == (True, "0.9"), f"{given}: {should}\n{report.checks}"
+        assert (report.ok, report.recommended) == (True, "0.9.1"), f"{given}: {should}\n{report.checks}"
 
     def test_rls_model_on_0_4_0(self):
         given = "examples/RLS_Model (PQL.Assert 0.4.0)"
@@ -141,6 +141,8 @@ class TestCli:
     @pytest.fixture(autouse=True)
     def _no_connection(self, monkeypatch):
         monkeypatch.setattr("pql_test.contract_run.resolve_xmla_connection", lambda *_a, **_k: None)
+        # A developer .env can set it; the folder then replaces it with a note on stderr.
+        monkeypatch.delenv("PQL_DATASET_ID", raising=False)
 
     def test_json_format(self):
         given = "doctor --format json on SampleModel"
@@ -152,7 +154,7 @@ class TestCli:
         assert (result.exit_code, data["ok"], data["recommendedPqlAssert"], len(data["checks"]) > 5) == (
             0,
             True,
-            "0.9",
+            "0.9.1",
             True,
         ), f"{given}: {should}\n{result.output}"
 
@@ -172,7 +174,7 @@ class TestCli:
 
         assert (result.exit_code, result.output.rstrip().splitlines()[-1]) == (
             0,
-            "Use --pql-assert 0.9 with generate, coverage, and trace for this model.",
+            "Use --pql-assert 0.9.1 with generate, mapping, and trace for this model.",
         ), f"{given}: {should}\n{result.output}"
 
 
@@ -199,7 +201,7 @@ class TestGenerateAuto:
         return path
 
     def test_auto_reads_the_model_folder(self, tmp_path):
-        given = "generate --pql-assert auto into a copy of SampleModel (PQL.Assert 0.9.0)"
+        given = "generate --pql-assert auto into a copy of SampleModel (PQL.Assert 0.9.1)"
         should = "use a catalog the model supports and say where the choice came from"
         import shutil
 

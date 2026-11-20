@@ -10,6 +10,7 @@ import yaml
 from click.testing import CliRunner
 
 from pql_test.odcs.api import plan_contract
+from pql_test.odcs.catalog import LATEST_PQL_ASSERT
 from pql_test.odcs.cli import contract
 from pql_test.odcs.datatypes import tmdl_model_type
 from pql_test.odcs.loader import load_contract
@@ -40,7 +41,8 @@ def test_starter_for_each_example_is_valid_lints_and_skips_nothing(tmp_path, mod
 
     written = _init(EXAMPLES / f"{model}.SemanticModel", "--output", out)
     lint = CliRunner().invoke(contract, ["lint", str(out), str(EXAMPLES / f"{model}.SemanticModel")])
-    plan = plan_contract(out)
+    # The newest catalog: --pql-assert 0.7 skips every relationship rule.
+    plan = plan_contract(out, pql_assert=LATEST_PQL_ASSERT)
 
     assert (
         written.exit_code,
@@ -266,3 +268,110 @@ class TestReviewEdgeCases:
         assert (result.exit_code, message in result.output, out.exists()) == (2, True, False), (
             f"{given}: {should}\n{result.output}"
         )
+
+
+class TestRelationships:
+    """init writes each relationship between starter tables, with its settings (tasks/init-relationships-epic.md)."""
+
+    def _model(self, tmp_path: Path, relationships: str, tables: dict[str, str] | None = None) -> Path:
+        model = _tmdl_model(
+            tmp_path,
+            tables
+            or {
+                "Orders": "\tcolumn CustomerId\n\t\tdataType: int64\n",
+                "Customer": "\tcolumn Id\n\t\tdataType: int64\n",
+            },
+        )
+        (model / "definition" / "relationships.tmdl").write_text(relationships, encoding="utf-8")
+        return model
+
+    def test_relationship_is_written_with_its_settings(self, tmp_path):
+        given = "an inactive, cross-filter Both relationship between names a reference can hold"
+        should = "write a schema-level foreign key under the from table, by name, with all four settings"
+        model = self._model(
+            tmp_path,
+            "relationship r1\n\tisActive: false\n\tcrossFilteringBehavior: bothDirections\n"
+            "\tfromColumn: Orders.CustomerId\n\ttoColumn: Customer.Id\n",
+        )
+
+        schema = {o["name"]: o for o in starter_contract(model)["schema"]}
+
+        assert (schema["Orders"]["relationships"], "relationships" in schema["Customer"]) == (
+            [
+                {
+                    "type": "foreignKey",
+                    "from": "Orders.CustomerId",
+                    "to": "Customer.Id",
+                    "customProperties": [
+                        {"property": "pbiCardinality", "value": "manyToOne"},
+                        {"property": "pbiCrossFilteringBehavior", "value": "both"},
+                        {"property": "pbiIsActive", "value": False},
+                        {"property": "pbiSecurityFilteringBehavior", "value": "oneDirection"},
+                    ],
+                }
+            ],
+            False,
+        ), f"{given}: {should}"
+
+    def test_names_with_spaces_are_referenced_by_id(self, tmp_path):
+        given = "two relationships from 'Fact Table' to 'Date Dim'[Date ID], whose names have spaces"
+        should = "reference both ends by id, give each element one id, and reuse it for the second relationship"
+        model = self._model(
+            tmp_path,
+            "relationship a\n\tfromColumn: 'Fact Table'.'Order Date'\n\ttoColumn: 'Date Dim'.'Date ID'\n\n"
+            "relationship b\n\tisActive: false\n\tfromColumn: 'Fact Table'.'Ship Date'\n\ttoColumn: 'Date Dim'.'Date ID'\n",
+            {
+                "'Fact Table'": "\tcolumn 'Order Date'\n\t\tdataType: int64\n\tcolumn 'Ship Date'\n\t\tdataType: int64\n",
+                "'Date Dim'": "\tcolumn 'Date ID'\n\t\tdataType: int64\n",
+            },
+        )
+
+        schema = {o["name"]: o for o in starter_contract(model)["schema"]}
+
+        fact, date = schema["Fact Table"], schema["Date Dim"]
+        assert (
+            [(r["from"], r["to"]) for r in fact["relationships"]],
+            fact["id"],
+            [p.get("id") for p in fact["properties"]],
+            date["id"],
+            date["properties"][0]["id"],
+        ) == (
+            [
+                ("schema/fact_table/properties/order_date", "schema/date_dim/properties/date_id"),
+                ("schema/fact_table/properties/ship_date", "schema/date_dim/properties/date_id"),
+            ],
+            "fact_table",
+            ["order_date", "ship_date"],
+            "date_dim",
+            "date_id",
+        ), f"{given}: {should}"
+
+    def test_relationship_to_a_left_out_table_is_not_written(self, tmp_path):
+        given = "init --table Orders on a model whose Orders relates to Customer"
+        should = "write no relationship, since Customer is not in the starter"
+        model = self._model(tmp_path, "relationship r1\n\tfromColumn: Orders.CustomerId\n\ttoColumn: Customer.Id\n")
+
+        (orders,) = starter_contract(model, tables=("Orders",))["schema"]
+
+        assert "relationships" not in orders, f"{given}: {should}"
+
+    def test_code_coverage_starter_pins_cross_filter_both(self):
+        given = "init on examples/CodeCoverage, whose one relationship is cross-filter Both"
+        should = "write that relationship by id with pbiCrossFilteringBehavior both"
+
+        schema = {o["name"]: o for o in starter_contract(EXAMPLES / "CodeCoverage.SemanticModel")["schema"]}
+
+        (rel,) = schema["Fact_Table"]["relationships"]
+        settings = {c["property"]: c["value"] for c in rel["customProperties"]}
+        assert (rel["to"], settings["pbiCrossFilteringBehavior"]) == (
+            "schema/date_dim/properties/date_id",
+            "both",
+        ), f"{given}: {should}"
+
+    def test_header_says_relationships(self):
+        given = "the starter's header"
+        should = "say it states the model's relationships too"
+
+        result = _init(EXAMPLES / "SampleModel.SemanticModel")
+
+        assert "relationships" in result.output.splitlines()[1], f"{given}: {should}"

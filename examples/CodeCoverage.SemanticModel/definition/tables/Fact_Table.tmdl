@@ -4,6 +4,9 @@ table Fact_Table
 	measure Measure
 		lineageTag: 30a5954c-c7d8-459f-9412-a61bbb9684a8
 
+	measure 'Measure 2' = "Test"
+		lineageTag: 2f9cbb43-c265-458c-ad57-4eb190dd591f
+
 	column 'Fact ID'
 		dataType: int64
 		formatString: 0

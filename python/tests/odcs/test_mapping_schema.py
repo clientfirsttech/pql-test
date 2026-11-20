@@ -99,7 +99,7 @@ class TestScheduledRules:
             for rid, release in [
                 ("Orders.amount.logicalTypeOptions", "planned"),
                 ("Orders.code.logicalTypeOptions", "a later release"),
-                ("Orders.relationships[0]", "planned"),
+                ("Orders.relationships[0]", "--pql-assert 0.8"),
                 ("slaProperties[0]", "R8"),
             ]
         }

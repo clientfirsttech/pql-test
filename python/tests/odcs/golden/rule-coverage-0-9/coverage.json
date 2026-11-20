@@ -12,9 +12,9 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 46,
+    "total": 47,
     "mapped": 31,
-    "approximated": 9,
+    "approximated": 10,
     "skipped": 6
   },
   "rules": [
@@ -346,6 +346,17 @@
       ],
       "severity": "error",
       "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
+    },
+    {
+      "ruleId": "orders.relationships[0]",
+      "status": "approximated",
+      "description": "orders relationship to customers.customer_id",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Relationship.ShouldExist"
+      ],
+      "severity": "error",
+      "reason": "not checked: pbiCrossFilteringBehavior, pbiIsActive, which need --pql-assert 0.9.1 (PQL.Assert 0.9.1 or later)"
     },
     {
       "ruleId": "orders.quality[0]",

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Unit tests for pql_test.odcs.coverage (rule-by-rule coverage report)."""
+"""Unit tests for pql_test.odcs.mapping_report (the rule-by-rule `contract mapping` report)."""
 
 from __future__ import annotations
 
 import json
 
-from pql_test.odcs.coverage import build_report, format_text
+from pql_test.odcs.mapping_report import build_report, format_text
 from pql_test.odcs.loader import load_contract
 from pql_test.odcs.mapping import map_contract
 from pql_test.odcs.naming import NameResolver

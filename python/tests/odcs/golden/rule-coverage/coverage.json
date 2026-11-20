@@ -12,8 +12,8 @@
     "source": "rule-coverage.odcs.yaml"
   },
   "summary": {
-    "total": 44,
-    "mapped": 16,
+    "total": 45,
+    "mapped": 17,
     "approximated": 7,
     "skipped": 21
   },
@@ -80,7 +80,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
     },
     {
       "ruleId": "orders.quantity.type",
@@ -303,6 +303,15 @@
       "reason": "the model has one date/time type (Date), so the check cannot tell a date column from a date/time one"
     },
     {
+      "ruleId": "orders.relationships[0]",
+      "status": "skipped",
+      "description": "orders relationship to customers.customer_id",
+      "assertions": 0,
+      "functions": [],
+      "severity": null,
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
+    },
+    {
       "ruleId": "orders.quality[0]",
       "status": "mapped",
       "description": "Order count is 0, not blank, for a year with no data",
@@ -340,12 +349,14 @@
     },
     {
       "ruleId": "orders.quality[3]",
-      "status": "skipped",
+      "status": "mapped",
       "description": "Quantity mean is in range",
-      "assertions": 0,
-      "functions": [],
-      "severity": null,
-      "reason": "direct PQL.Assert calls need --pql-assert 0.9 (signatures from 0.9.0)",
+      "assertions": 1,
+      "functions": [
+        "PQL.Assert.Col.MeanShouldBeInRange"
+      ],
+      "severity": "error",
+      "reason": null,
       "source": "contract-dax"
     },
     {
@@ -409,7 +420,7 @@
       "assertions": 0,
       "functions": [],
       "severity": null,
-      "reason": "relationship checks are planned (Relationship.ShouldExist with cardinality and direction)"
+      "reason": "relationship checks need --pql-assert 0.8 or later (Relationship.ShouldExist)"
     },
     {
       "ruleId": "slaProperties[0]",

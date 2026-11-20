@@ -2,14 +2,15 @@
 
 Generate [PQL.Assert](https://github.com/clientfirsttech/PQL.Assert) DAX test suites from [ODCS](https://bitol-io.github.io/open-data-contract-standard/) v3.0, v3.1, and v3.2 data contracts, run them, and trace every result back to its contract rule. Every contract rule is reported as **mapped**, **approximated**, or **skipped**, so nothing is dropped silently.
 
-The commands come with pql-test (`pip install pql-test`). `lint`, `coverage`, `generate`, and `trace` only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, and `doctor`'s live checks, need XMLA, which is Windows-only.
+The commands come with pql-test (`pip install pql-test`). `lint`, `mapping`, `generate`, `trace`, and `coverage` (without `--live`) only read and write files, so they also run on Linux, for example in a CI pipeline. `run`, `coverage --live`, and `doctor`'s live checks need XMLA, which is Windows-only.
 
 ## Quick start
 
 ```bash
 pql-test contract init ./SalesModel -o orders.odcs.yaml                 # start the contract from the model
 pql-test contract doctor ./SalesModel                                   # which PQL.Assert? which --pql-assert?
-pql-test contract coverage orders.odcs.yaml                             # which rules can be enforced?
+pql-test contract mapping orders.odcs.yaml                              # which rules can be enforced?
+pql-test contract coverage orders.odcs.yaml ./SalesModel                # which parts of the model does it cover?
 pql-test contract lint orders.odcs.yaml ./SalesModel                    # contract valid, names resolve?
 pql-test contract generate orders.odcs.yaml ./SalesModel --env DEV      # write *.Tests.dax suites
 pql-test contract run orders.odcs.yaml ./SalesModel --env DEV --output results.json  # generate in memory, run, trace
@@ -27,17 +28,53 @@ pql-test contract init ./SalesModel --output sales.odcs.yaml
 pql-test contract init local/SalesModel --table Sales --table Customer -o sales.odcs.yaml
 ```
 
-`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). It leaves out measure tables (only measures, or only hidden placeholder columns) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
+`init` reads the model's TMDL and writes a starter ODCS v3.1.0 contract (`status: draft`): one schema object per table and one property per column, with each column's `logicalType` (see [Column types](#column-types); `decimal` columns also get `pbiDataType: Currency`). Each relationship between two of its tables becomes a foreign key under its `from` table, with the four settings it has (see [Relationship settings](#relationship-settings)), by `table.property` when the names allow it and by id otherwise (the ids are added to the elements; see [Names with spaces](#names-with-spaces-reference-by-id)). It leaves out measure tables (measures and only hidden placeholder columns, in no relationship) and Power BI's automatic date tables, and gives a column with no ODCS type (a calculated table or column, or `binary`) a `description` saying why. It only reads the model, and prints to stdout unless `--output FILE` is given (`--force` overwrites that file). `--table NAME` (repeatable) picks tables, and `--id ID` sets the contract id.
 
-The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `coverage CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init`'s own output against SampleModel, unedited except for a comment.
+The starter states what the model already is, so `lint` and `run` pass on it as is. (A column name containing a comma makes the table's columns check skipped, because PQL.Assert splits its column list on commas.) `--output` refuses a path inside the model folder. Add the quality rules the data must meet, then loop: `lint CONTRACT MODEL` → `mapping CONTRACT` → `run CONTRACT MODEL --env DEV`. [`examples/contracts/starter.odcs.yaml`](../examples/contracts/starter.odcs.yaml) is `init --table DateDim --table AlignmentDim`'s own output against SampleModel, unedited except for a comment (so `coverage` shows SampleModel's other tables as not covered).
+
+## Which parts of the model a contract covers
+
+```bash
+pql-test contract coverage orders.odcs.yaml ./SalesModel                       # from the PBIP folder (Linux too)
+pql-test contract coverage orders.odcs.yaml local/SalesModel --live            # from the model open in Power BI Desktop
+pql-test contract coverage orders.odcs.yaml ./SalesModel --format json --min-coverage 80
+```
+
+`mapping` asks which contract rules can run. `coverage` asks the reverse: which tables, columns, relationships, and measures of the model the contract covers, so you can see what to add to the contract as the model grows. Each object gets the strongest level any rule gives it:
+
+| Level | Meaning |
+|---|---|
+| values tested | A rule checks its data: a data-quality or freshness rule on it, or DAX the contract wrote (`engine: pql-test`) that references it |
+| listed | The contract lists it and a schema check runs: the table exists, has the column, the column has its type, the relationship exists |
+| listed, not enforced | The contract lists it, but every rule on it is skipped (`mapping` says why) |
+| not covered | Nothing in the contract names it |
+
+The percentage counts the objects with at least one rule that runs (values tested or listed). `--min-coverage PERCENT` exits 1 below it, rounding like `code-coverage`: only every object covered rounds to 100.
+
+**What counts.**
+- Only direct references count, as in `pql-test code-coverage`: a rule on `[Total Sales]` covers that measure, not the columns `[Total Sales]` uses.
+- A column reference also covers its table.
+- A rule placed under a schema object does not cover that table by itself. Only what its DAX references counts.
+- An ODCS schema has no place to list a measure, so a measure is either values tested by an `engine: pql-test` rule or not covered.
+- A calculated column's values come from DAX, so the report lists every calculated column no rule checks the values of.
+- Left out, the way `init` leaves them out: Power BI's automatic date tables, measure tables (measures and only hidden placeholder columns, in no relationship; their measures still count), and calculation groups. A fact table that hides every column and shows only measures is not a measure table: it joins its dimensions. Roles and partitions are never counted, because no contract rule targets them.
+
+**What to change.** The report ends with ODCS YAML for each gap: a schema object for a table the contract does not list (written the way `init` writes one, with a rule template for each of its measures), a property for a missing column, an `engine: pql-test` rule template for every other uncovered measure, and a foreign key for each uncovered relationship. Edit each template's comparator to the value the measure must meet. A relationship end whose name has a character a `table.property` reference cannot hold (a space, usually) is written [by id](#names-with-spaces-reference-by-id): the report lists the `id` to give each element first (the JSON's `ids`), reusing ids the contract already has. ODCS v3.0 has no relationships, so a v3.0 contract gets no relationship suggestion, and the report says so. The report also lists contract entries the model lacks or types differently (the checks `lint CONTRACT MODEL_PATH` makes), and names in contract DAX that match nothing in the model.
+
+**From the files, or from the model.** By default `coverage` reads the PBIP folder's TMDL and finds what contract DAX references with a text scan, so it runs anywhere, Linux CI included. `--live` reads the deployed or open model instead, with `run`'s connection options, and asks the model's engine what each rule's DAX references, through `INFO.CALCDEPENDENCY("QUERY", ...)`. The engine's answer also lists every column a referenced measure uses, so each rule is asked twice, the second time with its measures replaced by `BLANK()`, and only direct references count. `--live` needs XMLA (Windows) and, like `code-coverage`, write permission on the model: its INFO functions and the engine check need it. When the model refuses them, `--live` counts from the PBIP folder and the text scan instead, and the report says why; with no PBIP folder to fall back on, it exits 1. The JSON labels each object's evidence `contract`, `scan`, or `engine`.
+
+**The model is never changed.** Neither mode writes to the model. Deploying the generated tests to measure them, then removing them, was ruled out: a write over XMLA stops a Desktop-authored model from being downloaded from the service as a PBIX, a failed cleanup would leave test functions in the model, and most schema checks pass table and column names as text, which leaves no dependency to measure.
+
+**JSON.** `--format json` (or `--output FILE`) prints the report that [contract-coverage.schema.json](https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-coverage.schema.json) describes: `schemaVersion` 1, a summary and per-category counts, every object with its level, rules, and evidence sources, and the gaps, suggestions, and mismatches. New properties can appear without changing `schemaVersion`.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, and types (see [above](#start-a-contract-from-the-model)) |
+| `init MODEL_PATH [--output FILE]` | Writes a starter contract from the model's TMDL: tables, columns, types, and relationships with their settings (see [above](#start-a-contract-from-the-model)) |
 | `generate CONTRACT MODEL_PATH --env ENV` | Writes `<Prefix>.<Suite>.<ENV>.Tests.dax` into the PBIP model's `DAXQueries/` folder |
-| `coverage CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
+| `mapping CONTRACT [--format text\|json]` | Lists every rule with its status, generated function(s), and skip reason |
+| `coverage CONTRACT MODEL_PATH [--live]` | Shows which tables, columns, relationships, and measures of the model the contract covers, and the ODCS YAML that would cover the rest (see [below](#which-parts-of-the-model-a-contract-covers)) |
 | `lint CONTRACT [MODEL_PATH]` | Validates against the bundled ODCS JSON schema, then checks that names resolve, that every [`engine: pql-test` DAX rule](#dax-rules-in-the-contract-engine-pql-test) can be generated, and (with a MODEL_PATH) that every table, column, and relationship exists in the model's TMDL |
 | `run CONTRACT MODEL_PATH --env ENV` | Generates the suites in memory, runs them over XMLA, and traces the results to rule ids, without writing any file (`--output`, `--log-format azuredevops\|github`, and the `run-tests` connection options). `--write` also saves the suites into `DAXQueries/`, like `generate` |
 | `trace CONTRACT RESULTS_JSON` | Joins pql-test `--output` JSON to rule ids: passed, failed, error, not executed, or skipped |
@@ -47,26 +84,26 @@ The starter states what the model already is, so `lint` and `run` pass on it as 
 
 **Shared flags**:
 - `--closed-schema` also forbids columns the contract does not list.
-- `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `coverage`).
-- `--pql-assert 0.7|0.8|0.9` picks the PQL.Assert version to generate for (`generate`, `coverage`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08) and [PQL.Assert 0.9](#pqlassert-09). When `run` is connected to a model, it warns (on stderr, and in the CI annotations) if the deployed PQL.Assert is older than the newest version pql-test supports, or older than the `--pql-assert` you chose. The warning does not change the exit code.
+- `--fail-on-skipped` exits 1 if any rule is skipped (`generate`, `mapping`).
+- `--pql-assert 0.7|0.8|0.9|0.9.1` picks the PQL.Assert version to generate for (`generate`, `mapping`, `trace`; default `0.7`). `generate` also takes `auto`, which reads the model folder the way `doctor` does, and `run` defaults to `auto`, which asks the model. See [PQL.Assert 0.8](#pqlassert-08), [PQL.Assert 0.9](#pqlassert-09), and [PQL.Assert 0.9.1](#pqlassert-091). When `run` is connected to a model, it warns (on stderr, and in the CI annotations) if the deployed PQL.Assert is older than the newest version pql-test supports, or older than the `--pql-assert` you chose. The warning does not change the exit code.
 - `--suite-prefix NAME` overrides the suite prefix (`generate`, `run`, `trace`).
 - `--dry-run` prints the DAX instead of writing files (`generate`).
 - `--force` overwrites suite files that pql-test did not generate (`generate`, and `run --write`).
 
 **Exit codes**:
 - 0 means success.
-- 1 means the contract is invalid, `lint` found problems, a `doctor` check failed, `--fail-on-skipped` was triggered, or (`run`) a blocking suite failed or nothing ran.
+- 1 means the contract is invalid, `lint` found problems, a `doctor` check failed, `--fail-on-skipped` was triggered, (`run`) a blocking suite failed or nothing ran, or (`coverage`) coverage is below `--min-coverage` or `--live` could not reach the model.
 - 2 means a usage error: a bad `--env` token, a MODEL_PATH that is not a PBIP model, a file pql-test would refuse to overwrite, or an unreadable results file.
 
 ## Generated suites
 
-- **Names**: `<Prefix>.<Suite>.<ENV>.Tests`. `Suite` is `Schema` (tables, columns, and relationships), `DataQuality` (the rules pql-test translates), `ContractDax` (DAX the contract wrote, with `engine: pql-test`), or `RefreshAge` (`frequency` SLAs, which read model metadata). A suite runs as one query, so one error fails every rule in it: the last two suites keep a mistake in hand-written DAX, or a permission error, from failing the translated rules. The prefix is a PascalCase form of the contract's `dataProduct`, then its `name`, then its `id`. pql-test matches `ENV` as the second-to-last dotted token, so `pql-test run-tests --env DEV` picks the suites up.
+- **Names**: `<Prefix>.<Suite>.<ENV>.Tests`. `Suite` is `Schema` (tables, columns, and relationships), `DataQuality` (the rules pql-test translates), `ContractDax` (DAX the contract wrote, with `engine: pql-test`), or `RefreshAge` (`frequency` SLAs, which read model metadata). A suite runs as one query, so under `run-tests` one error fails every rule in it: the last two suites keep a mistake in hand-written DAX, or a permission error, from failing the translated rules. `contract run` goes further: when a suite fails to run, it runs each of the suite's calls on its own, so the error lands on the rule that has it and every other rule reports its own result. The prefix is a PascalCase form of the contract's `dataProduct`, then its `name`, then its `id`. pql-test matches `ENV` as the second-to-last dotted token, so `pql-test run-tests --env DEV` picks the suites up.
 - **Warning rules**: rules with `severity: warning` or `info` go into separate `<Prefix>.<Suite>.<ENV>WARN.Tests` suites. CI can run these without failing the build, and `pql-test contract run` never fails on them.
 - **Test names**: `ODCS <contractId> <ruleId>: <description>`. The rule id is the ODCS `id` when it is unique in the contract; otherwise it is a stable path such as `orders.customer_id.quality[0]`. Descriptions use the contract's own names.
 - **Header**: every file starts with `// Generated by pql-test <version> from <contract> — do not edit`, followed by a line naming the contract id. `generate` refuses to overwrite a hand-written file, or a suite generated from a **different contract** that has the same prefix, unless you pass `--force`. It deletes a suite only when this contract generated it in an earlier run and it no longer has any rules. Give two contracts that share a `dataProduct` distinct `--suite-prefix` values.
 - **Line endings**: output is deterministic, with LF line endings, so the files can be committed and diffed.
 
-The generated DAX calls PQL.Assert, which must be installed in the model, version 0.7.1 or later (DAX Lib). `--pql-assert 0.8` needs 0.8.0 or later, and `--pql-assert 0.9` needs 0.9.0 or later.
+The generated DAX calls PQL.Assert, which must be installed in the model, version 0.7.1 or later (DAX Lib). `--pql-assert 0.8` needs 0.8.0 or later, `--pql-assert 0.9` needs 0.9.0 or later, and `--pql-assert 0.9.1` needs 0.9.1 or later.
 
 ## Commit the suites, or regenerate them in CI?
 
@@ -118,6 +155,38 @@ schema:
 
 When `pbiTable` or `pbiColumn` is absent, the ODCS logical `name` is used unchanged. `lint CONTRACT MODEL_PATH` checks that every resolved table and column exists in the model's TMDL, and that each column's data type is one the contract accepts.
 
+### Names with spaces: reference by id
+
+A relationship names its ends with references. ODCS has two forms:
+
+| Form | Example | Names it can hold |
+|---|---|---|
+| `table.property` (shorthand) | `to: Date_Dim.DateKey` | letters, digits, and `_` (ODCS 3.2 also `-`) |
+| fully qualified, by `id` | `to: schema/date_dim/properties/date_id` | any: the ids carry the reference, and the names stay as the model has them |
+
+Power BI names usually contain spaces, which the shorthand form cannot hold, and ODCS has no escape syntax. `Date_Dim.Date ID`, `"Date Dim"."Date ID"`, `[Date Dim].[Date ID]`, backticks, `Date\ ID`, and `Date%20ID` all fail schema validation. To reference such a column, give the schema object and the property an `id` and use the fully qualified form:
+
+```yaml
+schema:
+  - name: Fact_Table
+    properties:
+      - name: Date ID
+        relationships:                  # property level: the foreign key is this property
+          - to: schema/date_dim/properties/date_id
+  - id: date_dim
+    name: Date_Dim
+    properties:
+      - id: date_id
+        name: Date ID
+```
+
+- An id may hold letters, digits, `_`, and `-`. It must be unique within its array (the schema objects, or one schema object's properties), so two tables can each have a property with the id `date_id`. A leading `/` is optional.
+- A schema-level relationship (under the schema object, with `from` and `to`) can use either form for each end.
+- `lint` explains a rejected reference in one problem (in a composite relationship too), and fails on a reference that names nothing: an id no element has, or a `table.property` no property matches. A reference to a property that is not a column, or to a nested property (ODCS 3.2 `table.property.nested`), is valid ODCS: `mapping` reports its rule as skipped.
+- `coverage` suggests the id form, with the ids to add, for an uncovered relationship whose names need it.
+- A reference to an element in another contract file (`other.yaml#/schema/...`) is skipped: `mapping` says it references another file, which pql-test does not resolve.
+- The other way to keep the shorthand form is an ODCS name that fits (`Date_ID`) mapped to the model's name with `pbiColumn` (`Date ID`). The contract's names then differ from the model's.
+
 ## Column types
 
 Each property's `logicalType` becomes a `Tbl.ColumnDataTypeShouldBe` check in the Schema suite. It compares with the type the model reports in `INFO.VIEW.COLUMNS()`:
@@ -144,6 +213,47 @@ To check one exact model type, add a `pbiDataType` custom property to the proper
 
 A `number` check accepts either type and still reports both when it fails, for example `expected Number, actual Text`.
 
+## Relationship settings
+
+A contract relationship checks that its two columns are related. Four settings on Power BI's Edit relationship dialog also change the numbers the model returns, so a relationship can pin them with `customProperties`. Each property is named after the TMDL property it checks, and its values are the dialog's words where the dialog has words:
+
+| Edit relationship dialog | TMDL property | Contract property | Values (any case) |
+|---|---|---|---|
+| Cardinality | `fromCardinality`, `toCardinality` | `pbiCardinality` | `manyToOne`, `oneToMany`, `oneToOne`, `manyToMany`, read from the relationship's `from` to its `to` |
+| Cross-filter direction | `crossFilteringBehavior` | `pbiCrossFilteringBehavior` | `single` or `both` (the dialog), `oneDirection` or `bothDirections` (TMDL), `automatic` (TMDL only) |
+| Make this relationship active | `isActive` | `pbiIsActive` | `true`, `false` |
+| Apply security filter in both directions (row-level security) | `securityFilteringBehavior` | `pbiSecurityFilteringBehavior` | `oneDirection` (unchecked), `bothDirections` (checked), `none` (limited relationships) |
+
+```yaml
+      - name: Date ID
+        relationships:
+          - to: schema/date_dim/properties/date_id
+            customProperties:
+              - property: pbiCardinality
+                value: manyToOne
+              - property: pbiCrossFilteringBehavior
+                value: single
+              - property: pbiIsActive
+                value: true
+```
+
+- The security filter is the row-level security checkbox, not the cross-filter direction, so it takes only the TMDL names: `single` and `both` belong to the cross-filter dropdown. A relationship can filter both ways for reports (cross-filter Both) and still apply security filters one way.
+- A relationship with none of these properties checks existence only, as before.
+- `lint` reports a value that is not in the list, and any other `pbi` property on a relationship (such as a misspelled name), because the setting would otherwise go unchecked. Its rule is skipped until it is fixed.
+- `lint CONTRACT MODEL_PATH` reports a stated setting that differs from the model's TMDL, with both values. A setting the TMDL leaves out has Power BI's default: many to one, cross-filter single, active, security filter one direction.
+- `coverage` suggests an uncovered relationship with its four settings as the model has them (read from TMDL, or from `INFO.RELATIONSHIPS()` with `--live`).
+- "Assume referential integrity" (DirectQuery only) is not checked.
+
+Every setting goes to the one `Relationship.ShouldExist` call, which skips a setting passed as `""`. Which settings that call can check depends on the catalog:
+
+| Setting | `--pql-assert 0.8`, `0.9` | `--pql-assert 0.9.1` |
+|---|---|---|
+| `pbiCardinality` | checked | checked |
+| `pbiSecurityFilteringBehavior` `oneDirection`, `bothDirections` | checked | checked |
+| `pbiCrossFilteringBehavior`, `pbiIsActive`, `pbiSecurityFilteringBehavior: none` | not checked: the rule is **approximated**, and its reason names each setting and the `--pql-assert 0.9.1` it needs | checked |
+
+`--pql-assert 0.7` skips relationship rules.
+
 ## Rule mapping (`--pql-assert 0.7`, the default)
 
 | ODCS rule | PQL.Assert 0.7.1 call | Status |
@@ -163,7 +273,7 @@ A `number` check accepts either type and still reports both when it fails, for e
 
 ### PQL.Assert 0.8
 
-PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md)). Pass `--pql-assert 0.8` to `generate`, `coverage`, and `trace` to use them; the default stays `0.7`, so existing suites and golden files do not change. `pql-test contract run` defaults to `auto`: it asks the model with `PQL.Assert.LibraryVersion()` and uses 0.7 when that call fails. Use the same value for `generate` and `trace` that you used when the suites were generated.
+PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap plan](https://github.com/clientfirsttech/pql-test/blob/main/docs/pql-assert-gap-plan.md)). Pass `--pql-assert 0.8` to `generate`, `mapping`, and `trace` to use them; the default stays `0.7`, so existing suites and golden files do not change. `pql-test contract run` defaults to `auto`: it asks the model with `PQL.Assert.LibraryVersion()` and uses 0.7 when that call fails. Use the same value for `generate` and `trace` that you used when the suites were generated.
 
 | ODCS rule | PQL.Assert 0.8 call | Status |
 |---|---|---|
@@ -182,7 +292,7 @@ PQL.Assert 0.8.0 added the functions behind the gaps in the table above ([gap pl
 | v3.2 `enum`, and `invalidValues` with `arguments.validValues` and a zero ceiling | `Col.ValuesShouldBeInSet` (null rows are skipped) | mapped; **approximated** for text with letters (DAX compares text without regard to case) |
 | `invalidValues` with `validValues` and a count or percent ceiling | `Tbl.RowCountShouldBeAtMost` / `Tbl.RowRateShouldBeAtMost` over the non-null rows outside the list | as above |
 | `missingValues` (default: null, and `""` on text; or `arguments.missingValues`) | `Tbl.RowCountShouldBeAtMost` / `Tbl.RowRateShouldBeAtMost` over the missing rows | as above |
-| v3.1 `relationships` (`foreignKey`, `table.property` ends) | `Relationship.ShouldExist`, from the foreign key to the key | mapped |
+| v3.1 `relationships` (`foreignKey`; `table.property` or `schema/<id>/properties/<id>` ends, see [Names with spaces](#names-with-spaces-reference-by-id)) | `Relationship.ShouldExist`, from the foreign key to the key, with the cardinality and security filter the contract pins (see [Relationship settings](#relationship-settings)) | mapped; **approximated** when the contract pins a setting only 0.9.1 checks |
 | `slaProperties` `latency` in days or hours, with `table.column` element(s) | `Col.MaxDateShouldBeWithinDays` / `Col.MaxDateShouldBeWithinHours`, one per element | **approximated**: data age, see [Freshness](#freshness-latency-vs-frequency) |
 | `slaProperties` `frequency` in days or hours, with table element(s) | `ShouldBeLessOrEqual` on the hours since `INFO.PARTITIONS()[RefreshedTime]`, in the `RefreshAge` suite | **approximated**: refresh recency, see [Freshness](#freshness-latency-vs-frequency) |
 | `type: custom`, `engine: pql-test` | the contract's DAX, see [DAX rules](#dax-rules-in-the-contract-engine-pql-test) | mapped |
@@ -193,13 +303,23 @@ Upgrading note: suites generated with `--pql-assert 0.8` change when you regener
 
 ### PQL.Assert 0.9
 
-PQL.Assert 0.9.0 gave ODCS `frequency` a native function; every other 0.8 mapping is unchanged. Pass `--pql-assert 0.9` to `generate`, `coverage`, and `trace`; the default stays `0.7`.
+PQL.Assert 0.9.0 gave ODCS `frequency` a native function; every other 0.8 mapping is unchanged. Pass `--pql-assert 0.9` to `generate`, `mapping`, and `trace`; the default stays `0.7`.
 
 | ODCS rule | PQL.Assert 0.9 call | Status |
 |---|---|---|
 | `slaProperties` `frequency` in days or hours, with table element(s) | `Tbl.LastRefreshShouldBeWithinHours(testName, tableName, maxAgeHours)`, in the `RefreshAge` suite | **approximated**: refresh recency, see [Freshness](#freshness-latency-vs-frequency); clearer `Actual` text than 0.8's inline expression (`TABLE NOT FOUND`, `NEVER REFRESHED`, or the age in hours) |
 
-Upgrading note: regenerating with `--pql-assert 0.9` changes only the `frequency` rows' rendered DAX (the native call instead of 0.8's inline `INFO.PARTITIONS()` expression); their status stays **approximated**. It also raises the version an [`engine: pql-test` direct call](#dax-rules-in-the-contract-engine-pql-test) needs: pql-test validates a direct call's function name and argument count against the newest vendored PQL.Assert signatures, so that form now needs `--pql-assert 0.9` instead of 0.8 — a contract with a direct call that generated fine under `--pql-assert 0.8` reports it **skipped** until you move to `0.9`. `--pql-assert 0.7` and `0.8` output is otherwise unchanged.
+Upgrading note: regenerating with `--pql-assert 0.9` changes only the `frequency` rows' rendered DAX (the native call instead of 0.8's inline `INFO.PARTITIONS()` expression); their status stays **approximated**. An [`engine: pql-test` direct call](#dax-rules-in-the-contract-engine-pql-test) needs only the release that has its function, so only a call to `Tbl.LastRefreshShouldBeWithinHours` needs `--pql-assert 0.9`. `--pql-assert 0.7` and `0.8` output is otherwise unchanged.
+
+### PQL.Assert 0.9.1
+
+PQL.Assert 0.9.1, a patch release, added two optional arguments to `Relationship.ShouldExist`, `crossFilteringBehavior` and `isActive`, and reports a limited relationship's security filter as `None` (0.9.0 reported `Unknown`). Pass `--pql-assert 0.9.1` to check every [relationship setting](#relationship-settings) in one call:
+
+| ODCS rule | PQL.Assert 0.9.1 call | Status |
+|---|---|---|
+| v3.1 `relationships` with settings | `Relationship.ShouldExist(testName, fromTable, fromColumn, toTable, toColumn, fromCardinality, toCardinality, securityFilteringBehavior, crossFilteringBehavior, isActive)` | mapped |
+
+Every other 0.9 mapping is unchanged, and a relationship without settings generates the same call on every catalog. 0.9.0 and 0.9.1 have the same function names, so `contract doctor` tells them apart by the number of arguments `Relationship.ShouldExist` takes in the model's `functions.tmdl`, and `contract run`'s `auto` by `PQL.Assert.LibraryVersion()`. A [direct call](#dax-rules-in-the-contract-engine-pql-test) to `Relationship.ShouldExist` with its 9th or 10th argument needs `--pql-assert 0.9.1`; every other direct call is unchanged.
 
 These rules are reported as **skipped**, with the plan for each:
 
@@ -210,7 +330,7 @@ These rules are reported as **skipped**, with the plan for each:
 | Regular expressions beyond `^literal`, `literal$`, and a bare literal | later |
 | Date and time bounds; a `number`'s `exclusiveMaximum`, or `exclusiveMinimum` other than 0; `multipleOf`; `format` | no PQL.Assert check |
 | Value lists on date and time columns | not planned: the model compares them as locale-formatted text |
-| Composite (multi-column) relationships; fully qualified (`id`-based) relationship references | later |
+| Composite (multi-column) relationships; references to an element in another contract file | later |
 | `slaProperties` `latency` on a table with no column | not planned: refresh time is not source latency (use `frequency`) |
 | `slaProperties` `timeOfAvailability`, `retention`, and other SLA properties | not planned (`retention` could use `Partitions.ShouldExist` later) |
 | Nested (object / array) and v3.2 `map` / `vector` properties | no model column |
@@ -291,13 +411,13 @@ schema:
 
 With `--pql-assert 0.7`, a BLANK result passes the text `mustBe` and the number comparisons, because PQL.Assert 0.7 compared BLANK as an empty string or as 0. Those rules are **approximated** on 0.7; PQL.Assert 0.8 fails a BLANK.
 
-**Direct call.** `implementation.function` names any PQL.Assert assertion, and `implementation.args` lists its arguments after `testName`, which pql-test supplies. A text argument is DAX source, so a DAX string needs its own quotes (`'"AB"'`); numbers and true/false become DAX literals. pql-test checks the function name and argument count against the newest vendored PQL.Assert release (currently 0.9.0), so this form needs `--pql-assert 0.9` (it needed `0.8` before PQL.Assert 0.9.0 shipped, and will need the next release's value once pql-test vendors it). The model best-practice checks (`BP.*`) and the discovery helpers cannot be called this way.
+**Direct call.** `implementation.function` names any PQL.Assert assertion, and `implementation.args` lists its arguments after `testName`, which pql-test supplies. A text argument is DAX source, so a DAX string needs its own quotes (`'"AB"'`); numbers and true/false become DAX literals. pql-test checks the function name and argument count against the newest vendored PQL.Assert release (currently 0.9.1). Like a lock file's minimum versions, a call needs only the release that has its function with that many arguments, recorded as `since` in [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml): most functions date from 0.7.1, so a call to one works with any `--pql-assert`. A call to `Tbl.LastRefreshShouldBeWithinHours` needs `--pql-assert 0.9`, and one that passes `Relationship.ShouldExist` its 9th or 10th argument needs `0.9.1`; such a call under an older catalog is **skipped**, naming the release and the `--pql-assert` value it needs. A new PQL.Assert release raises this only for the functions it adds or changes. The model best-practice checks (`BP.*`) and the discovery helpers cannot be called this way.
 
 **Rules for the DAX.** It is pasted into a generated suite's `UNION`, so it must be one expression. pql-test skips a rule, and `lint` reports it, when its DAX has `EVALUATE` or `DEFINE`, unbalanced brackets or quotes, an unterminated comment, a comma outside brackets, or a control character other than a line feed or tab (a carriage return could end a comment early). A final `//` comment is fine. Numbers must be finite.
 
 **Reporting.** These rules run in their own `<Prefix>.ContractDax.<ENV>.Tests` suite, so a wrong measure or column name in hand-written DAX cannot fail the translated rules. They keep status `mapped` (or `approximated`), with `"source": "contract-dax"` in the `coverage --format json` output and "(contract DAX)" in the text output, so a reviewer can tell DAX written in the contract from rules pql-test translated. `severity: warning` sends them to the `ContractDax.<ENV>WARN` suite.
 
-**What reaches each PQL.Assert function.** [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml) lists every PQL.Assert 0.9.0 function as `mapped` (an ODCS rule generates it), `dax` (only a DAX rule calls it, such as `ShouldEqual`), or `none` (best-practice checks and discovery helpers). A test fails when a new PQL.Assert release adds a function nobody has classified.
+**What reaches each PQL.Assert function.** [`pql_assert_functions.yaml`](../python/pql_test/odcs/catalog/pql_assert_functions.yaml) lists every PQL.Assert 0.9.1 function as `mapped` (an ODCS rule generates it), `dax` (only a DAX rule calls it, such as `ShouldEqual`), or `none` (best-practice checks and discovery helpers). A test fails when a new PQL.Assert release adds a function nobody has classified.
 
 [`examples/contracts/scenario-tests.odcs.yaml`](../examples/contracts/scenario-tests.odcs.yaml) runs both forms against SampleModel: an expression over `[Number of Characters]`, a boolean expression compared with `mustBe: true`, and two direct calls (`ShouldStartWith` on a measure, which has no column to attach a `pattern` rule to; `Col.MeanShouldBeInRange`, a statistic ODCS has no metric for).
 
@@ -311,7 +431,7 @@ Two tests fail before a gap reaches a user: [`test_odcs_rule_matrix.py`](../pyth
 
 The format is a published contract: [contract-run-result.schema.json](https://github.com/clientfirsttech/pql-test/blob/main/python/pql_test/odcs/contract-run-result.schema.json) (JSON Schema 2020-12, also installed with the package). The `contract` object carries `schemaVersion` (currently `1`). New properties can appear without changing it, so ignore properties you do not know; removing or retyping a property bumps it. Tests fail if the output stops matching the schema.
 
-- Per rule, `status` is `passed`, `failed`, `error` (a test could not run), `not_executed` (the suite did not run, for example with no connection), or `skipped` (the rule maps to no DAX; see `contract coverage`). A rule with `severity: warning` never fails the run.
+- Per rule, `status` is `passed`, `failed`, `error` (a test could not run), `not_executed` (the suite did not run, for example with no connection), or `skipped` (the rule maps to no DAX; see `contract mapping`). A rule with `severity: warning` never fails the run.
 - The exit code is the pass/fail signal: `0` when every blocking suite passed, `1` otherwise (a failed or errored blocking test, nothing executed, or no connection). Read the file for per-rule detail; do not parse the human-readable report.
 
 ```bash
@@ -323,7 +443,7 @@ python -c "import json; r = json.load(open('results.json'))['contract']; print(r
 
 ```python
 from pql_test.odcs.api import plan_contract, render, generate
-from pql_test.odcs.coverage import build_report
+from pql_test.odcs.mapping_report import build_report
 from pql_test.odcs.results import trace
 
 plan = plan_contract("orders.odcs.yaml", pql_assert="0.8")  # or an already-parsed dict; default "0.7"

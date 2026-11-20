@@ -19,6 +19,7 @@ import contextlib
 import functools
 import inspect
 import io
+import math
 import sys
 from collections.abc import Callable
 from typing import Any
@@ -101,6 +102,27 @@ def format_option(default: str = "text", help: str | None = None) -> Callable:
 def output_option(help: str, type: Any = None) -> Callable:
     """``--output FILE`` / ``-o FILE``, passed to the command as ``output``."""
     return click.option("--output", "-o", "output", default=None, metavar="FILE", type=type, help=help)
+
+
+def _finite_percent(ctx: click.Context, param: click.Parameter, value: float | None) -> float | None:
+    """Reject ``nan``, which ``FloatRange(0, 100)`` lets through: NaN compares False with both bounds, and a
+    later ``percent < threshold`` check would be False too, silently reporting success."""
+    if value is not None and math.isnan(value):
+        raise click.BadParameter("must be a finite number between 0 and 100", ctx=ctx, param=param)
+    return value
+
+
+def min_coverage_option(help: str) -> Callable:
+    """``--min-coverage PERCENT``, passed to the command as ``min_coverage``."""
+    return click.option(
+        "--min-coverage",
+        "min_coverage",
+        type=click.FloatRange(0, 100),
+        default=None,
+        metavar="PERCENT",
+        callback=_finite_percent,
+        help=help,
+    )
 
 
 def deprecated_alias(*names: str, to: str, use: str, value: Any = _MISSING, **option_kwargs: Any) -> Callable:

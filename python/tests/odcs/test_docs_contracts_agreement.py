@@ -59,7 +59,7 @@ def _named_in(function: str, mentions: set[str]) -> bool:
 
 def test_every_function_docs_name_is_a_real_pql_assert_function():
     given = "every PQL.Assert function docs/contracts.md names in backticks"
-    should = "be a function the bundled PQL.Assert 0.9.0 library actually has (any classification)"
+    should = "be a function the bundled PQL.Assert 0.9.1 library actually has (any classification)"
     all_functions = {name.removeprefix("PQL.Assert.") for name in load_signatures().functions}
 
     unknown = [n for n in _doc_function_mentions() if not _known(n, all_functions)]
@@ -68,7 +68,7 @@ def test_every_function_docs_name_is_a_real_pql_assert_function():
 
 
 def test_every_catalog_generated_function_is_named_in_docs():
-    given = "every function some catalog op (0.7, 0.8, or 0.9) actually calls"
+    given = "every function some catalog op (any --pql-assert version) actually calls"
     should = "be named in docs/contracts.md somewhere (full or bare form)"
     catalog_functions = {
         spec.fn.removeprefix("PQL.Assert.")
@@ -138,6 +138,13 @@ _SKIP_CASES = [
         ),
         "slaProperties[0]",
         "refresh time is not source latency",
+    ),
+    (
+        contract_dict(
+            schema=[schema_object("T", [prop("a", relationships=[{"to": "other.yaml#/schema/x/properties/y"}])])]
+        ),
+        "T.a.relationships[0]",
+        "references another file",
     ),
 ]
 

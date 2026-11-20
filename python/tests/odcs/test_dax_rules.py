@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from pql_test.odcs.api import plan_contract, render
 from pql_test.odcs.cli import contract as cli
-from pql_test.odcs.coverage import build_report, format_text
+from pql_test.odcs.mapping_report import build_report, format_text
 from pql_test.odcs.ir import Status
 from pql_test.odcs.mapping.dax_rules import dax_problem
 from tests.odcs.factories import contract_dict, prop, schema_object
@@ -241,14 +241,42 @@ class TestFunctionForm:
 
         assert (outcome.status, reason in outcome.reason) == (Status.SKIPPED, True), f"{given}: {should}"
 
-    @pytest.mark.parametrize("version", ["0.7", "0.8"])
-    def test_direct_calls_need_the_latest_catalog(self, version):
-        given = f"a direct call under the {version} catalog"
-        should = "be skipped, naming --pql-assert 0.9"
+    @pytest.mark.parametrize("version", ["0.7", "0.8", "0.9", "0.9.1"])
+    def test_a_function_every_catalog_has_maps_under_each(self, version):
+        given = f"a direct call of Col.ShouldBePositive (unchanged since 0.7.1) under --pql-assert {version}"
+        should = "map: the call needs only the release that has the function"
 
         outcome = _outcome(_rule({"function": "PQL.Assert.Col.ShouldBePositive", "args": ["'T'[a]"]}), version=version)
 
-        assert "--pql-assert 0.9" in outcome.reason, f"{given}: {should}"
+        assert outcome.status is Status.MAPPED, f"{given}: {should}\n{outcome.reason}"
+
+    def test_a_newer_function_names_the_release_it_needs(self):
+        given = "a direct call of Tbl.LastRefreshShouldBeWithinHours (added in 0.9.0) under --pql-assert 0.8"
+        should = "be skipped, naming PQL.Assert 0.9.0 and --pql-assert 0.9"
+        rule = _rule({"function": "PQL.Assert.Tbl.LastRefreshShouldBeWithinHours", "args": ['"T"', 24]})
+
+        outcome = _outcome(rule, version="0.8")
+
+        assert (outcome.status, "0.9.0" in outcome.reason, "--pql-assert 0.9" in outcome.reason) == (
+            Status.SKIPPED,
+            True,
+            True,
+        ), f"{given}: {should}\n{outcome.reason}"
+
+    @pytest.mark.parametrize(
+        ("count", "version", "mapped"),
+        [(7, "0.8", True), (7, "0.9", True), (9, "0.9", False), (8, "0.9", False), (9, "0.9.1", True)],
+    )
+    def test_arguments_a_release_added_need_that_release(self, count, version, mapped):
+        given = f"a direct call of Relationship.ShouldExist with {count} arguments after testName under --pql-assert {version}"
+        should = "map only when the release has that many arguments (8 since 0.7.1, 10 since 0.9.1)"
+        args = ['"F"', '"f"', '"T"', '"t"', '"Many"', '"One"', '"OneDirection"', '"BothDirections"', '"TRUE"'][:count]
+
+        outcome = _outcome(_rule({"function": "PQL.Assert.Relationship.ShouldExist", "args": args}), version=version)
+
+        assert (outcome.status is Status.MAPPED, mapped or "0.9.1" in outcome.reason) == (mapped, True), (
+            f"{given}: {should}\n{outcome.reason}"
+        )
 
 
 class TestReporting:
